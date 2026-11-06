@@ -5,10 +5,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { api, devUser, HttpError, isDev, signInUrl } from "../lib/api.ts";
+import { api, devUser, HttpError, isDev } from "../lib/api.ts";
+import { passkeyAssertion } from "../lib/passkey.ts";
 import type { Me, OrgResponse, OrgSummary } from "../lib/types.ts";
 import { Rain } from "./Rain.tsx";
-import { Avatar, LayerBadge, LAYERS, layerName } from "./ui.tsx";
+import { Avatar, Icon, initials, LayerBadge, LAYERS, layerName } from "./ui.tsx";
 
 
 // --- Session -----------------------------------------------------------------
@@ -76,18 +77,40 @@ const DEMO = [
 ] as const;
 
 
-/** Sign-in: email first, then Cognito Managed Login (code, passkey, or Google) */
+// What the API answers at each sign-in step
+type Step = { step: "email" | "choose" | "code" | "totp" | "passkey" | "done" | "failed" | "not_invited"; methods?: ("code" | "passkey")[]; options?: unknown; wrong?: boolean };
+
+
+/** Sign-in on this page: email, then a code by email or a passkey, through the API */
 function SignIn() {
-  const [email, setEmail] = useState("");
+  // Invite links carry the email, so it's filled in already
+  const [email, setEmail] = useState(() => new URLSearchParams(location.search).get("email") ?? "");
+  const [code, setCode] = useState("");
+  const [at, setAt] = useState<Step>({ step: "email" });
+  const [busy, setBusy] = useState(false);
   const qc = useQueryClient();
-  const params = new URLSearchParams(location.search);
-  // The API's callback sends people back here with a reason when sign-in can't finish
-  const problem = params.get("signin");
+  // The Managed Login callback sends people back here with a reason when sign-in can't finish
+  const problem = at.step === "failed" || at.step === "not_invited" ? at.step : new URLSearchParams(location.search).get("signin");
   // Dev sign-in: remember the demo email and refetch everything as that person
   const pick = (e: string) => {
     devUser.set(e);
     qc.invalidateQueries();
   };
+  // One round trip to the API; a passkey step prompts the browser and answers right away
+  const send = async (body: object) => {
+    setBusy(true);
+    try {
+      let r = await api<Step>("/auth/step", { method: "POST", body });
+      if (r.step === "passkey") r = await api<Step>("/auth/step", { method: "POST", body: { op: "answer", kind: "passkey", value: await passkeyAssertion(r.options as never) } });
+      setCode("");
+      if (r.step === "done") await qc.invalidateQueries();
+      else setAt(r);
+    } catch {
+      setAt({ step: "failed" });
+    }
+    setBusy(false);
+  };
+  const restart = () => { setAt({ step: "email" }); setCode(""); };
   return (
     <main className="signin">
       <Rain panes=".signin .panel, .signin .home, .rainctl button" />
@@ -103,20 +126,36 @@ function SignIn() {
       <div className="panel glass">
         <h1 className="word">1NEON</h1>
         <span className="tag">1 portal. Needs. Execution. Observation. Next.</span>
-        {/* Sign-in problems from the callback, then the email form */}
         {problem === "not_invited" && <p className="notice" role="alert">That email hasn't been invited yet. Ask your organization's admin, or neon1.</p>}
         {problem === "failed" && <p className="notice" role="alert">Sign-in didn't finish. Please try again.</p>}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            location.href = signInUrl(email.trim());
-          }}
-        >
-          <label className="sr" htmlFor="email">Your email</label>
-          <input id="email" type="email" autoComplete="email webauthn" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <button className="btn btn-primary" type="submit">Continue</button>
-        </form>
-        <p className="fine">Sign in with a code by email, a passkey, or Google. 1NEON uses only the cookies it needs to keep you signed in.</p>
+        {/* Step 1: the email */}
+        {(at.step === "email" || at.step === "failed" || at.step === "not_invited") && (
+          <form onSubmit={(e) => { e.preventDefault(); void send({ op: "start", email: email.trim() }); }}>
+            <label className="sr" htmlFor="email">Your email</label>
+            <input id="email" type="email" required autoComplete="email webauthn" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? "One moment…" : "Continue"}</button>
+          </form>
+        )}
+        {/* Step 2a: a passkey or a code, when both are on offer */}
+        {at.step === "choose" && (
+          <div className="steps-col">
+            <p className="fine">Signing in as <b>{email}</b></p>
+            {at.methods?.includes("passkey") && <button className="btn btn-primary" disabled={busy} onClick={() => void send({ op: "choose", method: "passkey" })}>Use my passkey</button>}
+            {at.methods?.includes("code") && <button className="btn btn-ghost" disabled={busy} onClick={() => void send({ op: "choose", method: "code" })}>Email me a code</button>}
+          </div>
+        )}
+        {/* Step 2b: the emailed code, or an authenticator app's code */}
+        {(at.step === "code" || at.step === "totp") && (
+          <form onSubmit={(e) => { e.preventDefault(); void send({ op: "answer", kind: at.step, value: code.trim() }); }}>
+            <p className="fine">{at.step === "code" ? <>We sent a code to <b>{email}</b>.</> : "Enter the code from your authenticator app."}</p>
+            {at.wrong && <p className="notice" role="alert">That code didn't match. Check it and try again.</p>}
+            <label className="sr" htmlFor="code">Code</label>
+            <input id="code" className="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" maxLength={8} required autoFocus placeholder="code" value={code} onChange={(e) => setCode(e.target.value)} />
+            <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? "Checking…" : "Sign in"}</button>
+          </form>
+        )}
+        {at.step !== "email" && <p className="fine"><button className="linkish" onClick={restart}>Use a different email</button></p>}
+        <p className="fine">Sign in with a code sent to your email, or a passkey. 1NEON uses only the cookies it needs to keep you signed in.</p>
         {/* The three policies on one line of their own */}
         <p className="fine legal-links">
           <Link to="/cookies">Cookies</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
@@ -212,62 +251,85 @@ export function useTopBar(node: ReactNode, deps: unknown[]) {
 }
 
 
-/** Sidebar, top bar, and content area shared by every signed-in page */
+/** One menu entry: its icon box and label line up with every other entry; picking it closes the full menu */
+function Item({ to, icon, label, end }: { to: string; icon: ReactNode; label: string; end?: boolean }) {
+  return (
+    <li>
+      <NavLink to={to} end={end} title={label}>
+        {icon}
+        <span className="lbl">{label}</span>
+      </NavLink>
+    </li>
+  );
+}
+
+
+/** Menu, top bar, and content area shared by every signed-in page */
 function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; children: ReactNode }) {
   const me = useSession();
+  // The person's choice: a slim icon rail always on screen, or no rail and a menu button
+  const rail = (me.user.menu ?? "rail") === "rail";
   const [open, setOpen] = useState(false);
   const [top, setTop] = useState<ReactNode>(null);
   const loc = useLocation();
-  // Close the phone drawer after navigating
+  // The full menu closes after navigating, and on Escape
   useEffect(() => setOpen(false), [loc.pathname]);
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    addEventListener("keydown", esc);
+    return () => removeEventListener("keydown", esc);
+  }, []);
   const base = org ? `/o/${org.slug}` : "";
   return (
-    <div className="shell">
-      {/* Sidebar: brand, organization chooser, navigation, and the signed-in person */}
-      <aside className={`side${open ? " open" : ""}`} aria-label="Sidebar">
-        <Link className="brand" to="/">
-          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="5" aria-hidden="true">
-            <circle cx="32" cy="32" r="28" /><circle cx="32" cy="32" r="19" /><circle cx="32" cy="32" r="10" /><circle cx="32" cy="32" r="2" />
-          </svg>
-          1NEON
-        </Link>
+    <div className={`shell${rail ? " has-rail" : ""}`}>
+      {/* Scrim behind the full menu; a tap outside closes it */}
+      {open && <div className="scrim" onClick={() => setOpen(false)} aria-hidden="true" />}
+      {/* Menu: the onion opens and closes the full view; collapsed, only the icons show */}
+      <aside className={`side${open ? " open" : ""}`} aria-label="Menu">
+        <button className="brand" type="button" onClick={() => setOpen(!open)} aria-expanded={open} title={open ? "Close the menu" : "Open the menu"}>
+          <span className="ico mark" aria-hidden="true">
+            <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="5"><circle cx="32" cy="32" r="28" /><circle cx="32" cy="32" r="19" /><circle cx="32" cy="32" r="10" /><circle cx="32" cy="32" r="2" /></svg>
+          </span>
+          <span className="lbl">1NEON</span>
+        </button>
+        {/* Organization: the full chooser when open, its initials when collapsed */}
+        {open ? (
+          <OrgChooser current={org} all={all} />
+        ) : (
+          <button className="org-mini" type="button" onClick={() => setOpen(true)} title={all ? "All clients" : org?.name ?? "Choose an organization"}>
+            <span className="ico">{all ? "All" : org ? initials(org.name) : "?"}</span>
+            <span className="lbl">{all ? "All clients" : org?.name ?? "Choose"}</span>
+          </button>
+        )}
         {/* Organization pages get the hubs and layers; All clients gets only its board */}
-        <OrgChooser current={org} all={all} />
         <ul className="nav">
           {org ? (
             <>
-              <li><NavLink to={`${base}/workspace`}><span className="ico" aria-hidden="true">⌂</span>Workspace</NavLink></li>
-              <li><NavLink to={`${base}/workflow`}><span className="ico" aria-hidden="true">▦</span>Workflow</NavLink></li>
-              <li className="sep" aria-hidden="true">LAYERS</li>
+              <Item to={`${base}/workspace`} icon={<Icon name="workspace" />} label="Workspace" />
+              <Item to={`${base}/workflow`} icon={<Icon name="workflow" />} label="Workflow" />
+              <li className="sep"><span className="lbl">Layers</span></li>
               {LAYERS.map((l) => (
-                <li key={l}><NavLink to={`${base}/layer/${l}`}><LayerBadge layer={l} />{layerName(l)}</NavLink></li>
+                <Item key={l} to={`${base}/layer/${l}`} icon={<LayerBadge layer={l} />} label={layerName(l)} />
               ))}
-              <li className="sep" aria-hidden="true">HUBS</li>
-              <li><NavLink to={`${base}/projects`} end={false}><span className="ico" aria-hidden="true">◫</span>Projects</NavLink></li>
-              <li><NavLink to={`${base}/people`}><span className="ico" aria-hidden="true">◍</span>People</NavLink></li>
-              <li><NavLink to={`${base}/documents`}><span className="ico" aria-hidden="true">▤</span>Documents</NavLink></li>
-              <li><NavLink to={`${base}/settings`}><span className="ico" aria-hidden="true">⚙</span>Settings</NavLink></li>
+              <li className="sep"><span className="lbl">Hubs</span></li>
+              <Item to={`${base}/projects`} icon={<Icon name="projects" />} label="Projects" end={false} />
+              <Item to={`${base}/people`} icon={<Icon name="people" />} label="People" />
+              <Item to={`${base}/documents`} icon={<Icon name="documents" />} label="Documents" />
+              <Item to={`${base}/settings`} icon={<Icon name="settings" />} label="Settings" />
             </>
           ) : all ? (
-            <li><NavLink to="/all/workflow"><span className="ico" aria-hidden="true">▦</span>Workflow</NavLink></li>
+            <Item to="/all/workflow" icon={<Icon name="workflow" />} label="Workflow" />
           ) : null}
         </ul>
-        {/* The way back to the neon1.tech site, outside the app's routes */}
-        <a className="site-link" href="/">
-          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-              <path d="M6 6a24 24 0 0 1 24 24v30M6 12a18 18 0 0 1 18 18v30M6 18a12 12 0 0 1 12 12v30M6 24a6 6 0 0 1 6 6v30" />
-              <path d="M34 6a24 24 0 0 1 24 24v30M34 12a18 18 0 0 1 18 18v30M34 18a12 12 0 0 1 12 12v30M34 24a6 6 0 0 1 6 6v30" />
-            </svg>
-          neon1.tech
+        {/* Back to the neon1.tech site, outside the app's routes, then the signed-in person */}
+        <a className="site-link" href="/" title="neon1.tech">
+          <Icon name="site" />
+          <span className="lbl">neon1.tech</span>
         </a>
-        {/* The signed-in person links to their profile */}
-        <div className="foot">
-          <Link to="/me" className="who" style={{ color: "inherit", textDecoration: "none" }}>
-            <Avatar id={me.user.id} name={me.user.name || me.user.email} />
-            <span>{me.user.name || me.user.email}</span>
-          </Link>
-          <span style={{ marginLeft: "auto" }} title="Connected"><span className="dot" aria-hidden="true" /><span className="sr">Connected</span></span>
-        </div>
+        <NavLink to="/me" className="who-link" title="Your profile">
+          <span className="ico av-box"><Avatar id={me.user.id} name={me.user.name || me.user.email} size={24} /></span>
+          <span className="lbl">{me.user.name || me.user.email}</span>
+        </NavLink>
       </aside>
       <div className="main">
         {/* All clients is read only; say so on every screen of it */}
@@ -276,9 +338,9 @@ function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; childr
             <strong>All clients · read only.</strong> Open a client to make changes.
           </div>
         )}
-        {/* Top bar: the phone menu button and whatever the page put in the crumb slot */}
+        {/* Top bar: the menu button when there's no rail, then whatever the page put in the crumb slot */}
         <header className="top">
-          <button className="chip only-sm" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Menu">menu</button>
+          {!rail && <button className="chip" onClick={() => setOpen(!open)} aria-expanded={open}>menu</button>}
           <div className="crumb">{top}</div>
           <span className="spacer" />
           <span className="hide-sm muted small">Commands <span className="kbd">⌘K</span></span>

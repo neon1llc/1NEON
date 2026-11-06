@@ -154,7 +154,7 @@ export function NewProject() {
         )}
         {error && <p className="notice" role="alert">{error}</p>}
         {/* Back, then Next or Create */}
-        <div className="actions" style={{ justifyContent: "flex-start" }}>
+        <div className="actions">
           {step > 0 && <button type="button" className="btn btn-ghost" onClick={() => setStep(step - 1)}>Back</button>}
           <button className="btn btn-primary" type="submit" disabled={!ready[step] || busy}>{step < STEPS.length - 1 ? "Next" : busy ? "Creating…" : "Create project"}</button>
         </div>

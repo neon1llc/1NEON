@@ -1,29 +1,65 @@
-// apps/web/src/pages/Documents.tsx - Documents hub. Until uploads open it shows the layers files
-// will be filed under, in the organization's private folder.
+// apps/web/src/pages/Documents.tsx - Documents hub: every file in the organization, filed by layer
+// and project, with one place to upload from a phone or a browser.
 
 
+import type { DocumentRecord, Layer } from "@1neon/domain";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { DropZone, FileList } from "../components/Files.tsx";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
-import { Empty, LayerBadge, LAYERS, layerName } from "../components/ui.tsx";
+import { LayerBadge, LAYERS, layerName } from "../components/ui.tsx";
+import { api } from "../lib/api.ts";
 
 
-/** Placeholder until uploads open: shows the layers files will be filed under */
+// What the hub reads: the finished uploads, and project names to show beside them
+interface DocsResponse {
+  docs: DocumentRecord[];
+  projects: { id: string; key: string; name: string }[];
+}
+
+
+/** Upload with a project and layer chosen up front; browse by layer below */
 export function Documents() {
   const { org } = useOrg();
   useTopBar(<span>{org.name} · Documents</span>, [org.name]);
+  const q = useQuery({ queryKey: ["project", org.id, "docs"], queryFn: () => api<DocsResponse>(`/t/${org.id}/docs`) });
+  // Where the next upload is filed, and which layer the list shows
+  const [projectId, setProjectId] = useState("");
+  const [layer, setLayer] = useState<Layer>("needs");
+  const [show, setShow] = useState<Layer | "all">("all");
+  const docs = q.data?.docs ?? [];
+  const projectName = (id?: string) => (id ? q.data?.projects.find((p) => p.id === id)?.key : "General");
   return (
     <>
       <h1 className="page-title">Documents</h1>
-      <p className="lead">Files for {org.name}, kept in its own private folder and filed by layer. Every upload is checked for malware before anyone can open it.</p>
-      {/* One card per layer with the kinds of files it holds */}
-      <div className="grid" style={{ marginBottom: 24 }}>
+      <p className="lead">Files for {org.name}, kept in its own private folder and filed by layer. Every upload is scanned for malware before anyone can download it.</p>
+      {/* Where uploads go, then the drop area */}
+      <div className="file-target">
+        <label>Project
+          <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+            <option value="">General, not one project</option>
+            {q.data?.projects.map((p) => <option key={p.id} value={p.id}>{p.key} · {p.name}</option>)}
+          </select>
+        </label>
+        <label>Layer
+          <select value={layer} onChange={(e) => setLayer(e.target.value as Layer)}>
+            {LAYERS.map((l) => <option key={l} value={l}>{layerName(l)}</option>)}
+          </select>
+        </label>
+      </div>
+      <DropZone target={{ layer, projectId: projectId || undefined }}>
+        <span className="muted small">Filed under {layerName(layer)}{projectId ? ` in ${projectName(projectId)}` : ", for the whole organization"}. Files a project asks for can also be sent from its Needs tab.</span>
+      </DropZone>
+      {/* Filter by layer, with counts */}
+      <div className="chips" role="group" aria-label="Show files from">
+        <button className={`chip${show === "all" ? " on" : ""}`} onClick={() => setShow("all")}>All <span className="muted">{docs.length}</span></button>
         {LAYERS.map((l) => (
-          <div key={l} className="card hub">
-            <h3><span style={{ display: "flex", gap: 8, alignItems: "center" }}><LayerBadge layer={l} />{layerName(l)}</span><span className="big">0</span></h3>
-            <p>{l === "needs" ? "Contracts, exports, examples" : l === "execution" ? "Designs, change records" : l === "observation" ? "Reports, before and after" : "Runbooks, handoff docs"}</p>
-          </div>
+          <button key={l} className={`chip${show === l ? " on" : ""}`} onClick={() => setShow(l)}>
+            <LayerBadge layer={l} /> {layerName(l)} <span className="muted">{docs.filter((d) => d.layer === l).length}</span>
+          </button>
         ))}
       </div>
-      <Empty text="Uploads open once file scanning is switched on for this portal. Until then, send files through your usual channel with neon1." />
+      {q.isPending ? <p className="muted" aria-busy="true">Loading…</p> : <FileList docs={show === "all" ? docs : docs.filter((d) => d.layer === show)} projectName={projectName} empty="No files here yet." />}
     </>
   );
 }

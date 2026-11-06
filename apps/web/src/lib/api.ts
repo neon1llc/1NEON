@@ -64,6 +64,3 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   return data as T;
 }
 
-
-/** Start sign-in through the API, optionally pre-filling the email at Cognito */
-export const signInUrl = (email?: string) => `${BASE}/auth/login${email ? `?email=${encodeURIComponent(email)}` : ""}`;

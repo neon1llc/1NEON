@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app.ts";
 import { seed } from "./seed.ts";
-import { MemoryDirectory, MemoryMailer } from "./services.ts";
+import { MemoryDirectory, MemoryMailer, MemoryStorage } from "./services.ts";
 import { MemoryTable } from "./store/memory.ts";
 import { Repo } from "./store/repo.ts";
 
@@ -27,6 +27,7 @@ beforeEach(async () => {
     repo,
     directory: new MemoryDirectory(),
     mailer,
+    storage: new MemoryStorage(),
   });
 });
 
@@ -181,5 +182,34 @@ describe("projects and concurrency", () => {
     const raj = await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/projects/${p.id}/edits`, { recordId: p.id });
     expect(raj.json.ok).toBe(false);
     expect(raj.json.holder.name).toBe("Dana Kim");
+  });
+});
+
+
+// Uploads: the record first, then the bytes, then "done", which also checks off a "file needed" item
+describe("documents", () => {
+  it("files an upload under its project and layer, and answers the file it was asked for", async () => {
+    const dana = "dana@acmedental.example";
+    const p = (await call(dana, "GET", `/t/${s.acme.id}/projects`)).json[0];
+    const ask = await call(OP, "POST", `/t/${s.acme.id}/projects/${p.id}/items`, { kind: "file_request", title: "Last 3 months of invoices" });
+    const start = await call(dana, "POST", `/t/${s.acme.id}/docs`, { name: "invoices.pdf", contentType: "application/pdf", size: 4, layer: "needs", projectId: p.id, itemId: ask.json.id });
+    expect(start.status).toBe(201);
+    // Not listed until the bytes arrive
+    expect((await call(dana, "GET", `/t/${s.acme.id}/docs`)).json.docs).toHaveLength(0);
+    const put = await app.request(start.json.upload, { method: "PUT", headers: { "content-type": "application/pdf" }, body: "%PDF" });
+    expect(put.status).toBe(200);
+    await call(dana, "POST", `/t/${s.acme.id}/docs/${start.json.doc.id}/done?p=${p.id}`);
+    const list = await call(dana, "GET", `/t/${s.acme.id}/docs`);
+    expect(list.json.docs.map((x: { name: string }) => x.name)).toEqual(["invoices.pdf"]);
+    const item = (await call(dana, "GET", `/t/${s.acme.id}/projects/${p.id}`)).json.items.find((i: { id: string }) => i.id === ask.json.id);
+    expect(item.status).toBe("done");
+    expect((await call(dana, "GET", `/t/${s.acme.id}/docs/${start.json.doc.id}/download?p=${p.id}`)).json.url).toContain("/dev-files/");
+  });
+
+  it("refuses an answer to an item that isn't a file request", async () => {
+    const p = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json[0];
+    const task = await call(OP, "POST", `/t/${s.acme.id}/projects/${p.id}/items`, { kind: "task", title: "Not a file" });
+    const r = await call(OP, "POST", `/t/${s.acme.id}/docs`, { name: "x.txt", size: 1, layer: "needs", projectId: p.id, itemId: task.json.id });
+    expect(r.status).toBe(400);
   });
 });

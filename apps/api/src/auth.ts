@@ -1,8 +1,15 @@
-// apps/api/src/auth.ts - Sign-in: Cognito Managed Login with authorization code + PKCE, finished
-// server side. Tokens live only in HttpOnly cookies scoped to the API path; the SPA never sees
-// them.
+// apps/api/src/auth.ts - Sign-in, finished server side. Email codes and passkeys run on the 1NEON
+// page through Cognito's choice-based sign-in; Managed Login with authorization code + PKCE stays
+// for Google and as a fallback. Tokens live only in HttpOnly cookies scoped to the API path; the
+// SPA never sees them.
 
 
+import {
+  CognitoIdentityProviderClient,
+  InitiateAuthCommand,
+  RespondToAuthChallengeCommand,
+  type AuthenticationResultType,
+} from "@aws-sdk/client-cognito-identity-provider";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -10,7 +17,26 @@ import type { Config } from "./config.ts";
 
 
 // Cookie names; the __Secure- prefix makes browsers refuse them over plain HTTP
-export const COOKIE = { access: "__Secure-1neon_at", refresh: "__Secure-1neon_rt", flow: "__Secure-1neon_flow" } as const;
+export const COOKIE = { access: "__Secure-1neon_at", refresh: "__Secure-1neon_rt", flow: "__Secure-1neon_flow", step: "__Secure-1neon_step" } as const;
+
+
+/** Where an on-page sign-in stands: waiting for a code, a passkey, a method choice, or done */
+export type SignInStep =
+  | { step: "choose"; methods: ("code" | "passkey")[] }
+  | { step: "code" }
+  | { step: "totp" }
+  | { step: "passkey"; options: unknown }
+  | { step: "done" }
+  | { step: "failed" };
+
+
+// A finished sign-in, before the invite check
+export interface Verified {
+  sub: string;
+  email: string;
+  emailVerified: boolean;
+  accessToken: string;
+}
 
 
 // A verified caller: the Cognito subject, plus the email when the ID token supplied it
@@ -42,6 +68,8 @@ export class CognitoAuth {
   // Verifiers cache the pool's signing keys between requests
   private access;
   private idt;
+  // Choice-based sign-in calls; the public client needs no AWS credentials for them
+  private idp = new CognitoIdentityProviderClient({});
 
   // Both verifiers are pinned to this pool and app client
   constructor(private cfg: Required<Pick<Config, "userPoolId" | "clientId" | "authDomain" | "publicUrl">>) {
@@ -80,8 +108,8 @@ export class CognitoAuth {
     return { sub: p.sub };
   }
 
-  /** GET /auth/login: start Managed Login with PKCE; `hint` pre-fills the email */
-  async login(c: Context, hint?: string) {
+  /** GET /auth/login: start Managed Login with PKCE; `hint` pre-fills the email, `provider` skips straight to it */
+  async login(c: Context, hint?: string, provider?: string) {
     const verifier = randomString(48);
     const state = randomString(16);
     setCookie(c, COOKIE.flow, `${state}.${verifier}`, { ...this.cookieOpts(600), sameSite: "Lax" });
@@ -96,6 +124,7 @@ export class CognitoAuth {
       code_challenge_method: "S256",
     });
     if (hint) q.set("login_hint", hint);
+    if (provider) q.set("identity_provider", provider);
     return c.redirect(`https://${this.cfg.authDomain}/oauth2/authorize?${q}`);
   }
 
@@ -107,17 +136,95 @@ export class CognitoAuth {
     const code = c.req.query("code");
     if (!code || !state || !verifier || c.req.query("state") !== state) return undefined;
     const tokens = await this.token({ grant_type: "authorization_code", code, code_verifier: verifier, redirect_uri: this.redirectUri });
-    if (!tokens?.id_token || !tokens.access_token) return undefined;
-    // The ID token carries the email the invite check needs
-    const id = await this.idt.verify(tokens.id_token);
-    setCookie(c, COOKIE.access, tokens.access_token, this.cookieOpts(15 * 60));
-    if (tokens.refresh_token) setCookie(c, COOKIE.refresh, tokens.refresh_token, this.cookieOpts(30 * 24 * 3600));
-    return {
-      sub: id.sub,
-      email: String(id.email ?? "").toLowerCase(),
-      emailVerified: String(id.email_verified) === "true",
-      accessToken: tokens.access_token,
-    };
+    return this.finish(c, tokens?.access_token, tokens?.id_token, tokens?.refresh_token);
+  }
+
+  // Sets the session cookies from fresh tokens; the ID token carries the email the invite check needs
+  private async finish(c: Context, access?: string, idToken?: string, refresh?: string): Promise<Verified | undefined> {
+    if (!access || !idToken) return undefined;
+    const id = await this.idt.verify(idToken);
+    setCookie(c, COOKIE.access, access, this.cookieOpts(15 * 60));
+    if (refresh) setCookie(c, COOKIE.refresh, refresh, this.cookieOpts(30 * 24 * 3600));
+    return { sub: id.sub, email: String(id.email ?? "").toLowerCase(), emailVerified: String(id.email_verified) === "true", accessToken: access };
+  }
+
+  // --- On-page sign-in: Cognito's session token waits in an HttpOnly cookie between steps ---
+
+  // The email and Cognito session for the sign-in in progress; five minutes, like Cognito's own
+  private keep(c: Context, email: string, session?: string) {
+    if (session) setCookie(c, COOKIE.step, `${encodeURIComponent(email)}|${session}`, this.cookieOpts(300));
+  }
+  private held(c: Context) {
+    const [email, session] = (getCookie(c, COOKIE.step) ?? "").split("|");
+    return email && session ? { email: decodeURIComponent(email), session } : undefined;
+  }
+
+  // Turns Cognito's answer into the next step for the page, keeping its session for the step after
+  private async next(c: Context, email: string, r: { ChallengeName?: string; Session?: string; ChallengeParameters?: Record<string, string>; AvailableChallenges?: string[]; AuthenticationResult?: AuthenticationResultType }): Promise<{ next: SignInStep; verified?: Verified }> {
+    if (r.AuthenticationResult) {
+      deleteCookie(c, COOKIE.step, { path: "/1NEON/api", secure: true });
+      const v = await this.finish(c, r.AuthenticationResult.AccessToken, r.AuthenticationResult.IdToken, r.AuthenticationResult.RefreshToken);
+      return v ? { next: { step: "done" }, verified: v } : { next: { step: "failed" } };
+    }
+    this.keep(c, email, r.Session);
+    switch (r.ChallengeName) {
+      case "EMAIL_OTP":
+        return { next: { step: "code" } };
+      case "SOFTWARE_TOKEN_MFA":
+        return { next: { step: "totp" } };
+      case "WEB_AUTHN":
+        return { next: { step: "passkey", options: JSON.parse(r.ChallengeParameters?.CREDENTIAL_REQUEST_OPTIONS ?? "{}") } };
+      case "SELECT_CHALLENGE": {
+        const have = r.AvailableChallenges ?? [];
+        const methods = [...(have.includes("WEB_AUTHN") ? ["passkey" as const] : []), ...(have.includes("EMAIL_OTP") ? ["code" as const] : [])];
+        // Only a code on offer: send it straight away
+        if (methods.length === 1 && methods[0] === "code") return this.choose(c, "code");
+        return { next: { step: "choose", methods } };
+      }
+      default:
+        return { next: { step: "failed" } };
+    }
+  }
+
+  /** POST /auth/start: begin with an email; Cognito answers the same way whether or not it knows the person */
+  async start(c: Context, email: string) {
+    const r = await this.idp.send(new InitiateAuthCommand({ ClientId: this.cfg.clientId, AuthFlow: "USER_AUTH", AuthParameters: { USERNAME: email } }));
+    return this.next(c, email, r);
+  }
+
+  /** POST /auth/choose: pick a code by email or a passkey */
+  async choose(c: Context, method: "code" | "passkey") {
+    const h = this.held(c);
+    if (!h) return { next: { step: "failed" } as SignInStep };
+    const r = await this.idp.send(new RespondToAuthChallengeCommand({
+      ClientId: this.cfg.clientId,
+      ChallengeName: "SELECT_CHALLENGE",
+      Session: h.session,
+      ChallengeResponses: { USERNAME: h.email, ANSWER: method === "code" ? "EMAIL_OTP" : "WEB_AUTHN" },
+    }));
+    return this.next(c, h.email, r);
+  }
+
+  /** POST /auth/answer: the emailed code, an authenticator code, or the passkey's signed response */
+  async answer(c: Context, kind: "code" | "totp" | "passkey", value: string) {
+    const h = this.held(c);
+    if (!h) return { next: { step: "failed" } as SignInStep };
+    const challenge = kind === "code" ? "EMAIL_OTP" : kind === "totp" ? "SOFTWARE_TOKEN_MFA" : "WEB_AUTHN";
+    const field = kind === "code" ? "EMAIL_OTP_CODE" : kind === "totp" ? "SOFTWARE_TOKEN_MFA_CODE" : "CREDENTIAL";
+    try {
+      const r = await this.idp.send(new RespondToAuthChallengeCommand({
+        ClientId: this.cfg.clientId,
+        ChallengeName: challenge,
+        Session: h.session,
+        ChallengeResponses: { USERNAME: h.email, [field]: value },
+      }));
+      return this.next(c, h.email, r);
+    } catch (e) {
+      // A wrong code keeps the step; anything else ends it
+      const name = (e as { name?: string }).name;
+      if (name === "CodeMismatchException") return { next: { step: kind === "totp" ? "totp" : "code" } as SignInStep, wrong: true };
+      return { next: { step: "failed" } as SignInStep };
+    }
   }
 
   /** POST /auth/logout: revoke the refresh token and clear cookies */

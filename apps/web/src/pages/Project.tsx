@@ -2,8 +2,9 @@
 // Execution, Observation, Next).
 
 
-import { KIND_LAYER, metricProgress, MetricFields, OptionFields, type Item, type ItemKind, type Layer, type Project } from "@1neon/domain";
-import { useEffect, useState } from "react";
+import { KIND_LAYER, metricProgress, MetricFields, OptionFields, type DocumentRecord, type Item, type ItemKind, type Layer, type Project } from "@1neon/domain";
+import { useEffect, useState, type ReactNode } from "react";
+import { FileList, UploadButton } from "../components/Files.tsx";
 import { Link, NavLink, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerName, ago, daysSince, useToast } from "../components/ui.tsx";
@@ -20,7 +21,7 @@ const KIND_LABEL: Record<ItemKind, [string, string]> = {
   requirement: ["Requirement", "Requirements"],
   option: ["Option", "Options"],
   decision: ["Decision", "Decisions"],
-  file_request: ["File request", "Files we need"],
+  file_request: ["File needed", "Files needed"],
   task: ["Task", "Tasks"],
   milestone: ["Milestone", "Milestones"],
   change: ["Change", "Changes"],
@@ -86,7 +87,7 @@ export function ProjectPage() {
           <NavLink key={l} to={`${base}/${l}`}><LayerBadge layer={l} />{layerName(l)} <span className="muted">{count(l)}</span></NavLink>
         ))}
       </nav>
-      {tab === "overview" ? <Overview project={p} items={items} /> : LAYERS.includes(tab as Layer) ? <LayerTab layer={tab as Layer} project={p} items={items} edits={detail.data.edits} /> : <Empty text="That section doesn't exist." />}
+      {tab === "overview" ? <Overview project={p} items={items} /> : LAYERS.includes(tab as Layer) ? <LayerTab layer={tab as Layer} project={p} items={items} docs={detail.data.docs} edits={detail.data.edits} /> : <Empty text="That section doesn't exist." />}
     </>
   );
 }
@@ -254,7 +255,7 @@ function MetricCard({ item, onReading }: { item: Item; onReading?: (value: numbe
 
 
 /** One layer's items, grouped by kind, with add forms for people who can write */
-function LayerTab({ layer, project, items, edits }: { layer: Layer; project: Project; items: Item[]; edits: EditMarker[] }) {
+function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; project: Project; items: Item[]; docs: DocumentRecord[]; edits: EditMarker[] }) {
   const { org, canWrite } = useOrg();
   const toast = useToast();
   const refresh = useRefresh(org.id);
@@ -297,19 +298,40 @@ function LayerTab({ layer, project, items, edits }: { layer: Layer; project: Pro
                 } : undefined} />
               ))}</div> : null
             ) : (
-              <div>{list.map((i) => <ItemRow key={i.id} item={i} path={path} marker={edits.find((e) => e.recordId === i.id)} onToggle={CHECKABLE.has(kind) && canWrite ? () => void patch(i, { status: i.status === "done" ? "open" : "done" }) : undefined} />)}</div>
+              <div>{list.map((i) => (
+                <ItemRow key={i.id} item={i} path={path} marker={edits.find((e) => e.recordId === i.id)} onToggle={CHECKABLE.has(kind) && canWrite ? () => void patch(i, { status: i.status === "done" ? "open" : "done" }) : undefined}
+                  extra={kind === "file_request" ? <FileAsk item={i} docs={docs.filter((d) => d.itemId === i.id)} /> : undefined} />
+              ))}</div>
             )}
             {(canWrite || kind === "request") && <AddItem kind={kind} path={path} />}
           </section>
         );
       })}
+      {/* Every file filed under this layer of the project; anyone in the organization can add one */}
+      <section className="kind-group">
+        <h2 className="section-h">Files <small>{docs.filter((d) => d.uploaded && d.layer === layer).length}</small></h2>
+        <FileList docs={docs.filter((d) => d.layer === layer)} empty={`No ${layerName(layer)} files yet.`} />
+        <div className="actions" style={{ marginTop: 10 }}><UploadButton target={{ layer, projectId: project.id }} label={`Upload ${layerName(layer)} files`} /></div>
+      </section>
     </>
   );
 }
 
 
+/** Under a "file needed" item: what's been sent so far, and an Upload that checks the item off */
+function FileAsk({ item, docs }: { item: Item; docs: DocumentRecord[] }) {
+  const sent = docs.filter((d) => d.uploaded);
+  return (
+    <div className="file-ask">
+      {sent.map((d) => <span key={d.id} className="tag client">{d.name}</span>)}
+      <UploadButton target={{ layer: "needs", projectId: item.projectId, itemId: item.id }} label={sent.length ? "Send another" : "Upload"} className="chip" />
+    </div>
+  );
+}
+
+
 /** One item: view, edit with presence and conflict handling, check off, or remove */
-function ItemRow({ item, path, marker, onToggle }: { item: Item; path: string; marker?: EditMarker; onToggle?: () => void }) {
+function ItemRow({ item, path, marker, onToggle, extra }: { item: Item; path: string; marker?: EditMarker; onToggle?: () => void; extra?: ReactNode }) {
   const { org, canWrite } = useOrg();
   const me = useSession();
   const toast = useToast();
@@ -380,6 +402,7 @@ function ItemRow({ item, path, marker, onToggle }: { item: Item; path: string; m
           <div className="title" style={item.status === "done" ? { textDecoration: "line-through", color: "var(--muted)" } : undefined}>{item.title}</div>
           {item.body && <div className="body">{item.body}</div>}
           {otherEditing && <div className="small" style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}><Avatar id={otherEditing.userId} name={otherEditing.name} editing size={18} /> {otherEditing.name} is editing</div>}
+          {extra}
         </div>
       )}
       {/* Edit and Remove for editors */}

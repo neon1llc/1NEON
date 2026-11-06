@@ -56,19 +56,18 @@ export function Settings() {
       </div>
       <h2 className="section-h">Workflow stages <small>the columns on the board</small></h2>
       {!canAdmin && <p className="muted small">Only admins can change stages.</p>}
-      {/* One row per stage: name, layer, exit rule, limit, and order controls for admins */}
-      <div className="rows">
+      {/* One row per stage: name, layer, exit rule, limit, and order controls; phones stack each stage as a card */}
+      <div className="stages">
         {stages.map((s, i) => (
-          <div key={s.id} className="row" style={{ gridTemplateColumns: "minmax(0,1.2fr) 150px minmax(0,2fr) 80px auto", opacity: s.hidden ? 0.55 : 1 }}>
+          <div key={s.id} className={`stage${s.hidden ? " off" : ""}`}>
             <input aria-label={`Name of stage ${i + 1}`} value={s.name} disabled={!canAdmin} onChange={(e) => set(i, { name: e.target.value })} maxLength={40} />
             <select aria-label={`Layer of ${s.name}`} value={s.layer} disabled={!canAdmin} onChange={(e) => set(i, { layer: e.target.value as Layer })}>
               {LAYERS.map((l) => <option key={l} value={l}>{layerName(l)}</option>)}
             </select>
             <input aria-label={`Done when, for ${s.name}`} placeholder="Done when…" value={s.exit} disabled={!canAdmin} onChange={(e) => set(i, { exit: e.target.value })} maxLength={200} />
             <input aria-label={`Limit for ${s.name}`} placeholder="Limit" inputMode="numeric" value={s.wipLimit ?? ""} disabled={!canAdmin} onChange={(e) => set(i, { wipLimit: e.target.value ? Math.max(1, Math.min(99, Number(e.target.value) || 1)) : undefined })} />
-            <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            <span className="ctl">
               <LayerBadge layer={s.layer} />
-              {/* Save and undo, with the strong sign-in requirement spelled out */}
               {canAdmin && (
                 <>
                   <button className="chip" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move ${s.name} up`}>↑</button>
@@ -80,8 +79,9 @@ export function Settings() {
           </div>
         ))}
       </div>
+      {/* Save and undo, with the strong sign-in requirement spelled out */}
       {canAdmin && (
-        <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
+        <div className="actions" style={{ marginTop: 14 }}>
           <button className="btn btn-primary" disabled={!dirty || busy} onClick={() => void save()}>{busy ? "Saving…" : "Save workflow"}</button>
           {dirty && <button className="btn btn-ghost" onClick={() => setStages(org.stages)}>Undo changes</button>}
           <span className="muted small">Saving needs an authenticator app or passkey on your account.</span>

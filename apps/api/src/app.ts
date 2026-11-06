@@ -4,10 +4,12 @@
 
 import {
   ApproveInput,
+  CreateDocInput,
   CreateItemInput,
   CreateProjectInput,
   CreateTenantInput,
   DEFAULT_STAGES,
+  DocumentRecord,
   InviteInput,
   Item,
   KIND_LAYER,
@@ -35,10 +37,10 @@ import {
 import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
-import { CognitoAuth } from "./auth.ts";
+import { CognitoAuth, type Verified } from "./auth.ts";
 import type { Config } from "./config.ts";
-import type { Directory, Mailer } from "./services.ts";
-import { inviteEmail } from "./services.ts";
+import type { Directory, Mailer, Storage } from "./services.ts";
+import { inviteEmail, MemoryStorage } from "./services.ts";
 import { keys, Repo } from "./store/repo.ts";
 import { ConflictError } from "./store/types.ts";
 
@@ -49,6 +51,7 @@ export interface Deps {
   repo: Repo;
   directory: Directory;
   mailer: Mailer;
+  storage: Storage;
   auth?: CognitoAuth;
 }
 
@@ -71,7 +74,7 @@ const EDIT_MS = 2 * 60 * 1000;
 
 
 /** Stop the request with a JSON error the web app can show as written */
-function fail(status: 400 | 401 | 403 | 404 | 409 | 412 | 428, error: string, message: string, current?: unknown): never {
+function fail(status: 400 | 401 | 403 | 404 | 409 | 410 | 412 | 428, error: string, message: string, current?: unknown): never {
   throw new HTTPException(status, { res: Response.json({ error, message, current }, { status }) });
 }
 
@@ -110,6 +113,19 @@ export function createApp(d: Deps) {
     return c.json({ error: "server_error", message: "Something went wrong on our side. Please try again." }, 500);
   });
 
+  // Local dev only: the in-memory file store's upload and download links (S3 links in production)
+  const mem = d.storage instanceof MemoryStorage ? d.storage : undefined;
+  if (mem && cfg.devAuth) {
+    app.put("/dev-files/:key", async (c) => {
+      mem.files.set(c.req.param("key"), { type: c.req.header("content-type") ?? "application/octet-stream", bytes: new Uint8Array(await c.req.arrayBuffer()) });
+      return c.body(null, 200);
+    });
+    app.get("/dev-files/:key", (c) => {
+      const f = mem.files.get(c.req.param("key"));
+      return f ? new Response(f.bytes, { headers: { "content-type": f.type } }) : c.notFound();
+    });
+  }
+
   // CSRF: every state-changing call must carry a custom header (plus SameSite=Strict cookies)
   app.use("*", async (c, next) => {
     if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method) && c.req.header("x-1neon") !== "1") {
@@ -124,19 +140,12 @@ export function createApp(d: Deps) {
 
   // --- Sign-in (Cognito) -------------------------------------------------
 
-  app.get("/auth/login", async (c) => {
-    // Local dev has no Cognito; the demo account buttons stand in for sign-in
-    if (!d.auth) return c.redirect("/1NEON/");
-    return d.auth.login(c, c.req.query("email"));
-  });
-
-  app.get("/auth/callback", async (c) => {
-    if (!d.auth) return c.redirect("/1NEON/");
-    const r = await d.auth.callback(c);
-    if (!r || !r.emailVerified) return c.redirect("/1NEON/?signin=failed");
+  /** After any sign-in: invite check, link the Cognito identity, refresh strong sign-in */
+  async function admit(r: Verified | undefined): Promise<"ok" | "failed" | "not_invited"> {
+    if (!r || !r.emailVerified) return "failed";
     // Invite only: a verified email must already belong to an invited person
     const uid = await repo.userIdForEmail(r.email);
-    if (!uid) return c.redirect("/1NEON/?signin=not_invited");
+    if (!uid) return "not_invited";
     // Remember which Cognito identity (email code, passkey, or Google) maps to this person
     await repo.linkSubject(r.sub, uid);
     const user = await repo.getUser(uid);
@@ -145,7 +154,38 @@ export function createApp(d: Deps) {
       const strongAuth = await d.directory.hasStrongAuth(r.accessToken).catch(() => user.strongAuth);
       if (strongAuth !== user.strongAuth) await repo.saveUser({ ...user, strongAuth, version: user.version + 1, updatedAt: now() }, user.version);
     }
-    return c.redirect("/1NEON/");
+    return "ok";
+  }
+
+  // Managed Login: Google goes straight to Google; anything else is the auth.neon1.tech fallback
+  app.get("/auth/login", async (c) => {
+    // Local dev has no Cognito; the demo account buttons stand in for sign-in
+    if (!d.auth) return c.redirect("/1NEON/");
+    const provider = c.req.query("provider") === "google" ? "Google" : undefined;
+    return d.auth.login(c, c.req.query("email"), provider);
+  });
+
+  app.get("/auth/callback", async (c) => {
+    if (!d.auth) return c.redirect("/1NEON/");
+    const result = await admit(await d.auth.callback(c));
+    return c.redirect(result === "ok" ? "/1NEON/" : `/1NEON/?signin=${result}`);
+  });
+
+  // On-page sign-in: each call returns the next step; "done" means the cookies are set
+  const SignInBody = z.discriminatedUnion("op", [
+    z.object({ op: z.literal("start"), email: z.string().trim().toLowerCase().email().max(254) }),
+    z.object({ op: z.literal("choose"), method: z.enum(["code", "passkey"]) }),
+    z.object({ op: z.literal("answer"), kind: z.enum(["code", "totp", "passkey"]), value: z.string().min(1).max(20000) }),
+  ]);
+  app.post("/auth/step", async (c) => {
+    if (!d.auth) fail(404, "not_found", "Sign-in runs through the demo accounts locally.");
+    const b = SignInBody.parse(await c.req.json());
+    const r = b.op === "start" ? await d.auth.start(c, b.email) : b.op === "choose" ? await d.auth.choose(c, b.method) : await d.auth.answer(c, b.kind, b.value);
+    if (r.next.step !== "done") return c.json({ ...r.next, wrong: "wrong" in r ? r.wrong : undefined });
+    const result = await admit("verified" in r ? r.verified : undefined);
+    // Not invited: drop the cookies Cognito's tokens just set
+    if (result !== "ok") await d.auth.logout(c);
+    return c.json(result === "ok" ? { step: "done" } : { step: result });
   });
 
   // Revoke the refresh token, clear cookies, and send the browser to Cognito's logout
@@ -340,7 +380,7 @@ export function createApp(d: Deps) {
         building: live.filter((p) => stageName.get(p.stageId)?.layer === "execution").length,
         people: members.filter((m) => m.status !== "deactivated").length,
         invited: members.filter((m) => m.status === "invited").length,
-        documents: 0,
+        documents: (await allDocs(t.id, live.map((p) => p.id))).length,
       },
       waiting: waiting.slice(0, 10),
       activity,
@@ -375,7 +415,7 @@ export function createApp(d: Deps) {
       const ts = now();
       if (!uid) {
         uid = newId("u");
-        await repo.createUser({ id: uid, email: p.email, name: p.name, title: p.title, phone: "", operator: false, strongAuth: false, theme: "system", version: 1, createdAt: ts, updatedAt: ts, updatedBy: inviter.id });
+        await repo.createUser({ id: uid, email: p.email, name: p.name, title: p.title, phone: "", operator: false, strongAuth: false, theme: "system", menu: "rail", version: 1, createdAt: ts, updatedAt: ts, updatedBy: inviter.id });
       }
       const existing = await repo.getMember(t.id, uid);
       // Already a member: nothing to do. A deactivated member is re-invited
@@ -401,7 +441,7 @@ export function createApp(d: Deps) {
       // The Cognito user exists before the email goes out, so the link works on first click
       await d.directory.ensureUser(p.email);
       await repo.table.write([repo.memberOp(m, existing ? { version: existing.version } : { create: true }), repo.auditOp({ tenantId: t.id, actorId: inviter.id, action: "member.invited", target: uid, summary: `Invited ${p.email} as ${p.access}` })]);
-      const mail = inviteEmail({ orgName: t.name, inviter: inviter.name || "neon1", url: `${cfg.publicUrl}/1NEON/api/auth/login?email=${encodeURIComponent(p.email)}` });
+      const mail = inviteEmail({ orgName: t.name, inviter: inviter.name || "neon1", url: `${cfg.publicUrl}/1NEON/?email=${encodeURIComponent(p.email)}` });
       await d.mailer.send(p.email, mail.subject, mail.text, mail.html);
       out.push(m);
     }
@@ -648,6 +688,83 @@ export function createApp(d: Deps) {
     need(c, "read");
     const p = await project(c);
     await repo.clearEditing(p.tenantId, p.id, c.req.param("recordId"), actorId(c));
+    return c.json({ ok: true });
+  });
+
+  // --- Documents: general files and project files, filed by layer -------------
+
+  // Where a file's bytes live: the organization's folder, then the project (or "_"), then the record
+  const docKey = (x: DocumentRecord) => `t/${x.tenantId}/${x.projectId ?? "_"}/${x.id}/${x.name.replace(/[^\w.\- ]+/g, "_")}`;
+
+  /** Every finished upload in the organization: the general files and each live project's */
+  async function allDocs(tid: string, pids: string[]) {
+    const lists = await Promise.all([repo.listDocs(tid, undefined), ...pids.map((pid) => repo.listDocs(tid, pid))]);
+    return lists.flat().filter((x) => x.uploaded).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  /** The record named by :did, in the project given as ?p= (none for general files) */
+  async function doc(c: Context<Env>) {
+    const x = await repo.getDoc(c.get("tenant").id, c.req.query("p") || undefined, c.req.param("did")!);
+    if (!x) fail(404, "not_found", "That file no longer exists.");
+    return x;
+  }
+
+  app.get("/t/:tid/docs", async (c) => {
+    need(c, "read");
+    const t = c.get("tenant");
+    const projects = (await repo.listProjects(t.id)).filter((p) => !p.deletedAt);
+    return c.json({ docs: await allDocs(t.id, projects.map((p) => p.id)), projects: projects.map((p) => ({ id: p.id, key: p.key, name: p.name })) });
+  });
+
+  // Start an upload. Anyone who can comment may upload, so clients can send the files that are needed
+  app.post("/t/:tid/docs", async (c) => {
+    need(c, "comment");
+    const t = c.get("tenant");
+    const input = await body(c, CreateDocInput);
+    if (input.projectId) await repo.getProject(t.id, input.projectId).then((p) => (!p || p.deletedAt) && fail(404, "not_found", "That project doesn't exist."));
+    if (input.itemId) {
+      const item = input.projectId ? await repo.getItem(t.id, input.projectId, input.itemId) : undefined;
+      if (!item || item.kind !== "file_request") fail(400, "invalid", "Files can only answer a \"file needed\" item in the same project.");
+    }
+    const ts = now();
+    const x = DocumentRecord.parse({ ...input, tenantId: t.id, id: newId("d"), key: "", scan: "pending", uploaded: false, version: 1, createdAt: ts, updatedAt: ts, updatedBy: actorId(c) });
+    x.key = docKey(x);
+    await repo.saveDoc(x, { create: true });
+    return c.json({ doc: x, upload: await d.storage.putUrl(x.key, x.contentType) }, 201);
+  });
+
+  // The browser finished sending the bytes: show the file, and check off the item it answers
+  app.post("/t/:tid/docs/:did/done", async (c) => {
+    need(c, "comment");
+    const x = await doc(c);
+    if (x.uploaded) return c.json(x);
+    const ts = now();
+    const next: DocumentRecord = { ...x, uploaded: true, version: x.version + 1, updatedAt: ts };
+    const ops = [repo.docOp(next, { version: x.version }), repo.auditOp({ tenantId: x.tenantId, actorId: actorId(c), action: "doc.uploaded", target: x.id, summary: `Uploaded "${x.name}"` })];
+    const item = x.projectId && x.itemId ? await repo.getItem(x.tenantId, x.projectId, x.itemId) : undefined;
+    if (item && item.status !== "done") ops.push(repo.itemOp({ ...item, status: "done", version: item.version + 1, updatedAt: ts, updatedBy: actorId(c) }, { version: item.version }));
+    await repo.table.write(ops);
+    return c.json(next);
+  });
+
+  // A download link, once the malware scan has passed
+  app.get("/t/:tid/docs/:did/download", async (c) => {
+    need(c, "read");
+    const x = await doc(c);
+    const scan = x.scan === "clean" ? "clean" : await d.storage.scan(x.key);
+    if (scan !== x.scan) await repo.saveDoc({ ...x, scan, version: x.version + 1, updatedAt: now() }, { version: x.version }).catch(() => undefined);
+    if (scan === "infected") fail(410, "infected", "This file was flagged by the malware scan and can't be downloaded.");
+    if (scan === "pending") fail(409, "scanning", "This file is still being scanned. Try again in a minute.");
+    return c.json({ url: await d.storage.getUrl(x.key, x.name) });
+  });
+
+  // Remove a file: the person who uploaded it, or an admin
+  app.delete("/t/:tid/docs/:did", async (c) => {
+    const x = await doc(c);
+    if (x.updatedBy !== actorId(c)) need(c, "delete");
+    else need(c, "comment");
+    await d.storage.remove(x.key);
+    await repo.table.write([{ delete: keys.doc(x.tenantId, x.projectId, x.id) }, repo.auditOp({ tenantId: x.tenantId, actorId: actorId(c), action: "doc.deleted", target: x.id, summary: `Removed "${x.name}"` })]);
     return c.json({ ok: true });
   });
 

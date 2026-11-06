@@ -60,12 +60,43 @@ input, textarea, select { font: 15px var(--sans); color: var(--text); background
 textarea { min-height: 96px; resize: vertical; }
 input:focus, textarea:focus, select:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: transparent; }
 
-/* App shell (deep.-style sidebar, neon1 styling) */
-/* Two columns: the sidebar and the main area */
-.shell { display: grid; grid-template-columns: 252px 1fr; min-height: 100%; }
-.side { background: var(--frame); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 16px 12px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
-.brand { display: flex; align-items: center; gap: 10px; color: var(--accent); text-decoration: none; font: 700 14px var(--mono); letter-spacing: .08em; padding: 4px 8px 14px; }
-.brand svg { width: 24px; height: 24px; }
+/* App shell: a slim icon rail (or none, by preference), and the full menu over the page */
+.shell { min-height: 100%; }
+.shell.has-rail .main { padding-left: calc(var(--rail) + env(safe-area-inset-left)); }
+/* Notched phones sideways: the page's right edge stays clear of the notch too */
+.main { padding-right: env(safe-area-inset-right); }
+:root { --rail: 60px; --box: 28px; }
+/* The menu: fixed on the left; collapsed it is the rail, open it is full width over the page */
+.side { position: fixed; inset: 0 auto 0 0; z-index: 40; width: calc(var(--rail) + env(safe-area-inset-left)); background: var(--frame); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 2px; padding: 12px 10px 12px calc(10px + env(safe-area-inset-left)); overflow-x: hidden; overflow-y: auto; transition: width .2s, box-shadow .2s; }
+.side.open { width: calc(272px + env(safe-area-inset-left)); box-shadow: 0 0 40px rgba(0, 0, 0, .3); }
+.shell:not(.has-rail) .side:not(.open) { transform: translateX(-100%); }
+.scrim { position: fixed; inset: 0; z-index: 39; background: rgba(13, 2, 8, .45); }
+/* Every entry is one row: a 28px box, then its label; collapsed, labels stay readable to screen readers only */
+.side .brand, .side .org-mini, .nav a, .site-link, .who-link { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 6px 6px; border-radius: var(--r-sm);
+  color: var(--text); text-decoration: none; font: 14px var(--sans); background: none; border: 0; cursor: pointer; width: 100%; text-align: left; white-space: nowrap; }
+.side:not(.open) .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.side .brand { color: var(--accent); font: 700 14px var(--mono); letter-spacing: .08em; margin-bottom: 6px; }
+/* Icon boxes: rounded, with a brand-green border; layer letters keep their fills at the same size */
+.side .ico, .side .badge { flex: none; width: var(--box); height: var(--box); border-radius: 7px; display: inline-grid; place-items: center; }
+.side .ico { border: 1px solid var(--line-strong); color: var(--accent); font: 700 11px var(--mono); }
+.side .ico svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.side .ico svg[viewBox="0 0 64 64"] { stroke-width: 5; }
+.side .ico.mark { border-color: var(--accent); }
+.side .ico.mark svg { width: 20px; height: 20px; stroke-width: 6; }
+.side .badge { font-size: 12px; }
+.side .av-box { border: 0; }
+.side .av-box .av { width: var(--box) !important; height: var(--box) !important; border: 0; }
+.nav a:hover, .side .org-mini:hover, .site-link:hover, .who-link:hover, .side .brand:hover { background: var(--accent-soft); }
+.nav a.active, .who-link.active { background: var(--accent-soft); font-weight: 600; }
+.nav a.active .ico { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.nav { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 2px; }
+/* Section labels when open; a thin rule when collapsed */
+.nav .sep { font: 11px var(--mono); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; padding: 12px 6px 4px; }
+.side:not(.open) .nav .sep { padding: 0; margin: 6px 4px; border-top: 1px solid var(--line); }
+.site-link { margin-top: auto; font: 13px var(--mono); color: var(--muted); }
+.who-link { border-top: 1px solid var(--line); border-radius: 0; padding-top: 10px; margin-top: 4px; }
+.side .org { margin: 2px 0 6px; }
 /* Organization chooser; amber when it shows All clients */
 .org { width: 100%; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 9px 12px; cursor: pointer; color: var(--text); display: grid; gap: 1px; }
 .org:hover { border-color: var(--line-strong); }
@@ -78,21 +109,6 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--focus); out
 .menu button:hover, .menu a:hover, .menu [aria-selected="true"] { background: var(--accent-soft); }
 .menu small { font: 12px var(--mono); color: var(--muted); }
 .menu hr { border: 0; border-top: 1px solid var(--line); margin: 6px 4px; }
-/* Sidebar navigation; the active page gets an accent bar */
-.nav { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 2px; }
-.nav a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-sm); color: var(--text); text-decoration: none; font-size: 14px; position: relative; }
-.nav a:hover { background: var(--accent-soft); }
-.nav a.active { background: var(--accent-soft); font-weight: 600; }
-.nav a.active::before { content: ""; position: absolute; left: -12px; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--accent); }
-.nav .letter { width: 20px; height: 20px; display: inline-grid; place-items: center; font: 700 11px var(--mono); border-radius: 6px; color: #fff; }
-.nav .ico { width: 20px; text-align: center; font: 14px var(--mono); color: var(--muted); }
-.nav .sep { font: 11px var(--mono); color: var(--muted); padding: 12px 10px 4px; letter-spacing: .06em; }
-/* Signed-in person and the connection dot at the sidebar's foot */
-/* Link back to the neon1.tech site, just above the signed-in person */
-.site-link { margin-top: auto; display: flex; align-items: center; gap: 8px; padding: 8px 10px; font: 12px var(--mono); color: var(--muted); text-decoration: none; border-radius: var(--r-sm); }
-.site-link:hover { color: var(--accent); background: var(--accent-soft); }
-.site-link svg { width: 16px; height: 16px; }
-.side .foot { margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; }
 .dot.warn { background: var(--amber); }
 
@@ -209,7 +225,7 @@ a.row:hover { background: var(--accent-soft); }
 .steps span.done { background: var(--accent-soft); }
 /* Forms, action rows, and native dialogs */
 .form { display: grid; gap: 16px; max-width: 640px; }
-.actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: flex-start; }
 dialog { border: 1px solid var(--line-strong); border-radius: var(--r); padding: 24px; background: var(--panel); color: var(--text); max-width: 560px; width: calc(100% - 32px); box-shadow: 0 24px 64px rgba(0, 0, 0, .25); }
 dialog::backdrop { background: rgba(13, 2, 8, .45); backdrop-filter: blur(2px); }
 dialog h2 { font-size: 17px; margin-bottom: 10px; }
@@ -243,18 +259,57 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
 .signin .fine { font-size: 12px; color: #84A98C; margin: 18px 0 0; }
 .signin .fine a { color: #84A98C; }
 .signin .legal-links { margin-top: 8px; white-space: nowrap; }
+/* Sign-in steps: stacked buttons, and a wide, spaced-out code field */
+.signin .steps-col { display: grid; gap: 10px; }
+.signin .steps-col .btn { width: 100%; margin: 0; }
+.signin .btn-ghost { color: var(--neon); border-color: var(--neon); }
+.signin input.code { font: 600 22px var(--mono); letter-spacing: .3em; }
+.signin .linkish { color: #84A98C; }
 .signin .dev { margin-top: 18px; display: grid; gap: 6px; }
 .signin .dev button { background: rgba(255, 255, 255, .03); border: 1px solid rgba(0, 255, 65, .18); color: #D6F5DC; border-radius: 8px; padding: 8px; cursor: pointer; font: 13px var(--sans); }
 .signin .dev button:hover { border-color: var(--neon); }
-/* Page entrance: a short fade from blur, off for reduced motion */
-.wake { animation: wake .9s ease-out both; }
+/* Page entrance: a short fade from blur, off for reduced motion. No fill afterwards: a leftover
+   filter would pin the fixed menu to the page instead of the screen */
+.wake { animation: wake .9s ease-out backwards; }
 @keyframes wake { from { opacity: 0; filter: blur(6px); } to { opacity: 1; filter: none; } }
 
-/* Phones and small tablets: the sidebar becomes a drawer, side columns stack */
+/* Workflow stages: one row each on wide screens; phones get a small card per stage */
+.stages { border-top: 1px solid var(--line); }
+.stage { display: grid; grid-template-columns: minmax(0, 1.2fr) 150px minmax(0, 2fr) 80px auto; grid-template-areas: "name layer exit limit ctl";
+  gap: 10px; align-items: center; padding: 12px 4px; border-bottom: 1px solid var(--line); }
+.stage.off { opacity: .55; }
+.stage > :nth-child(1) { grid-area: name; } .stage > :nth-child(2) { grid-area: layer; } .stage > :nth-child(3) { grid-area: exit; }
+.stage > :nth-child(4) { grid-area: limit; } .stage .ctl { grid-area: ctl; display: flex; gap: 6px; align-items: center; }
+@media (max-width: 760px) {
+  .stage { grid-template-columns: minmax(0, 1fr) 80px; grid-template-areas: "name name" "exit exit" "layer limit" "ctl ctl"; gap: 8px; padding: 14px 0; }
+  .stage .ctl { justify-content: flex-end; }
+}
+
+/* Files: where uploads go, the drop area, layer filters, and file rows */
+.file-target { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.file-target label { display: grid; gap: 6px; font: 12px var(--mono); color: var(--muted); flex: 1 1 220px; }
+.drop { display: grid; gap: 6px; place-items: center; text-align: center; padding: 28px 16px; border: 1.5px dashed var(--line-strong); border-radius: var(--r); cursor: pointer; margin-bottom: 22px; transition: border-color .2s, background .2s; }
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop b { font: 600 14px var(--mono); color: var(--accent); }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.chips .chip { display: inline-flex; align-items: center; gap: 6px; }
+.files { border-top: 1px solid var(--line); }
+.file { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+.file .meta { display: grid; min-width: 0; }
+.file .t { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file .s { font: 12px var(--mono); color: var(--muted); }
+.file .acts { display: flex; gap: 6px; }
+.file-ask { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+@media (max-width: 600px) { .file { grid-template-columns: auto minmax(0, 1fr); } .file .acts { grid-column: 1 / -1; justify-content: flex-end; } }
+
+/* Phones, upright or sideways: action buttons and the notes beside them sit centered at the end of a page */
 @media (max-width: 900px) {
-  .shell { grid-template-columns: 1fr; }
-  .side { position: fixed; inset: 0 auto 0 0; width: 280px; z-index: 40; transform: translateX(-100%); transition: transform .2s; box-shadow: 0 0 40px rgba(0, 0, 0, .3); }
-  .side.open { transform: none; }
+  .actions { justify-content: center; text-align: center; }
+  .actions .muted { flex-basis: 100%; }
+}
+
+/* Phones and small tablets: side columns stack */
+@media (max-width: 900px) {
   .content { padding: 20px 16px; }
   .top { padding: 10px 16px; }
   .two { grid-template-columns: 1fr; }
@@ -262,8 +317,6 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
   .row > :nth-child(2) { display: none; }
   .hide-sm { display: none; }
 }
-/* The drawer button only shows on small screens */
-@media (min-width: 901px) { .only-sm { display: none !important; } }
 /* Respect reduced motion everywhere */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

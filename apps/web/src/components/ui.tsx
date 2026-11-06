@@ -203,3 +203,27 @@ export function Empty({ text, action }: { text: string; action?: ReactNode }) {
     </div>
   );
 }
+
+
+// Line icons for the menu, drawn on one 24px grid with one stroke so they line up
+const ICONS = {
+  workspace: "M4 11 12 4l8 7M6 9.5V20h12V9.5",
+  workflow: "M4 5h4v14H4zM10 5h4v9h-4zM16 5h4v6h-4z",
+  projects: "M3 7h7l2 2h9v10H3z",
+  people: "M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3.5 3.5 0 0 1 0 6.5M21 20c0-2.6-1.6-4.9-4-5.7",
+  documents: "M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6",
+  settings: "M4 7h10M18 7h2M4 17h4M12 17h8M16 5v4M10 15v4",
+  // neon1's mark: two arches of nested arcs falling into columns, on its own 64px grid
+  site: "M6 6a24 24 0 0 1 24 24v30M6 18a12 12 0 0 1 12 12v30M34 6a24 24 0 0 1 24 24v30M34 18a12 12 0 0 1 12 12v30",
+} as const;
+export type IconName = keyof typeof ICONS;
+
+
+/** A menu icon in its rounded box, the same size as the layer badges */
+export function Icon({ name }: { name: IconName }) {
+  return (
+    <span className="ico" aria-hidden="true">
+      <svg viewBox={name === "site" ? "0 0 64 64" : "0 0 24 24"} strokeWidth={name === "site" ? 5 : undefined}><path d={ICONS[name]} /></svg>
+    </span>
+  );
+}

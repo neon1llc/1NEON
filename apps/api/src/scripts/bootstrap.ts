@@ -25,7 +25,7 @@ const now = new Date().toISOString();
 let uid = await repo.userIdForEmail(email);
 if (!uid) {
   uid = newId("u");
-  await repo.createUser({ id: uid, email: email.toLowerCase(), name, title: "", phone: "", operator: false, strongAuth: false, theme: "system", version: 1, createdAt: now, updatedAt: now, updatedBy: uid });
+  await repo.createUser({ id: uid, email: email.toLowerCase(), name, title: "", phone: "", operator: false, strongAuth: false, theme: "system", menu: "rail", version: 1, createdAt: now, updatedAt: now, updatedBy: uid });
   console.log(`created user ${email}`);
 }
 

@@ -1,4 +1,4 @@
-// apps/web/src/pages/Me.tsx - Your profile: name, title, phone, theme, and signing out.
+// apps/web/src/pages/Me.tsx - Your profile: name, title, phone, theme, menu, and signing out.
 
 
 import type { User } from "@1neon/domain";
@@ -17,7 +17,7 @@ export function MePage() {
   const qc = useQueryClient();
   const toast = useToast();
   // Edits stay local until Save
-  const [draft, setDraft] = useState({ name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme });
+  const [draft, setDraft] = useState({ name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme, menu: me.user.menu ?? "rail" });
   const [busy, setBusy] = useState(false);
   // Save the profile; the theme applies immediately and is kept with the account
   const save = async () => {
@@ -65,13 +65,25 @@ export function MePage() {
             ))}
           </div>
         </fieldset>
+        {/* Menu: the icon rail stays on screen, or pages get the full width behind a menu button */}
+        <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend style={{ marginBottom: 8 }}>Menu</legend>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {(["rail", "hidden"] as const).map((m) => (
+              <label key={m} className={`chip${draft.menu === m ? " on" : ""}`} style={{ cursor: "pointer" }}>
+                <input type="radio" name="menu" className="sr" checked={draft.menu === m} onChange={() => setDraft({ ...draft, menu: m })} />
+                {m === "rail" ? "Icons always showing" : "Hidden behind a menu button"}
+              </label>
+            ))}
+          </div>
+        </fieldset>
         {/* Strong sign-in status: admins need it for people and settings */}
         <div className="card small" style={{ display: "grid", gap: 4 }}>
           <b>Sign-in security</b>
           <span className="muted">{me.user.strongAuth ? "You have an authenticator app or passkey. Admin actions are open to you." : "Add an authenticator app (such as Authy) or a passkey at your next sign-in. Admins need one to manage people and settings."}</span>
         </div>
         {/* Save, and sign out */}
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="actions">
           <button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
           <button className="btn btn-ghost" type="button" onClick={() => void signOut()}>Sign out</button>
         </div>

@@ -71,6 +71,8 @@ export const User = z.object({
   operator: z.boolean().default(false),
   strongAuth: z.boolean().default(false),
   theme: z.enum(["system", "awake", "matrix"]).default("system"),
+  // "rail" keeps a slim icon menu on screen; "hidden" gives pages the full width behind a menu button
+  menu: z.enum(["rail", "hidden"]).default("rail"),
   ...versioned,
 });
 export type User = z.infer<typeof User>;
@@ -255,10 +257,12 @@ export const itemFields: Partial<Record<ItemKind, z.ZodType>> = {
 };
 
 
-/** A file's record. Bytes live in S3 under the organization's folder; `scan` gates downloads */
+/** A file's record. Bytes live in S3 under the organization's folder; `scan` gates downloads.
+ * Without a project it's a general file for the organization; with `itemId` it answers a "file needed" item */
 export const DocumentRecord = z.object({
   tenantId: id,
-  projectId: id,
+  projectId: id.optional(),
+  itemId: id.optional(),
   id: id,
   name: z.string().trim().min(1).max(200),
   layer: Layer,
@@ -267,6 +271,8 @@ export const DocumentRecord = z.object({
   key: z.string().max(512),
   scan: z.enum(["pending", "clean", "infected"]),
   needsApproval: z.boolean().default(false),
+  // False until the browser reports the upload finished
+  uploaded: z.boolean().default(false),
   ...versioned,
 });
 export type DocumentRecord = z.infer<typeof DocumentRecord>;

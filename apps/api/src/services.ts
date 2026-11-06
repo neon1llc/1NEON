@@ -10,7 +10,10 @@ import {
   ListWebAuthnCredentialsCommand,
   UsernameExistsException,
 } from "@aws-sdk/client-cognito-identity-provider";
+import { DeleteObjectCommand, GetObjectCommand, GetObjectTaggingCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { branded, esc } from "./mail.ts";
 
 
 /** The identity directory: create sign-in accounts for invitees and check strong sign-in */
@@ -26,6 +29,55 @@ export interface Directory {
 export interface Mailer {
   // Send one message with plain text and HTML bodies
   send(to: string, subject: string, text: string, html: string): Promise<void>;
+}
+
+
+/** File storage: short-lived links for the browser to upload and download directly, and the scan result */
+export interface Storage {
+  // A link the browser PUTs the bytes to, with this content type
+  putUrl(key: string, contentType: string): Promise<string>;
+  // A download link that saves the file under its own name
+  getUrl(key: string, name: string): Promise<string>;
+  // The malware scan's verdict; nothing to read yet means it's still running
+  scan(key: string): Promise<"pending" | "clean" | "infected">;
+  // Remove the file
+  remove(key: string): Promise<void>;
+}
+
+
+// Upload and download links live five minutes: long enough for a phone on a slow network
+const LINK_SECONDS = 300;
+
+
+/** S3, scanned by GuardDuty, which tags each object with its result */
+export class S3Storage implements Storage {
+  // Region and credentials come from the Lambda environment
+  private s3 = new S3Client({});
+  constructor(private bucket: string) {}
+
+  async putUrl(key: string, contentType: string) {
+    return getSignedUrl(this.s3, new PutObjectCommand({ Bucket: this.bucket, Key: key, ContentType: contentType }), { expiresIn: LINK_SECONDS });
+  }
+
+  // The bucket refuses this download until GuardDuty tags the object clean
+  async getUrl(key: string, name: string) {
+    const disposition = `attachment; filename*=UTF-8''${encodeURIComponent(name)}`;
+    return getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key, ResponseContentDisposition: disposition }), { expiresIn: LINK_SECONDS });
+  }
+
+  async scan(key: string) {
+    try {
+      const r = await this.s3.send(new GetObjectTaggingCommand({ Bucket: this.bucket, Key: key }));
+      const v = r.TagSet?.find((t) => t.Key === "GuardDutyMalwareScanStatus")?.Value;
+      return v === "NO_THREATS_FOUND" ? "clean" : v === "THREATS_FOUND" ? "infected" : "pending";
+    } catch {
+      return "pending"; // not uploaded yet
+    }
+  }
+
+  async remove(key: string) {
+    await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+  }
 }
 
 
@@ -93,6 +145,25 @@ export class SesMailer implements Mailer {
 
 
 /** Local and test stand-ins */
+/** Files in memory; the dev API serves the links, and everything counts as scanned clean */
+export class MemoryStorage implements Storage {
+  readonly files = new Map<string, { type: string; bytes: Uint8Array }>();
+  async putUrl(key: string) {
+    return `/1NEON/api/dev-files/${encodeURIComponent(key)}`;
+  }
+  async getUrl(key: string) {
+    return `/1NEON/api/dev-files/${encodeURIComponent(key)}`;
+  }
+  async scan(key: string) {
+    return this.files.has(key) ? "clean" as const : "pending" as const;
+  }
+  async remove(key: string) {
+    this.files.delete(key);
+  }
+}
+
+
+
 export class MemoryDirectory implements Directory {
   // Emails that would have accounts, for assertions in tests
   readonly users = new Set<string>();
@@ -118,11 +189,7 @@ export class MemoryMailer implements Mailer {
 }
 
 
-// HTML-escape values placed into the invite email
-const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
-
-
-/** The invite email: plain text plus a small branded HTML version */
+/** The invite email: plain text plus the branded HTML version */
 export function inviteEmail(opts: { orgName: string; inviter: string; url: string }) {
   const subject = `You're invited to ${opts.orgName} on 1NEON`;
   const text = [
@@ -136,15 +203,12 @@ export function inviteEmail(opts: { orgName: string; inviter: string; url: strin
     "",
     "neon1 · 1 is glad to be of service.",
   ].join("\n");
-  // Inline styles only: mail clients strip style sheets
-  const html = `<!doctype html><html><body style="margin:0;background:#F2F4F2;font:16px/1.6 -apple-system,Segoe UI,Inter,sans-serif;color:#12241A">
-<div style="max-width:520px;margin:0 auto;padding:40px 24px">
-<p style="font:600 15px ui-monospace,Menlo,monospace;color:#035704;letter-spacing:.06em;margin:0 0 24px">1NEON</p>
-<p>${esc(opts.inviter)} invited you to <b>${esc(opts.orgName)}</b> on 1NEON, the neon1 project portal.</p>
-<p style="color:#56665c">1NEON keeps your projects with neon1 in one place: what you need, the work, how it's measured, and what comes next.</p>
-<p style="margin:32px 0"><a href="${esc(opts.url)}" style="background:#035704;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font:500 14px ui-monospace,Menlo,monospace">Join ${esc(opts.orgName)}</a></p>
-<p style="color:#56665c;font-size:14px">You'll sign in with a code sent to this email. If you weren't expecting this, you can ignore it.</p>
-<p style="color:#56665c;font-size:13px;margin-top:40px">neon1 · 1 is glad to be of service.</p>
-</div></body></html>`;
+  const html = branded({
+    preheader: `${opts.inviter} invited you to ${opts.orgName}.`,
+    heading: `You're invited to ${opts.orgName}`,
+    body: `<p style="margin:0 0 12px">${esc(opts.inviter)} invited you to <b>${esc(opts.orgName)}</b> on 1NEON.</p><p style="margin:0;color:#56665c">1NEON keeps your projects with neon1 in one place: what you need, the work, how it's measured, and what comes next.</p>`,
+    button: { label: `Join ${opts.orgName}`, url: opts.url },
+    note: "You'll sign in with a code sent to this email. If you weren't expecting this, you can ignore it.",
+  });
   return { subject, text, html };
 }

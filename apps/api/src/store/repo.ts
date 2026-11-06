@@ -24,7 +24,8 @@ export const keys = {
   projectCounter: (tid: string, prefix: string) => ({ PK: `T#${tid}`, SK: `COUNTER#${prefix}` }),
   // Inside one project
   item: (tid: string, pid: string, iid: string) => ({ PK: `T#${tid}#P#${pid}`, SK: `ITEM#${iid}` }),
-  doc: (tid: string, pid: string, did: string) => ({ PK: `T#${tid}#P#${pid}`, SK: `DOC#${did}` }),
+  // General files, with no project, share the "_" partition
+  doc: (tid: string, pid: string | undefined, did: string) => ({ PK: `T#${tid}#P#${pid ?? "_"}`, SK: `DOC#${did}` }),
   edit: (tid: string, pid: string, recordId: string) => ({ PK: `T#${tid}#P#${pid}`, SK: `EDIT#${recordId}` }),
   audit: (tid: string) => `T#${tid}#AUDIT`,
 };
@@ -218,20 +219,25 @@ export class Repo {
     await this.table.write([{ delete: keys.item(tid, pid, iid), guard: { version } }]);
   }
 
-  // A project's document records (the files live in S3)
-  async listDocs(tid: string, pid: string) {
-    return (await this.table.query(`T#${tid}#P#${pid}`, "DOC#")).map((r) => entity<DocumentRecord>(r)!);
+  // A project's document records, or the general ones without a project (the files live in S3)
+  async listDocs(tid: string, pid: string | undefined) {
+    return (await this.table.query(`T#${tid}#P#${pid ?? "_"}`, "DOC#")).map((r) => entity<DocumentRecord>(r)!);
   }
 
   // One document record
-  async getDoc(tid: string, pid: string, did: string) {
+  async getDoc(tid: string, pid: string | undefined, did: string) {
     const k = keys.doc(tid, pid, did);
     return entity<DocumentRecord>(await this.table.get(k.PK, k.SK));
   }
 
+  // Document record write to combine with others in one transaction
+  docOp(d: DocumentRecord, guard: Guard): WriteOp {
+    return { put: { ...keys.doc(d.tenantId, d.projectId, d.id), type: "doc", ...d }, guard };
+  }
+
   // Document record write; the guard keeps scan results and renames from crossing
   async saveDoc(d: DocumentRecord, guard: Guard) {
-    await this.table.write([{ put: { ...keys.doc(d.tenantId, d.projectId, d.id), type: "doc", ...d }, guard }]);
+    await this.table.write([this.docOp(d, guard)]);
   }
 
   // --- Edit markers (advisory soft locks) ---------------------------------

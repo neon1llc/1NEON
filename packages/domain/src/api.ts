@@ -2,7 +2,7 @@
 
 
 import { z } from "zod";
-import { AccessLevel, Health, ItemKind, ProjectRole, email, id } from "./model.ts";
+import { AccessLevel, Health, ItemKind, Layer, ProjectRole, email, id } from "./model.ts";
 
 
 // Organizations (operator only)
@@ -121,6 +121,7 @@ export const UpdateMeInput = z.object({
   title: z.string().trim().max(80).optional(),
   phone: z.string().trim().max(32).optional(),
   theme: z.enum(["system", "awake", "matrix"]).optional(),
+  menu: z.enum(["rail", "hidden"]).optional(),
 });
 
 
@@ -130,3 +131,14 @@ export interface ApiError {
   message: string;
   current?: unknown;
 }
+
+
+/** Start an upload: the record is made first, then the browser sends the bytes straight to storage */
+export const CreateDocInput = z.object({
+  name: z.string().trim().min(1).max(200),
+  contentType: z.string().max(120).default("application/octet-stream"),
+  size: z.number().int().positive().max(100 * 1024 * 1024),
+  layer: Layer,
+  projectId: id.optional(),
+  itemId: id.optional(),
+});

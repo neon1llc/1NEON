@@ -78,8 +78,11 @@ resource "aws_cognito_user_pool" "main" {
     configuration_set     = var.ses_configuration_set
   }
 
-  # Refuses first-time Google sign-ins without an invite
-  lambda_config { pre_sign_up = var.pre_sign_up_arn }
+  # One trigger function: refuses first-time Google sign-ins without an invite, and brands code emails
+  lambda_config {
+    pre_sign_up    = var.pre_sign_up_arn
+    custom_message = var.pre_sign_up_arn
+  }
 
   # An email change takes effect only after the new address is verified
   user_attribute_update_settings { attributes_require_verification_before_update = ["email"] }

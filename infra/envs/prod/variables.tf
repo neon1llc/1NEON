@@ -48,7 +48,7 @@ variable "google_client_id" {
 
 
 variable "malware_scan" {
-  description = "GuardDuty Malware Protection on the documents bucket. Turn on before the first client upload."
+  description = "GuardDuty Malware Protection on the documents bucket; uploads are open, so it stays on."
   type        = bool
-  default     = false
+  default     = true
 }
