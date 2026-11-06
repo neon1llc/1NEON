@@ -71,13 +71,14 @@ module "api" {
 
 # Cognito: invite-only sign-in on auth.neon1.tech.
 module "auth" {
-  source                         = "../../modules/auth"
-  name                           = local.name
-  auth_domain                    = local.auth_domain
-  zone_id                        = var.zone_id
-  certificate_arn                = data.aws_acm_certificate.site.arn
-  public_url                     = local.public_url
-  passkey_rp_id                  = local.auth_domain
+  source          = "../../modules/auth"
+  name            = local.name
+  auth_domain     = local.auth_domain
+  zone_id         = var.zone_id
+  certificate_arn = data.aws_acm_certificate.site.arn
+  public_url      = local.public_url
+  # Passkeys bound to neon1.tech work on every subdomain, so a later move off auth.neon1.tech keeps them.
+  passkey_rp_id                  = var.domain
   ses_identity_arn               = module.mail.identity_arn
   ses_configuration_set          = module.mail.configuration_set
   mail_from                      = module.mail.from
