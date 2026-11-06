@@ -1,0 +1,17 @@
+{
+  "name": "1neon",
+  "private": true,
+  "version": "0.1.0",
+  "description": "1 portal. Needs. Execution. Observation. Next.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "npm run dev --workspace @1neon/api & npm run dev --workspace @1neon/web",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "check": "npm run typecheck && npm run test && npm run build"
+  }
+}

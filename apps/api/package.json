@@ -1,0 +1,34 @@
+{
+  "name": "@1neon/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "DEV_AUTH=1 tsx watch src/dev.ts",
+    "typecheck": "tsc -p .",
+    "test": "vitest run",
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@1neon/domain": "0.1.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.900.0",
+    "@aws-sdk/client-dynamodb": "^3.900.0",
+    "@aws-sdk/client-s3": "^3.900.0",
+    "@aws-sdk/client-sesv2": "^3.900.0",
+    "@aws-sdk/lib-dynamodb": "^3.900.0",
+    "@aws-sdk/s3-presigned-post": "^3.900.0",
+    "@aws-sdk/s3-request-presigner": "^3.900.0",
+    "aws-jwt-verify": "^5.1.0",
+    "hono": "^4.10.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@hono/node-server": "^1.19.0",
+    "@types/aws-lambda": "^8.10.150",
+    "@types/node": "^22.18.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

@@ -1,0 +1,249 @@
+// The 1NEON domain: organizations (tenants), people, projects, and the four layers.
+// Schemas are shared by the web app and the API, so validation is identical on both sides.
+import { z } from "zod";
+
+export const id = z.string().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/);
+export const isoDate = z.string().datetime({ offset: true });
+export const email = z.string().trim().toLowerCase().email().max(254);
+
+/** Access level inside one organization. Titles and project roles never grant access. */
+export const AccessLevel = z.enum(["viewer", "editor", "admin"]);
+export type AccessLevel = z.infer<typeof AccessLevel>;
+
+/** The four layers of every project: Needs, Execution, Observation, Next. */
+export const Layer = z.enum(["needs", "execution", "observation", "next"]);
+export type Layer = z.infer<typeof Layer>;
+
+export const Health = z.enum(["on_track", "at_risk", "off_track", "not_started"]);
+export type Health = z.infer<typeof Health>;
+
+/** Every stored record carries a version for optimistic concurrency. */
+const versioned = {
+  version: z.number().int().nonnegative(),
+  createdAt: isoDate,
+  updatedAt: isoDate,
+  updatedBy: id,
+};
+
+export const Stage = z.object({
+  id: id,
+  name: z.string().trim().min(1).max(40),
+  layer: Layer,
+  exit: z.string().max(200).default(""),
+  wipLimit: z.number().int().positive().max(99).optional(),
+  hidden: z.boolean().default(false),
+});
+export type Stage = z.infer<typeof Stage>;
+
+export const Tenant = z.object({
+  id: id,
+  slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/),
+  clientId: z.string().regex(/^N1-\d{4}$/),
+  name: z.string().trim().min(1).max(80),
+  status: z.enum(["active", "archived"]),
+  stages: z.array(Stage).min(1).max(20),
+  ...versioned,
+});
+export type Tenant = z.infer<typeof Tenant>;
+
+export const User = z.object({
+  id: id,
+  email: email,
+  name: z.string().trim().max(80).default(""),
+  title: z.string().trim().max(80).default(""),
+  phone: z.string().trim().max(32).default(""),
+  operator: z.boolean().default(false),
+  strongAuth: z.boolean().default(false),
+  theme: z.enum(["system", "awake", "matrix"]).default("system"),
+  ...versioned,
+});
+export type User = z.infer<typeof User>;
+
+export const MemberStatus = z.enum(["invited", "joined", "deactivated"]);
+export const Member = z.object({
+  tenantId: id,
+  userId: id,
+  email: email,
+  name: z.string().max(80).default(""),
+  title: z.string().max(80).default(""),
+  access: AccessLevel,
+  status: MemberStatus,
+  invitedBy: id,
+  invitedAt: isoDate,
+  joinedAt: isoDate.optional(),
+  lastSeenAt: isoDate.optional(),
+  ...versioned,
+});
+export type Member = z.infer<typeof Member>;
+
+export const ProjectRole = z.enum([
+  "lead_engineer",
+  "sponsor",
+  "decision_maker",
+  "tech_contact",
+  "stakeholder",
+  "observer",
+]);
+export type ProjectRole = z.infer<typeof ProjectRole>;
+
+export const Project = z.object({
+  tenantId: id,
+  id: id,
+  key: z.string().regex(/^[A-Z][A-Z0-9]{1,5}-\d{1,4}$/),
+  name: z.string().trim().min(1).max(120),
+  summary: z.string().max(500).default(""),
+  outcome: z.string().max(500).default(""),
+  template: z.string().max(40).default("blank"),
+  stageId: id,
+  stageEnteredAt: isoDate,
+  health: Health,
+  rank: z.string().min(1).max(64),
+  targetDate: z.string().date().optional(),
+  people: z.array(z.object({ userId: id, role: ProjectRole })).max(50).default([]),
+  flags: z.array(z.enum(["pii", "phi", "payment"])).default([]),
+  archived: z.boolean().default(false),
+  deletedAt: isoDate.optional(),
+  ...versioned,
+});
+export type Project = z.infer<typeof Project>;
+
+/** Items inside a project's layers share one shape with a kind discriminator. */
+export const ItemKind = z.enum([
+  "request", // Needs: intake from anyone in the org
+  "discovery", // Needs: guided question and answer
+  "asset", // Needs: systems, accounts, vendors, data (never secrets)
+  "requirement", // Needs: must / should / could
+  "option", // Needs: a proposal option scored on cost, quality, effort
+  "decision", // Needs: immutable record of the approved option
+  "file_request", // Needs: "please upload X"
+  "task", // Execution
+  "milestone", // Execution
+  "change", // Execution: change request against the decision
+  "update", // Execution: health update
+  "metric", // Observation
+  "check", // Observation
+  "incident", // Observation
+  "handoff", // Next: checklist item
+  "runbook", // Next
+  "training", // Next
+  "care", // Next: care plan
+  "retro", // Next
+]);
+export type ItemKind = z.infer<typeof ItemKind>;
+
+export const KIND_LAYER: Record<ItemKind, Layer> = {
+  request: "needs",
+  discovery: "needs",
+  asset: "needs",
+  requirement: "needs",
+  option: "needs",
+  decision: "needs",
+  file_request: "needs",
+  task: "execution",
+  milestone: "execution",
+  change: "execution",
+  update: "execution",
+  metric: "observation",
+  check: "observation",
+  incident: "observation",
+  handoff: "next",
+  runbook: "next",
+  training: "next",
+  care: "next",
+  retro: "next",
+};
+
+export const Score = z.number().int().min(1).max(5);
+
+export const Item = z.object({
+  tenantId: id,
+  projectId: id,
+  id: id,
+  kind: ItemKind,
+  title: z.string().trim().min(1).max(160),
+  body: z.string().max(20_000).default(""),
+  status: z.string().max(24).default("open"),
+  rank: z.string().max(64).default("m"),
+  assigneeId: id.optional(),
+  dueDate: z.string().date().optional(),
+  /** Kind-specific fields, validated by `itemFields` below. */
+  fields: z.record(z.string(), z.unknown()).default({}),
+  ...versioned,
+});
+export type Item = z.infer<typeof Item>;
+
+export const OptionFields = z.object({
+  cost: z.string().max(80).default(""),
+  costScore: Score.default(3),
+  qualityScore: Score.default(3),
+  effortScore: Score.default(3),
+  timeline: z.string().max(80).default(""),
+  recommended: z.boolean().default(false),
+});
+
+export const DecisionFields = z.object({
+  optionId: id,
+  optionVersion: z.number().int(),
+  approvedBy: id,
+  approvedAt: isoDate,
+  conditions: z.string().max(2000).default(""),
+});
+
+export const MetricFields = z.object({
+  category: z
+    .enum(["performance", "reliability", "cost", "security", "adoption", "sla", "delivery"])
+    .default("performance"),
+  unit: z.string().max(24).default(""),
+  direction: z.enum(["up", "down"]).default("up"),
+  baseline: z.number().optional(),
+  baselineDate: z.string().date().optional(),
+  target: z.number().optional(),
+  targetDate: z.string().date().optional(),
+  readings: z.array(z.object({ at: z.string().date(), value: z.number(), note: z.string().max(200).default("") })).max(500).default([]),
+});
+
+export const RequirementFields = z.object({ priority: z.enum(["must", "should", "could"]).default("should") });
+export const UpdateFields = z.object({ health: Health });
+
+export const itemFields: Partial<Record<ItemKind, z.ZodType>> = {
+  option: OptionFields,
+  decision: DecisionFields,
+  metric: MetricFields,
+  requirement: RequirementFields,
+  update: UpdateFields,
+};
+
+export const DocumentRecord = z.object({
+  tenantId: id,
+  projectId: id,
+  id: id,
+  name: z.string().trim().min(1).max(200),
+  layer: Layer,
+  contentType: z.string().max(120),
+  size: z.number().int().nonnegative(),
+  key: z.string().max(512),
+  scan: z.enum(["pending", "clean", "infected"]),
+  needsApproval: z.boolean().default(false),
+  ...versioned,
+});
+export type DocumentRecord = z.infer<typeof DocumentRecord>;
+
+export const AuditEvent = z.object({
+  tenantId: id,
+  at: isoDate,
+  id: id,
+  actorId: id,
+  action: z.string().max(40),
+  target: z.string().max(160),
+  summary: z.string().max(300),
+});
+export type AuditEvent = z.infer<typeof AuditEvent>;
+
+/** Metric progress: (latest - baseline) / (target - baseline), clamped to 0..1. */
+export function metricProgress(m: z.infer<typeof MetricFields>): number | undefined {
+  const latest = m.readings.at(-1)?.value;
+  if (latest === undefined || m.baseline === undefined || m.target === undefined) return undefined;
+  if (m.target === m.baseline) return latest === m.target ? 1 : 0;
+  const p = (latest - m.baseline) / (m.target - m.baseline);
+  return Math.max(0, Math.min(1, p));
+}

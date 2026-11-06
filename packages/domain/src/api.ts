@@ -1,0 +1,107 @@
+// Request bodies for the API, shared with the web client.
+import { z } from "zod";
+import { AccessLevel, Health, ItemKind, ProjectRole, email, id } from "./model.ts";
+
+export const CreateTenantInput = z.object({
+  name: z.string().trim().min(1).max(80),
+  slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/).optional(),
+});
+
+export const InviteInput = z.object({
+  people: z
+    .array(
+      z.object({
+        email: email,
+        name: z.string().trim().max(80).default(""),
+        title: z.string().trim().max(80).default(""),
+        access: AccessLevel.default("editor"),
+      }),
+    )
+    .min(1)
+    .max(50),
+});
+
+export const UpdateMemberInput = z.object({
+  version: z.number().int(),
+  access: AccessLevel.optional(),
+  title: z.string().trim().max(80).optional(),
+  status: z.enum(["joined", "deactivated"]).optional(),
+});
+
+export const CreateProjectInput = z.object({
+  name: z.string().trim().min(1).max(120),
+  template: z.string().max(40).default("blank"),
+  summary: z.string().max(500).default(""),
+  outcome: z.string().max(500).default(""),
+  example: z.string().max(2000).default(""),
+  targetDate: z.string().date().optional(),
+  flags: z.array(z.enum(["pii", "phi", "payment"])).default([]),
+  people: z.array(z.object({ userId: id, role: ProjectRole })).max(50).default([]),
+  metrics: z
+    .array(z.object({ title: z.string().trim().min(1).max(160), unit: z.string().max(24).default(""), baseline: z.number().optional(), target: z.number().optional() }))
+    .max(10)
+    .default([]),
+});
+
+export const UpdateProjectInput = z.object({
+  version: z.number().int(),
+  name: z.string().trim().min(1).max(120).optional(),
+  summary: z.string().max(500).optional(),
+  outcome: z.string().max(500).optional(),
+  health: Health.optional(),
+  targetDate: z.string().date().nullable().optional(),
+  archived: z.boolean().optional(),
+});
+
+export const MoveProjectInput = z.object({
+  version: z.number().int(),
+  stageId: id,
+  before: z.string().max(64).optional(),
+  after: z.string().max(64).optional(),
+  reason: z.string().max(300).optional(),
+});
+
+export const CreateItemInput = z.object({
+  kind: ItemKind,
+  title: z.string().trim().min(1).max(160),
+  body: z.string().max(20_000).default(""),
+  status: z.string().max(24).optional(),
+  assigneeId: id.optional(),
+  dueDate: z.string().date().optional(),
+  fields: z.record(z.string(), z.unknown()).default({}),
+});
+
+export const UpdateItemInput = z.object({
+  version: z.number().int(),
+  title: z.string().trim().min(1).max(160).optional(),
+  body: z.string().max(20_000).optional(),
+  status: z.string().max(24).optional(),
+  rank: z.string().max(64).optional(),
+  assigneeId: id.nullable().optional(),
+  dueDate: z.string().date().nullable().optional(),
+  fields: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const ApproveInput = z.object({ version: z.number().int(), conditions: z.string().max(2000).default("") });
+
+export const UploadInput = z.object({
+  name: z.string().trim().min(1).max(200),
+  contentType: z.string().max(120),
+  size: z.number().int().positive().max(250 * 1024 * 1024),
+  layer: z.enum(["needs", "execution", "observation", "next"]),
+});
+
+export const UpdateMeInput = z.object({
+  version: z.number().int(),
+  name: z.string().trim().max(80).optional(),
+  title: z.string().trim().max(80).optional(),
+  phone: z.string().trim().max(32).optional(),
+  theme: z.enum(["system", "awake", "matrix"]).optional(),
+});
+
+/** Every error the API returns has this shape. */
+export interface ApiError {
+  error: string;
+  message: string;
+  current?: unknown;
+}
