@@ -95,7 +95,7 @@ function SignIn() {
           <button className="btn btn-primary" type="submit">Continue</button>
         </form>
         <p className="fine">
-          Sign in with a code by email, a passkey, or Google. 1NEON uses only the cookies it needs to keep you signed in. <a href="/1NEON/cookies">Cookies</a> · <a href="/privacy">Privacy</a>
+          Sign in with a code by email, a passkey, or Google. 1NEON uses only the cookies it needs to keep you signed in. <Link to="/cookies">Cookies</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
         </p>
         {isDev && (
           <div className="dev" aria-label="Local demo accounts">

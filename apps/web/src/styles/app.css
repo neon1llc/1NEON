@@ -242,3 +242,8 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
 form label:not(.card):not(.chip):not(.field), dialog label { display: block; font: 12px var(--mono); color: var(--muted); margin-bottom: 6px; }
 fieldset legend { font: 12px var(--mono); color: var(--muted); }
 .chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+/* Legal pages: comfortable reading width and list spacing. */
+.legal p, .legal li { line-height: 1.7; }
+.legal ul, .legal ol { padding-left: 22px; }
+.legal code { font: 13px var(--mono); background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }

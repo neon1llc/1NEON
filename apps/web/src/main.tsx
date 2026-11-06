@@ -8,6 +8,7 @@ import { AllLayout, OrgLayout, Root } from "./components/Shell.tsx";
 import { AllWorkflow } from "./pages/AllWorkflow.tsx";
 import { Documents } from "./pages/Documents.tsx";
 import { LayerPage } from "./pages/LayerPage.tsx";
+import { Legal } from "./pages/Legal.tsx";
 import { MePage } from "./pages/Me.tsx";
 import { NewProject } from "./pages/NewProject.tsx";
 import { NotFound } from "./pages/NotFound.tsx";
@@ -27,6 +28,10 @@ const queries = new QueryClient({
 // Routes. /o/:slug is one organization, /all is the operator's read-only view, /me is the profile.
 const router = createBrowserRouter(
   [
+    // Public pages: no sign-in needed, so they sit outside Root's gate.
+    { path: "privacy", element: <Legal doc="privacy" /> },
+    { path: "terms", element: <Legal doc="terms" /> },
+    { path: "cookies", element: <Legal doc="cookies" /> },
     {
       path: "/",
       element: <Root />,
