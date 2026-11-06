@@ -1,8 +1,15 @@
-# Build output, local Terraform state, secrets, and private working notes never enter the repo.
+# .gitignore - Build output, local Terraform state, and secrets never enter the repo.
+
+
+# Dependencies and build output
 node_modules/
 dist/
+
+# Local Terraform state, plans, and the placeholder zips Terraform writes
 .terraform/
 *.tfstate*
+infra/**/.placeholder-*.zip
+
+# Secrets and OS clutter
 .env*
 .DS_Store
-infra/**/.placeholder-*.zip
