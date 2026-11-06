@@ -1,5 +1,7 @@
+// Response shapes from the API, built on the shared domain types.
 import type { AccessLevel, AuditEvent, DocumentRecord, Item, Member, Project, Stage, Tenant, User } from "@1neon/domain";
 
+/** An organization in the chooser: its handles and the caller's access. */
 export interface OrgSummary {
   id: string;
   slug: string;
@@ -8,23 +10,27 @@ export interface OrgSummary {
   access?: AccessLevel;
 }
 
+/** GET /me */
 export interface Me {
   user: User;
   operator: boolean;
   orgs: OrgSummary[];
 }
 
+/** GET /t/:tid */
 export interface OrgResponse {
   org: Tenant;
   access: AccessLevel;
 }
 
+/** GET /t/:tid/workspace */
 export interface Workspace {
   counts: { projects: number; deciding: number; building: number; people: number; invited: number; documents: number };
   waiting: { projectId: string; projectKey: string; itemId: string; title: string; kind: string }[];
   activity: AuditEvent[];
 }
 
+/** Someone editing a record right now (expires on its own). */
 export interface EditMarker {
   recordId: string;
   userId: string;
@@ -32,6 +38,7 @@ export interface EditMarker {
   expiresAt: string;
 }
 
+/** GET /t/:tid/projects/:pid */
 export interface ProjectDetail {
   project: Project;
   items: Item[];
@@ -39,10 +46,12 @@ export interface ProjectDetail {
   edits: EditMarker[];
 }
 
+/** GET /all/projects (operator, read only) */
 export interface AllProjects {
   orgs: (OrgSummary & { stages: Stage[] })[];
   projects: Project[];
   stages: Stage[];
 }
 
+/** GET /t/:tid/members */
 export type MemberRow = Member & { phone: string };

@@ -16,6 +16,7 @@ export function Workflow() {
   const [reason, setReason] = useState("");
   useTopBar(<span>{org.name} · Workflow</span>, [org.name]);
 
+  // Ask the API to move; it may need a reason (428) or report that someone moved the card first (409).
   const move = async (m: MoveRequest, why?: string) => {
     try {
       await api(`/t/${org.id}/projects/${m.project.id}/move`, {
@@ -25,6 +26,7 @@ export function Workflow() {
       const to = org.stages.find((s) => s.id === m.stageId)?.name;
       if (m.stageId !== m.project.stageId) toast(`${m.project.key} moved to ${to}`);
     } catch (e) {
+      // Past Decide with no approved option: collect a reason and try again with it.
       if (e instanceof HttpError && e.status === 428) {
         setReason("");
         setPending({ move: m, message: e.body.message });
@@ -48,6 +50,7 @@ export function Workflow() {
       ) : (
         <Board stages={org.stages} projects={live} hrefFor={(p) => `/o/${summary.slug}/projects/${p.key}`} onMove={canWrite ? (m) => void move(m) : undefined} />
       )}
+      {/* The reason prompt for moving past Decide without a decision. */}
       <Dialog open={Boolean(pending)} onClose={() => setPending(undefined)} label="Reason needed">
         <h2>Move on without a decision?</h2>
         <p className="muted small">{pending?.message}</p>

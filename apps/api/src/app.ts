@@ -39,6 +39,7 @@ import { inviteEmail } from "./services.ts";
 import { keys, Repo } from "./store/repo.ts";
 import { ConflictError } from "./store/types.ts";
 
+/** Everything the app needs from outside; tests and local dev pass in-memory versions. */
 export interface Deps {
   cfg: Config;
   repo: Repo;
@@ -47,20 +48,25 @@ export interface Deps {
   auth?: CognitoAuth;
 }
 
+/** The signed-in person and the actor that permission checks use. */
 interface Who {
   user: User;
   actor: Actor;
 }
 
+// Per-request values set by middleware: who is calling, and the tenant a /t/:tid route resolved.
 type Env = { Variables: { who: Who; tenant: Tenant; access: AccessLevel | undefined } };
 
 const now = () => new Date().toISOString();
+// Edit markers last two minutes; the editor's browser renews them while the form is open.
 const EDIT_MS = 2 * 60 * 1000;
 
+/** Stop the request with a JSON error the web app can show as written. */
 function fail(status: 400 | 401 | 403 | 404 | 409 | 412 | 428, error: string, message: string, current?: unknown): never {
   throw new HTTPException(status, { res: Response.json({ error, message, current }, { status }) });
 }
 
+/** Parse and validate a JSON body; validation messages name the field that failed. */
 async function body<S extends z.ZodType>(c: Context, schema: S): Promise<z.infer<S>> {
   const raw = await c.req.json().catch(() => fail(400, "bad_json", "The request body isn't valid JSON."));
   const r = schema.safeParse(raw);
@@ -68,6 +74,7 @@ async function body<S extends z.ZodType>(c: Context, schema: S): Promise<z.infer
   return r.data;
 }
 
+// Status and wording for each permission refusal from can().
 const REASONS = {
   not_member: [404, "not_found", "That organization doesn't exist, or you don't have access to it."],
   forbidden: [403, "forbidden", "Your access level doesn't allow that."],
@@ -75,15 +82,18 @@ const REASONS = {
   read_only_view: [403, "read_only", "All clients is read only. Open the organization to make changes."],
 } as const;
 
+/** Build the API. Order matters: errors, CSRF, public routes, identity, then tenant routes. */
 export function createApp(d: Deps) {
   const { repo, cfg } = d;
   const app = new Hono<Env>().basePath("/1NEON/api");
 
+  // Known errors keep their status; a version conflict returns the current record for the conflict dialog.
   app.onError((err, c) => {
     if (err instanceof HTTPException) return err.getResponse();
     if (err instanceof ConflictError) {
       return c.json({ error: "conflict", message: err.message, current: strip(err.current) }, 409);
     }
+    // Anything else is logged in full for us and shown to people as a plain apology.
     console.error(JSON.stringify({ level: "error", message: String(err), stack: (err as Error).stack }));
     return c.json({ error: "server_error", message: "Something went wrong on our side. Please try again." }, 500);
   });
@@ -97,11 +107,13 @@ export function createApp(d: Deps) {
     c.header("cache-control", "no-store");
   });
 
+  // Liveness for checks and deploys; no identity needed.
   app.get("/health", (c) => c.json({ ok: true, env: cfg.env, version: process.env.APP_VERSION ?? "dev" }));
 
   // --- Sign-in (Cognito) -------------------------------------------------
 
   app.get("/auth/login", async (c) => {
+    // Local dev has no Cognito; the demo account buttons stand in for sign-in.
     if (!d.auth) return c.redirect("/1NEON/");
     return d.auth.login(c, c.req.query("email"));
   });
@@ -110,17 +122,21 @@ export function createApp(d: Deps) {
     if (!d.auth) return c.redirect("/1NEON/");
     const r = await d.auth.callback(c);
     if (!r || !r.emailVerified) return c.redirect("/1NEON/?signin=failed");
+    // Invite only: a verified email must already belong to an invited person.
     const uid = await repo.userIdForEmail(r.email);
     if (!uid) return c.redirect("/1NEON/?signin=not_invited");
+    // Remember which Cognito identity (email code, passkey, or Google) maps to this person.
     await repo.linkSubject(r.sub, uid);
     const user = await repo.getUser(uid);
     if (user) {
+      // Refresh strong sign-in on every sign-in, so removing a passkey or authenticator takes effect.
       const strongAuth = await d.directory.hasStrongAuth(r.accessToken).catch(() => user.strongAuth);
       if (strongAuth !== user.strongAuth) await repo.saveUser({ ...user, strongAuth, version: user.version + 1, updatedAt: now() }, user.version);
     }
     return c.redirect("/1NEON/");
   });
 
+  // Revoke the refresh token, clear cookies, and send the browser to Cognito's logout.
   app.post("/auth/logout", async (c) => {
     const url = d.auth ? await d.auth.logout(c) : "/1NEON/";
     return c.json({ redirect: url });
@@ -131,11 +147,13 @@ export function createApp(d: Deps) {
   app.use("*", async (c, next) => {
     const user = await resolveUser(c);
     if (!user) fail(401, "signed_out", "Please sign in.");
+    // The operator role comes from configuration, never from the database, so no data edit can grant it.
     const operator = cfg.operatorEmails.includes(user.email);
     c.set("who", { user, actor: { userId: user.id, operator, strongAuth: user.strongAuth || (cfg.devAuth && operator) } });
     await next();
   });
 
+  /** Who is calling: the dev header locally, otherwise the Cognito cookie mapped to our user record. */
   async function resolveUser(c: Context): Promise<User | undefined> {
     if (cfg.devAuth) {
       const email = c.req.header("x-dev-user")?.toLowerCase();
@@ -151,6 +169,7 @@ export function createApp(d: Deps) {
 
   const who = (c: Context<Env>) => c.get("who");
 
+  // Me: the person, their organizations (all of them for the operator), and the join bookkeeping.
   app.get("/me", async (c) => {
     const { user, actor } = who(c);
     const memberships = await repo.membershipsOf(user.id);
@@ -167,6 +186,7 @@ export function createApp(d: Deps) {
       }
     }
     const active = memberships.filter((m) => m.status !== "deactivated");
+    // The operator sees every active organization; everyone else sees their own.
     const tenants = actor.operator ? await repo.listTenants() : (await Promise.all(active.map((m) => repo.getTenant(m.tenantId)))).filter(Boolean) as Tenant[];
     const accessBy = new Map(active.map((m) => [m.tenantId, m.access] as const));
     return c.json({
@@ -179,6 +199,7 @@ export function createApp(d: Deps) {
     });
   });
 
+  // People edit only their own profile; operator and strong sign-in can't be set here.
   app.patch("/me", async (c) => {
     const { user } = who(c);
     const input = await body(c, UpdateMeInput);
@@ -190,6 +211,7 @@ export function createApp(d: Deps) {
 
   // --- Operator: organizations and the All clients view --------------------
 
+  // Create an organization with the default stages and the next client ID.
   app.post("/orgs", async (c) => {
     const { actor, user } = who(c);
     check(can(actor, "manage_orgs", undefined));
@@ -218,6 +240,7 @@ export function createApp(d: Deps) {
     return c.json(tenant, 201);
   });
 
+  // All clients: every active project across organizations, read only.
   app.get("/all/projects", async (c) => {
     check(can(who(c).actor, "read", undefined, "all"));
     const [tenants, projects] = await Promise.all([repo.listTenants(), repo.listAllProjects()]);
@@ -240,6 +263,7 @@ export function createApp(d: Deps) {
   app.use("/t/:tid/*", loadTenant);
   app.use("/t/:tid", loadTenant);
 
+  /** Resolve :tid and the caller's access, or answer 404 for non-members (the operator may enter any). */
   async function loadTenant(c: Context<Env>, next: () => Promise<void>) {
     const tid = c.req.param("tid")!;
     const { actor, user } = who(c);
@@ -251,14 +275,17 @@ export function createApp(d: Deps) {
     await next();
   }
 
+  // Shorthand for a permission check inside a tenant route.
   const need = (c: Context<Env>, action: Action) => check(can(who(c).actor, action, c.get("access")));
   const actorId = (c: Context<Env>) => who(c).user.id;
 
+  // The organization and the caller's access, for the web app's frame.
   app.get("/t/:tid", (c) => {
     need(c, "read");
     return c.json({ org: c.get("tenant"), access: who(c).actor.operator ? "admin" : c.get("access") });
   });
 
+  // Workflow stages: admins only, and never remove a stage that still holds a project.
   app.put("/t/:tid/stages", async (c) => {
     need(c, "manage_settings");
     const input = await body(c, z.object({ version: z.number().int(), stages: z.array(Stage).min(1).max(20) }));
@@ -274,12 +301,14 @@ export function createApp(d: Deps) {
     return c.json(next);
   });
 
+  // Workspace landing: hub counts, what's waiting on the caller, and recent activity.
   app.get("/t/:tid/workspace", async (c) => {
     need(c, "read");
     const t = c.get("tenant");
     const [projects, members, activity] = await Promise.all([repo.listProjects(t.id), repo.listMembers(t.id), repo.listAudit(t.id, 12)]);
     const live = projects.filter((p) => !p.archived);
     const me = actorId(c);
+    // Waiting on you: open items assigned to the caller, and options shared for approval.
     const waiting: { projectId: string; projectKey: string; itemId: string; title: string; kind: string }[] = [];
     for (const p of live) {
       const items = await repo.listItems(t.id, p.id);
@@ -304,6 +333,7 @@ export function createApp(d: Deps) {
     });
   });
 
+  // The audit trail, newest first.
   app.get("/t/:tid/activity", async (c) => {
     need(c, "read");
     return c.json(await repo.listAudit(c.get("tenant").id, 100));
@@ -311,6 +341,7 @@ export function createApp(d: Deps) {
 
   // People
 
+  // Members with their current profile details.
   app.get("/t/:tid/members", async (c) => {
     need(c, "read");
     const members = await repo.listMembers(c.get("tenant").id);
@@ -318,6 +349,7 @@ export function createApp(d: Deps) {
     return c.json(members.map((m, i) => ({ ...m, phone: users[i]?.phone ?? "", name: users[i]?.name || m.name, title: users[i]?.title || m.title })));
   });
 
+  // Invite: create the person if new, add the membership, create the Cognito user, and email the link.
   app.post("/t/:tid/members/invite", async (c) => {
     need(c, "manage_people");
     const t = c.get("tenant");
@@ -332,6 +364,7 @@ export function createApp(d: Deps) {
         await repo.createUser({ id: uid, email: p.email, name: p.name, title: p.title, phone: "", operator: false, strongAuth: false, theme: "system", version: 1, createdAt: ts, updatedAt: ts, updatedBy: inviter.id });
       }
       const existing = await repo.getMember(t.id, uid);
+      // Already a member: nothing to do. A deactivated member is re-invited.
       if (existing && existing.status !== "deactivated") {
         out.push(existing);
         continue;
@@ -351,6 +384,7 @@ export function createApp(d: Deps) {
         updatedAt: ts,
         updatedBy: inviter.id,
       };
+      // The Cognito user exists before the email goes out, so the link works on first click.
       await d.directory.ensureUser(p.email);
       await repo.table.write([repo.memberOp(m, existing ? { version: existing.version } : { create: true }), repo.auditOp({ tenantId: t.id, actorId: inviter.id, action: "member.invited", target: uid, summary: `Invited ${p.email} as ${p.access}` })]);
       const mail = inviteEmail({ orgName: t.name, inviter: inviter.name || "neon1", url: `${cfg.publicUrl}/1NEON/api/auth/login?email=${encodeURIComponent(p.email)}` });
@@ -360,6 +394,7 @@ export function createApp(d: Deps) {
     return c.json(out, 201);
   });
 
+  // Change access or deactivate. An organization always keeps at least one active admin.
   app.patch("/t/:tid/members/:uid", async (c) => {
     need(c, "manage_people");
     const t = c.get("tenant");
@@ -383,6 +418,7 @@ export function createApp(d: Deps) {
     return c.json(await repo.listProjects(c.get("tenant").id));
   });
 
+  // New project: next key for the template (FLOW-3), first visible stage, top of that column.
   app.post("/t/:tid/projects", async (c) => {
     need(c, "write");
     const t = c.get("tenant");
@@ -417,6 +453,7 @@ export function createApp(d: Deps) {
     const base = { tenantId: t.id, projectId: project.id, status: "open", body: "", fields: {}, version: 1, createdAt: ts, updatedAt: ts, updatedBy: by };
     const items: Item[] = [];
     let rank = "";
+    // Starter items: the real example, the template's items, and the measures from the wizard.
     const push = (i: Partial<Item> & Pick<Item, "kind" | "title">) => {
       rank = rankBetween(rank, "");
       items.push(Item.parse({ ...base, id: newId("i"), rank, ...i }));
@@ -430,6 +467,7 @@ export function createApp(d: Deps) {
     return c.json(project, 201);
   });
 
+  // One project with its items, documents, and who is editing what.
   app.get("/t/:tid/projects/:pid", async (c) => {
     need(c, "read");
     const t = c.get("tenant");
@@ -438,6 +476,7 @@ export function createApp(d: Deps) {
     return c.json({ project: p, items: items.sort(byRank), docs, edits });
   });
 
+  // Edit project fields; `targetDate: null` clears the date.
   app.patch("/t/:tid/projects/:pid", async (c) => {
     need(c, "write");
     const p = await project(c);
@@ -449,6 +488,7 @@ export function createApp(d: Deps) {
     return c.json(next);
   });
 
+  // Move between stages or reorder within one; the client sends the neighbours, the API picks the rank.
   app.post("/t/:tid/projects/:pid/move", async (c) => {
     need(c, "write");
     const t = c.get("tenant");
@@ -471,6 +511,7 @@ export function createApp(d: Deps) {
     return c.json(next);
   });
 
+  // Trash a project. Typing its key confirms; nothing is erased here.
   app.delete("/t/:tid/projects/:pid", async (c) => {
     need(c, "delete");
     const p = await project(c);
@@ -510,6 +551,7 @@ export function createApp(d: Deps) {
     return c.json(item, 201);
   });
 
+  // Edit an item. Finishing an edit also clears the caller's edit marker.
   app.patch("/t/:tid/projects/:pid/items/:iid", async (c) => {
     need(c, "write");
     const p = await project(c);
@@ -527,6 +569,7 @@ export function createApp(d: Deps) {
     return c.json(next);
   });
 
+  // Remove an item, guarded by the version the person last saw.
   app.delete("/t/:tid/projects/:pid/items/:iid", async (c) => {
     need(c, "write");
     const p = await project(c);
@@ -566,6 +609,7 @@ export function createApp(d: Deps) {
       updatedAt: ts,
       updatedBy: by,
     });
+    // The option and its decision are written in one transaction, so neither exists without the other.
     const approved: Item = { ...option, status: "approved", version: option.version + 1, updatedAt: ts, updatedBy: by };
     await repo.table.write([
       repo.itemOp(approved, { version: option.version }),
@@ -595,12 +639,14 @@ export function createApp(d: Deps) {
 
   // --- helpers ---------------------------------------------------------------
 
+  /** The project in :pid within this tenant; trashed projects are gone as far as routes are concerned. */
   async function project(c: Context<Env>) {
     const p = await repo.getProject(c.get("tenant").id, c.req.param("pid")!);
     if (!p || p.deletedAt) fail(404, "not_found", "That project doesn't exist or was deleted.");
     return p;
   }
 
+  /** Record an audit event on its own (most writes add theirs to the same transaction instead). */
   async function audit(c: Context<Env>, action: string, target: string, summary: string) {
     await repo.table.write([repo.auditOp({ tenantId: c.get("tenant").id, actorId: actorId(c), action, target, summary })]);
   }
@@ -608,6 +654,7 @@ export function createApp(d: Deps) {
   return app;
 }
 
+/** Turn a permission refusal into the matching HTTP error. */
 function check(d: ReturnType<typeof can>) {
   if (!d.ok) {
     const [status, error, message] = REASONS[d.reason];
@@ -615,6 +662,7 @@ function check(d: ReturnType<typeof can>) {
   }
 }
 
+/** Validate kind-specific fields; kinds without a schema keep free-form fields. */
 function validateFields(kind: Item["kind"], fields: Record<string, unknown>) {
   const schema = itemFields[kind];
   if (!schema) return fields;
@@ -623,16 +671,20 @@ function validateFields(kind: Item["kind"], fields: Record<string, unknown>) {
   return r.data as Record<string, unknown>;
 }
 
+// Board and list order.
 const byRank = (a: { rank: string }, b: { rank: string }) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0);
 
+/** Drop undefined values so a partial update never blanks a field. */
 function defined<T extends object>(o: T): Partial<T> {
   return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
 }
 
+/** Readable item kind for audit summaries, such as "file request (needs)". */
 function label(kind: Item["kind"]) {
   return `${kind.replace("_", " ")} (${KIND_LAYER[kind]})`;
 }
 
+/** Remove storage keys before a record leaves the API. */
 function strip(row: unknown) {
   if (!row || typeof row !== "object") return row;
   const { PK: _a, SK: _b, GSI1PK: _c, GSI1SK: _d, GSI2PK: _e, GSI2SK: _f, ttl: _g, type: _h, ...rest } = row as Record<string, unknown>;

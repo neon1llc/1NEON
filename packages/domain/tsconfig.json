@@ -1,1 +1,2 @@
+// Domain: runs in Node and the browser, so both sets of globals (crypto) are available.
 { "extends": "../../tsconfig.base.json", "compilerOptions": { "lib": ["ES2023", "DOM"] }, "include": ["src"] }

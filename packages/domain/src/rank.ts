@@ -1,8 +1,10 @@
 // Fractional ranks: lexicographic strings so a card move rewrites only that card.
 const DIGITS = "0123456789abcdefghijklmnopqrstuvwxyz";
+// Bounds as digit indexes; MAX + 1 stands for "no upper bound" at a position.
 const MIN = 0;
 const MAX = DIGITS.length - 1;
 
+/** The digit value of `s` at `i`, or `fallback` past its end. */
 function digit(s: string, i: number, fallback: number): number {
   const c = s[i];
   return c === undefined ? fallback : DIGITS.indexOf(c);
@@ -18,6 +20,7 @@ export function rankBetween(a = "", b = ""): string {
   for (let i = 0; ; i++) {
     const lo = digit(a, i, MIN);
     const hi = b ? digit(b, i, MAX + 1) : MAX + 1;
+    // Room between the two digits: take the midpoint and stop.
     if (hi - lo > 1) {
       return out + DIGITS[Math.floor((lo + hi) / 2)];
     }

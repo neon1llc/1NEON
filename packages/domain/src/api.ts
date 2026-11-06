@@ -2,11 +2,13 @@
 import { z } from "zod";
 import { AccessLevel, Health, ItemKind, ProjectRole, email, id } from "./model.ts";
 
+// Organizations (operator only)
 export const CreateTenantInput = z.object({
   name: z.string().trim().min(1).max(80),
   slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/).optional(),
 });
 
+// People
 export const InviteInput = z.object({
   people: z
     .array(
@@ -28,6 +30,7 @@ export const UpdateMemberInput = z.object({
   status: z.enum(["joined", "deactivated"]).optional(),
 });
 
+// Projects. Every update carries the version the client read, for conflict checks.
 export const CreateProjectInput = z.object({
   name: z.string().trim().min(1).max(120),
   template: z.string().max(40).default("blank"),
@@ -53,6 +56,7 @@ export const UpdateProjectInput = z.object({
   archived: z.boolean().optional(),
 });
 
+// A move names its neighbours; the API computes the new rank between them.
 export const MoveProjectInput = z.object({
   version: z.number().int(),
   stageId: id,
@@ -61,6 +65,7 @@ export const MoveProjectInput = z.object({
   reason: z.string().max(300).optional(),
 });
 
+// Items inside a layer
 export const CreateItemInput = z.object({
   kind: ItemKind,
   title: z.string().trim().min(1).max(160),
@@ -82,8 +87,10 @@ export const UpdateItemInput = z.object({
   fields: z.record(z.string(), z.unknown()).optional(),
 });
 
+// Approval pins the option version shown to the approver.
 export const ApproveInput = z.object({ version: z.number().int(), conditions: z.string().max(2000).default("") });
 
+// Documents: the API answers with a presigned upload URL.
 export const UploadInput = z.object({
   name: z.string().trim().min(1).max(200),
   contentType: z.string().max(120),
@@ -91,6 +98,7 @@ export const UploadInput = z.object({
   layer: z.enum(["needs", "execution", "observation", "next"]),
 });
 
+// The signed-in person's own profile
 export const UpdateMeInput = z.object({
   version: z.number().int(),
   name: z.string().trim().max(80).optional(),

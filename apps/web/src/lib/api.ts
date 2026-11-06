@@ -1,9 +1,11 @@
 // Thin client for the 1NEON API. Same origin, cookies only; no tokens in JavaScript.
 import type { ApiError } from "@1neon/domain";
 
+// Every API call is same-origin under /1NEON/api; the dev user lives in localStorage.
 const BASE = "/1NEON/api";
 const DEV_KEY = "1neon.devUser";
 
+/** A non-2xx reply, carrying the API's { error, message, current? } body. */
 export class HttpError extends Error {
   constructor(
     readonly status: number,
@@ -34,6 +36,7 @@ export const devUser = {
 
 export const isDev = import.meta.env.DEV;
 
+/** Call the API. The x-1neon header satisfies the CSRF check; cookies ride along automatically. */
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const headers: Record<string, string> = { "x-1neon": "1" };
   if (init.body !== undefined) headers["content-type"] = "application/json";
@@ -50,4 +53,5 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   return data as T;
 }
 
+/** Start sign-in through the API, optionally pre-filling the email at Cognito. */
 export const signInUrl = (email?: string) => `${BASE}/auth/login${email ? `?email=${encodeURIComponent(email)}` : ""}`;

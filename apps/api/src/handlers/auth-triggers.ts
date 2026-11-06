@@ -6,6 +6,7 @@ import { Repo } from "../store/repo.ts";
 
 const repo = new Repo(new DynamoTable(process.env.TABLE_NAME!));
 
+/** Pre sign-up: refuse any first sign-in whose email has no invite. */
 export async function handler(event: PreSignUpTriggerEvent) {
   if (event.triggerSource === "PreSignUp_AdminCreateUser") return event; // our own invite path
   const email = String(event.request.userAttributes.email ?? "").toLowerCase();

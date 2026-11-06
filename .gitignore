@@ -1,6 +1,8 @@
+# Build output, local Terraform state, secrets, and private working notes never enter the repo.
 node_modules/
 dist/
 .terraform/
 *.tfstate*
 .env*
 .DS_Store
+infra/**/.placeholder-*.zip

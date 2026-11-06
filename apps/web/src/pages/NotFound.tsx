@@ -1,3 +1,4 @@
+// Fallback for unknown URLs under /1NEON.
 import { Link } from "react-router";
 
 export function NotFound() {

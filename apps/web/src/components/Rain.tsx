@@ -1,9 +1,11 @@
 // The neon1.tech rain, trimmed for the sign-in screen. Still frame for reduced motion.
 import { useEffect, useRef } from "react";
 
+// Katakana and digits as on neon1.tech; WORDS surface now and then as readable columns.
 const CHARS = [..."ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789neon1"];
 const WORDS = ["1NEON", "needs", "execution", "observation", "next", "onion", "neon1", "listen", "propose", "decide", "build", "hand over"];
 
+/** Full-screen canvas rain behind the sign-in panel; decorative, hidden from assistive tech. */
 export function Rain() {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -12,6 +14,7 @@ export function Rain() {
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
     let size = 20, rows = 0, frame = 0, raf = 0;
     let cols: { y: number; word?: string; wi: number; wy: number; hold: number }[] = [];
+    // Size the canvas to the window at up to 2x pixel density, and restart the columns.
     const resize = () => {
       const dpr = Math.min(devicePixelRatio || 1, 2);
       size = innerWidth < 640 ? 17 : 21;
@@ -25,10 +28,12 @@ export function Rain() {
       ctx.fillStyle = "#0D0208";
       ctx.fillRect(0, 0, innerWidth, innerHeight);
     };
+    // One frame: fade the old frame a little, then draw a character (or a word) per column.
     const draw = () => {
       ctx.fillStyle = "rgba(13, 2, 8, 0.05)";
       ctx.fillRect(0, 0, innerWidth, innerHeight);
       ctx.font = `500 ${size}px "JetBrains Mono", ui-monospace, monospace`;
+      // Occasionally start spelling a word down a free column.
       if (Math.random() < 0.05) {
         const c = cols[(Math.random() * cols.length) | 0];
         const w = WORDS[(Math.random() * WORDS.length) | 0]!;
@@ -59,11 +64,13 @@ export function Rain() {
         if (c.y > rows && Math.random() > 0.97) c.y = 0;
       });
     };
+    // Every third animation frame, and nothing while the tab is hidden.
     const loop = () => {
       if (!document.hidden && ++frame % 3 === 0) draw();
       raf = requestAnimationFrame(loop);
     };
     resize();
+    // Reduced motion: paint a settled still frame once instead of animating.
     if (reduce) for (let i = 0; i < 60; i++) draw();
     else raf = requestAnimationFrame(loop);
     addEventListener("resize", resize);

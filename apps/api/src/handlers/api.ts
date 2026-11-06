@@ -8,6 +8,7 @@ import { DynamoTable } from "../store/dynamo.ts";
 import { Repo } from "../store/repo.ts";
 
 const cfg = loadConfig();
+// Fail at cold start, loudly, rather than on the first request.
 if (!cfg.table || !cfg.userPoolId || !cfg.clientId || !cfg.authDomain || !cfg.mailFrom) {
   throw new Error("Missing configuration: TABLE_NAME, USER_POOL_ID, USER_POOL_CLIENT_ID, AUTH_DOMAIN, MAIL_FROM");
 }
@@ -20,4 +21,5 @@ const app = createApp({
   auth: new CognitoAuth({ userPoolId: cfg.userPoolId, clientId: cfg.clientId, authDomain: cfg.authDomain, publicUrl: cfg.publicUrl }),
 });
 
+// API Gateway HTTP API (payload 2.0) events in, responses out.
 export const handler = handle(app);

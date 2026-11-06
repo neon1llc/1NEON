@@ -2,6 +2,7 @@
 // Schemas are shared by the web app and the API, so validation is identical on both sides.
 import { z } from "zod";
 
+// Shared field shapes. IDs are URL-safe because they appear in routes and keys.
 export const id = z.string().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/);
 export const isoDate = z.string().datetime({ offset: true });
 export const email = z.string().trim().toLowerCase().email().max(254);
@@ -14,6 +15,7 @@ export type AccessLevel = z.infer<typeof AccessLevel>;
 export const Layer = z.enum(["needs", "execution", "observation", "next"]);
 export type Layer = z.infer<typeof Layer>;
 
+/** How a project is going, set by the team and shown on every card. */
 export const Health = z.enum(["on_track", "at_risk", "off_track", "not_started"]);
 export type Health = z.infer<typeof Health>;
 
@@ -25,6 +27,7 @@ const versioned = {
   updatedBy: id,
 };
 
+/** One column of an organization's workflow board; each stage belongs to one layer. */
 export const Stage = z.object({
   id: id,
   name: z.string().trim().min(1).max(40),
@@ -35,6 +38,7 @@ export const Stage = z.object({
 });
 export type Stage = z.infer<typeof Stage>;
 
+/** An organization (tenant). Slug and client ID are its public handles; its ID scopes every key. */
 export const Tenant = z.object({
   id: id,
   slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/),
@@ -46,6 +50,7 @@ export const Tenant = z.object({
 });
 export type Tenant = z.infer<typeof Tenant>;
 
+/** A person, across organizations. Operator and strong sign-in come from sign-in, never from a form. */
 export const User = z.object({
   id: id,
   email: email,
@@ -59,6 +64,7 @@ export const User = z.object({
 });
 export type User = z.infer<typeof User>;
 
+/** A person's membership in one organization; access lives here, not on the user. */
 export const MemberStatus = z.enum(["invited", "joined", "deactivated"]);
 export const Member = z.object({
   tenantId: id,
@@ -76,6 +82,7 @@ export const Member = z.object({
 });
 export type Member = z.infer<typeof Member>;
 
+/** What someone does on a project. Roles describe; they never grant access. */
 export const ProjectRole = z.enum([
   "lead_engineer",
   "sponsor",
@@ -86,6 +93,7 @@ export const ProjectRole = z.enum([
 ]);
 export type ProjectRole = z.infer<typeof ProjectRole>;
 
+/** A project. `key` (FLOW-1) is its human handle; `rank` orders it within its stage column. */
 export const Project = z.object({
   tenantId: id,
   id: id,
@@ -100,8 +108,10 @@ export const Project = z.object({
   rank: z.string().min(1).max(64),
   targetDate: z.string().date().optional(),
   people: z.array(z.object({ userId: id, role: ProjectRole })).max(50).default([]),
+  // Sensitive data flags: neon1 doesn't touch PII, PHI, or payment data without the right agreements.
   flags: z.array(z.enum(["pii", "phi", "payment"])).default([]),
   archived: z.boolean().default(false),
+  // Set when moved to Trash; the project then disappears from every view.
   deletedAt: isoDate.optional(),
   ...versioned,
 });
@@ -131,6 +141,7 @@ export const ItemKind = z.enum([
 ]);
 export type ItemKind = z.infer<typeof ItemKind>;
 
+/** Which layer tab each kind of item lives under. */
 export const KIND_LAYER: Record<ItemKind, Layer> = {
   request: "needs",
   discovery: "needs",
@@ -153,8 +164,10 @@ export const KIND_LAYER: Record<ItemKind, Layer> = {
   retro: "next",
 };
 
+/** A 1 to 5 score used to compare options. */
 export const Score = z.number().int().min(1).max(5);
 
+/** One item in a project layer: a question, task, option, measure, and so on. */
 export const Item = z.object({
   tenantId: id,
   projectId: id,
@@ -172,6 +185,7 @@ export const Item = z.object({
 });
 export type Item = z.infer<typeof Item>;
 
+// Kind-specific fields. Unknown kinds store free-form fields.
 export const OptionFields = z.object({
   cost: z.string().max(80).default(""),
   costScore: Score.default(3),
@@ -181,6 +195,7 @@ export const OptionFields = z.object({
   recommended: z.boolean().default(false),
 });
 
+// Decisions point at the exact option version approved, so later edits can't change what was agreed.
 export const DecisionFields = z.object({
   optionId: id,
   optionVersion: z.number().int(),
@@ -213,6 +228,7 @@ export const itemFields: Partial<Record<ItemKind, z.ZodType>> = {
   update: UpdateFields,
 };
 
+/** A file's record. Bytes live in S3 under the organization's folder; `scan` gates downloads. */
 export const DocumentRecord = z.object({
   tenantId: id,
   projectId: id,
@@ -228,6 +244,7 @@ export const DocumentRecord = z.object({
 });
 export type DocumentRecord = z.infer<typeof DocumentRecord>;
 
+/** Who did what, when. Written in the same transaction as the change it describes. */
 export const AuditEvent = z.object({
   tenantId: id,
   at: isoDate,

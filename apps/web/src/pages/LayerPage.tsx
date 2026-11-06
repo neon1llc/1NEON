@@ -5,6 +5,7 @@ import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { daysSince, Empty, Health, LAYERS, layerName, Rings } from "../components/ui.tsx";
 import { useProjects } from "../lib/hooks.ts";
 
+// What each layer holds, shown under its title.
 const ABOUT: Record<Layer, string> = {
   needs: "What you need: requests, discovery, systems and accounts, requirements, options, and decisions.",
   execution: "The work itself: tasks, milestones, changes, and status updates.",
@@ -19,6 +20,7 @@ export function LayerPage() {
   const l = layer as Layer;
   useTopBar(<span>{org.name} · {LAYERS.includes(l) ? layerName(l) : "Layer"}</span>, [org.name, l]);
   if (!LAYERS.includes(l)) return <Empty text="That layer doesn't exist." />;
+  // Projects in this layer's stages first, then every other project with a link to its tab for this layer.
   const stages = org.stages.filter((s) => s.layer === l && !s.hidden);
   const ids = new Set(stages.map((s) => s.id));
   const all = (projects.data ?? []).filter((p) => !p.archived);

@@ -12,6 +12,7 @@ export function Projects() {
   const [archived, setArchived] = useState(false);
   useTopBar(<span>{org.name} · Projects</span>, [org.name]);
   const stage = new Map(org.stages.map((s) => [s.id, s]));
+  // Filter by archive state and search, then order by stage, then key.
   const list = (projects.data ?? [])
     .filter((p) => p.archived === archived)
     .filter((p) => (p.key + p.name + p.summary).toLowerCase().includes(q.toLowerCase()))

@@ -1,3 +1,4 @@
+// Web app: browser libraries and React JSX on top of the shared settings.
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "lib": ["ES2023", "DOM", "DOM.Iterable"], "jsx": "react-jsx", "types": ["vite/client"] },

@@ -1,3 +1,4 @@
+// Domain rules that everything else trusts: permissions, ordering, IDs, and metric progress.
 import { describe, expect, it } from "vitest";
 import { can, type Action } from "./access.ts";
 import { initialRanks, rankBetween } from "./rank.ts";
@@ -44,6 +45,7 @@ describe("can()", () => {
   });
 });
 
+// Ranks must keep strict order however cards are shuffled.
 describe("rankBetween()", () => {
   it("orders correctly under many random inserts", () => {
     let ranks = initialRanks(5);
@@ -78,6 +80,7 @@ describe("ids", () => {
   });
 });
 
+// Progress drives the bars on measures; direction comes from baseline vs target.
 describe("metricProgress()", () => {
   it("measures progress toward a lower-is-better target", () => {
     const m = MetricFields.parse({ baseline: 62, target: 4, direction: "down", readings: [{ at: "2026-11-01", value: 33 }] });

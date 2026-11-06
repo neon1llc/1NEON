@@ -1,5 +1,6 @@
 // One single-table design, two backends: memory (local dev and tests) and DynamoDB.
 
+/** A stored item: keys, optional index keys, optional TTL (epoch seconds), and the record's fields. */
 export interface Row {
   PK: string;
   SK: string;
@@ -15,6 +16,7 @@ export interface Row {
 /** How a put is guarded: create-only, match a version, or (rarely) unconditional. */
 export type Guard = { create: true } | { version: number } | { always: true };
 
+/** The storage operations the repository needs, nothing more. */
 export interface TableStore {
   get(pk: string, sk: string): Promise<Row | undefined>;
   /** Rows in one partition whose SK starts with `prefix`, ascending. */
@@ -27,10 +29,12 @@ export interface TableStore {
   increment(pk: string, sk: string): Promise<number>;
 }
 
+/** One write inside an all-or-nothing batch. */
 export type WriteOp =
   | { put: Row; guard: Guard }
   | { delete: { PK: string; SK: string }; guard?: Guard };
 
+/** A guard failed: someone else saved first, or the record already exists. */
 export class ConflictError extends Error {
   constructor(
     readonly current: Row | undefined,

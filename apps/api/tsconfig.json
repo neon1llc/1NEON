@@ -1,1 +1,2 @@
+// API: Node types on top of the shared settings.
 { "extends": "../../tsconfig.base.json", "compilerOptions": { "types": ["node"] }, "include": ["src", "build.mjs"] }

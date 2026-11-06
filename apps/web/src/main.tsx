@@ -1,3 +1,4 @@
+// Web app entry: data cache, toasts, and the route table under /1NEON.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -18,10 +19,12 @@ import { Workflow } from "./pages/Workflow.tsx";
 import { WorkspacePage } from "./pages/Workspace.tsx";
 import "./styles/app.css";
 
+// Data stays fresh for 10 seconds; HTTP errors (401, 403, 404) are answers, not reasons to retry.
 const queries = new QueryClient({
   defaultOptions: { queries: { staleTime: 10_000, retry: (n, e) => n < 2 && !("status" in (e as object)) } },
 });
 
+// Routes. /o/:slug is one organization, /all is the operator's read-only view, /me is the profile.
 const router = createBrowserRouter(
   [
     {
@@ -54,6 +57,7 @@ const router = createBrowserRouter(
   { basename: "/1NEON" },
 );
 
+// Mount the app.
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queries}>

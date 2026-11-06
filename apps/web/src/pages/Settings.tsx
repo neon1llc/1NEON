@@ -15,14 +15,17 @@ export function Settings() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   useTopBar(<span>{org.name} · Settings</span>, [org.name]);
+  // Unsaved changes enable Save and Undo.
   const dirty = JSON.stringify(stages) !== JSON.stringify(org.stages);
   const set = (i: number, patch: Partial<Stage>) => setStages(stages.map((s, j) => (j === i ? { ...s, ...patch } : s)));
+  // Reorder stages; the board's columns follow this order.
   const move = (i: number, d: number) => {
     const next = stages.slice();
     const [s] = next.splice(i, 1);
     next.splice(i + d, 0, s!);
     setStages(next);
   };
+  // Save every stage at once against the organization's version; the API refuses removing a stage in use.
   const save = async () => {
     setBusy(true);
     setError("");

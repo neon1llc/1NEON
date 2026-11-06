@@ -8,8 +8,10 @@ import { api } from "../lib/api.ts";
 import { problem, useRefresh } from "../lib/hooks.ts";
 import type { Project } from "@1neon/domain";
 
+// The wizard's steps, in order.
 const STEPS = ["Template", "Basics", "Measures", "Review"] as const;
 
+/** A measure as typed; numbers are parsed on submit. */
 interface MetricDraft {
   title: string;
   unit: string;
@@ -34,11 +36,14 @@ export function NewProject() {
   const [error, setError] = useState("");
   useTopBar(<span><Link to={`/o/${summary.slug}/projects`}>Projects</Link> / New</span>, [summary.slug]);
 
+  // Viewers can open the page by URL but can't create.
   if (!canWrite) return <p className="lead">Viewers can't start projects. Ask an editor or admin in {org.name}.</p>;
   const t = TEMPLATES.find((x) => x.id === template) ?? TEMPLATES[0]!;
   const num = (s: string) => (s.trim() === "" || Number.isNaN(Number(s)) ? undefined : Number(s));
+  // Only the Basics step has a required field.
   const ready = [true, name.trim().length > 0, true, true];
 
+  // Create the project with its starter items and measures, then open it.
   const create = async () => {
     setBusy(true);
     setError("");
@@ -80,6 +85,7 @@ export function NewProject() {
           else void create();
         }}
       >
+        {/* Step 1: template */}
         {step === 0 && (
           <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
             <legend className="muted small" style={{ marginBottom: 10 }}>Start from a template. It adds the usual questions, checks, and measures, and you can change all of them.</legend>
@@ -95,6 +101,7 @@ export function NewProject() {
             </div>
           </fieldset>
         )}
+        {/* Step 2: basics */}
         {step === 1 && (
           <>
             <div><label htmlFor="n">Name</label><input id="n" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required autoFocus placeholder="Move the file server to the cloud" /></div>
@@ -104,6 +111,7 @@ export function NewProject() {
             <div><label htmlFor="d">Target date (optional)</label><input id="d" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} style={{ maxWidth: 220 }} /></div>
           </>
         )}
+        {/* Step 3: measures */}
         {step === 2 && (
           <>
             <p className="muted small" style={{ margin: 0 }}>How will we know it worked? Add a measure with where it is now and where it should be. You can add readings later.</p>
@@ -121,6 +129,7 @@ export function NewProject() {
             {metrics.length < 10 && <button type="button" className="btn btn-ghost" style={{ justifySelf: "start" }} onClick={() => setMetrics([...metrics, { title: "", unit: "", baseline: "", target: "" }])}>Add another measure</button>}
           </>
         )}
+        {/* Step 4: review */}
         {step === 3 && (
           <div className="card">
             <p className="s mono muted small" style={{ margin: 0 }}>{t.keyPrefix}-· · {t.name}</p>

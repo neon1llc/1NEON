@@ -10,6 +10,7 @@ import {
 import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
 
 /** The sign-in directory (Cognito). */
+/** The identity directory: create sign-in accounts for invitees and check strong sign-in. */
 export interface Directory {
   /** Create a passwordless user for an invited email; no-op if they already exist. */
   ensureUser(email: string): Promise<void>;
@@ -17,14 +18,17 @@ export interface Directory {
   hasStrongAuth(accessToken: string): Promise<boolean>;
 }
 
+/** Outbound email. */
 export interface Mailer {
   send(to: string, subject: string, text: string, html: string): Promise<void>;
 }
 
+/** Cognito user pool as the directory. */
 export class CognitoDirectory implements Directory {
   private idp = new CognitoIdentityProviderClient({});
   constructor(private userPoolId: string) {}
 
+  // Create the Cognito user for an invitee if missing; an existing user is fine.
   async ensureUser(email: string) {
     try {
       await this.idp.send(new AdminGetUserCommand({ UserPoolId: this.userPoolId, Username: email }));
@@ -40,6 +44,7 @@ export class CognitoDirectory implements Directory {
           MessageAction: "SUPPRESS", // 1NEON sends its own invite email
           UserAttributes: [
             { Name: "email", Value: email },
+            // The invite proves the address belongs to the person we invited.
             { Name: "email_verified", Value: "true" },
           ],
         }),
@@ -49,6 +54,7 @@ export class CognitoDirectory implements Directory {
     }
   }
 
+  // Strong sign-in means an authenticator app (TOTP) or at least one passkey.
   async hasStrongAuth(accessToken: string) {
     const [user, keys] = await Promise.all([
       this.idp.send(new GetUserCommand({ AccessToken: accessToken })),
@@ -59,6 +65,7 @@ export class CognitoDirectory implements Directory {
   }
 }
 
+/** SES v2 sender for invites and notices. */
 export class SesMailer implements Mailer {
   private ses = new SESv2Client({});
   constructor(private from: string) {}
@@ -92,8 +99,10 @@ export class MemoryMailer implements Mailer {
   }
 }
 
+// HTML-escape values placed into the invite email.
 const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
+/** The invite email: plain text plus a small branded HTML version. */
 export function inviteEmail(opts: { orgName: string; inviter: string; url: string }) {
   const subject = `You're invited to ${opts.orgName} on 1NEON`;
   const text = [

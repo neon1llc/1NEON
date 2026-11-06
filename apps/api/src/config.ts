@@ -1,5 +1,6 @@
 // Runtime configuration from the environment (set by Terraform on the Lambda function).
 
+/** Everything the API reads from its environment. */
 export interface Config {
   env: "local" | "dev" | "prod";
   table?: string;
@@ -15,6 +16,7 @@ export interface Config {
   devAuth: boolean;
 }
 
+/** Read the environment once at start-up; refuse dev sign-in anywhere on Lambda. */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const onLambda = Boolean(env.AWS_LAMBDA_FUNCTION_NAME);
   const devAuth = env.DEV_AUTH === "1";

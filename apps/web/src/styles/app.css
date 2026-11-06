@@ -2,6 +2,7 @@
 @font-face { font-family: "Inter"; src: url(/1NEON/fonts/inter-latin-wght-normal.woff2) format("woff2"); font-weight: 100 900; font-display: swap; }
 @font-face { font-family: "JetBrains Mono"; src: url(/1NEON/fonts/jetbrains-mono-latin-wght-normal.woff2) format("woff2"); font-weight: 100 800; font-display: swap; }
 
+/* Brand tokens, then the semantic tokens every component uses. */
 :root {
   --void: #0D0208; --deep: #003B00; --mid: #008F11; --glow: #00E676; --neon: #6CFFA8;
   --brand: #035704; --mark: #327641; --paper: #F2F4F2; --ink: #12241A;
@@ -18,6 +19,7 @@
   color-scheme: light;
 }
 
+/* Matrix (dark) follows the device unless the person chose Awake; data-theme="matrix" forces it. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="awake"]) { color-scheme: dark; }
   :root:not([data-theme="awake"]) { --bg: #0F0A0D; --frame: var(--void); --panel: #15100F; --text: #D6F5DC; --muted: #84A98C;
@@ -30,6 +32,7 @@
   --accent-soft: rgba(0, 230, 118, .08); --focus: var(--glow); --shadow: none; --amber: #FFB547; --red: #FF8A80; --ok: #6CFFA8;
   --l1: #008F11; --l2: #00B84F; --l3: #00E676; --l4: #6CFFA8; }
 
+/* Base elements and utilities */
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
@@ -213,9 +216,11 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
 .signin .dev { margin-top: 18px; display: grid; gap: 6px; }
 .signin .dev button { background: rgba(255, 255, 255, .03); border: 1px solid rgba(0, 255, 65, .18); color: #D6F5DC; border-radius: 8px; padding: 8px; cursor: pointer; font: 13px var(--sans); }
 .signin .dev button:hover { border-color: var(--neon); }
+/* Page entrance: a short fade from blur, off for reduced motion. */
 .wake { animation: wake .9s ease-out both; }
 @keyframes wake { from { opacity: 0; filter: blur(6px); } to { opacity: 1; filter: none; } }
 
+/* Phones and small tablets: the sidebar becomes a drawer, side columns stack. */
 @media (max-width: 900px) {
   .shell { grid-template-columns: 1fr; }
   .side { position: fixed; inset: 0 auto 0 0; width: 280px; z-index: 40; transform: translateX(-100%); transition: transform .2s; box-shadow: 0 0 40px rgba(0, 0, 0, .3); }
@@ -228,6 +233,7 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
   .hide-sm { display: none; }
 }
 @media (min-width: 901px) { .only-sm { display: none !important; } }
+/* Respect reduced motion everywhere. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

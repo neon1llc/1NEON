@@ -10,6 +10,7 @@ import type { Workspace } from "../lib/types.ts";
 export function WorkspacePage() {
   const { org, summary } = useOrg();
   const base = `/o/${summary.slug}`;
+  // Counts, waiting items, and activity in one call, refreshed every 30 seconds.
   const ws = useQuery({ queryKey: qk.workspace(org.id), queryFn: () => api<Workspace>(`/t/${org.id}/workspace`), refetchInterval: 30_000 });
   useTopBar(<span>{org.name} · Workspace</span>, [org.name]);
   const c = ws.data?.counts;
@@ -54,6 +55,7 @@ export function WorkspacePage() {
   );
 }
 
+/** One hub card on the workspace. */
 function Hub({ to, title, big, text, icon }: { to: string; title: string; big?: number; text: string; icon?: boolean }) {
   return (
     <Link to={to} className="card hub" style={{ textDecoration: "none", color: "inherit" }}>

@@ -2,6 +2,7 @@
 import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { Empty, LayerBadge, LAYERS, layerName } from "../components/ui.tsx";
 
+/** Placeholder until uploads open: shows the layers files will be filed under. */
 export function Documents() {
   const { org } = useOrg();
   useTopBar(<span>{org.name} · Documents</span>, [org.name]);

@@ -1,3 +1,4 @@
+// API behavior that matters most: identity, tenant isolation, access levels, and conflict handling.
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app.ts";
 import { seed } from "./seed.ts";
@@ -5,6 +6,7 @@ import { MemoryDirectory, MemoryMailer } from "./services.ts";
 import { MemoryTable } from "./store/memory.ts";
 import { Repo } from "./store/repo.ts";
 
+// Each test gets a fresh in-memory store with the demo data, and calls the app as a given person.
 const OP = "pradeep@neon1.tech";
 let app: ReturnType<typeof createApp>;
 let mailer: MemoryMailer;
@@ -22,6 +24,7 @@ beforeEach(async () => {
   });
 });
 
+/** Call the API as `as` (an email, or undefined for anonymous) and parse the JSON reply. */
 async function call(as: string | undefined, method: string, path: string, body?: unknown) {
   const headers: Record<string, string> = { "content-type": "application/json", "x-1neon": "1" };
   if (as) headers["x-dev-user"] = as;

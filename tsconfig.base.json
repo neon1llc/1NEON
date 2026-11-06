@@ -1,3 +1,4 @@
+// Shared TypeScript settings. Strict everywhere; bundlers (Vite, esbuild) emit, tsc only checks.
 {
   "compilerOptions": {
     "target": "ES2023",
@@ -5,6 +6,7 @@
     "moduleResolution": "Bundler",
     "lib": ["ES2023"],
     "strict": true,
+    // Indexing may miss: forces handling of absent array items and map keys.
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": false,
@@ -12,6 +14,7 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    // Type-only imports stay explicit, so bundles never pull in a module for its types.
     "verbatimModuleSyntax": true,
     "noEmit": true,
     "allowImportingTsExtensions": true

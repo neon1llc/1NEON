@@ -6,6 +6,7 @@ import { Link } from "react-router";
 import { byRank } from "../lib/hooks.ts";
 import { daysSince, Health, LayerBadge } from "./ui.tsx";
 
+/** A requested move: target stage and the ranks of the neighbours it lands between. */
 export interface MoveRequest {
   project: Project;
   stageId: string;
@@ -13,6 +14,7 @@ export interface MoveRequest {
   before?: string;
 }
 
+/** The board. Without `onMove` it's read only (viewers and the All clients view). */
 export function Board({
   stages,
   projects,
@@ -29,8 +31,10 @@ export function Board({
   const [dragging, setDragging] = useState<string>();
   const [over, setOver] = useState<string>();
   const visible = stages.filter((s) => !s.hidden);
+  // Cards in one column, in rank order.
   const byStage = (sid: string) => projects.filter((p) => p.stageId === sid).sort(byRank);
 
+  // Drop before `beforeId`, or at the end of the column; a drop onto the card's own place is ignored.
   const drop = (stageId: string, beforeId?: string) => {
     const p = projects.find((x) => x.id === dragging);
     setDragging(undefined);
@@ -47,6 +51,7 @@ export function Board({
     <div className="board" role="list" aria-label="Workflow board">
       {visible.map((s) => {
         const cards = byStage(s.id);
+        // Work-in-progress limits are advice: the count turns amber, nothing is blocked.
         const overLimit = s.wipLimit !== undefined && cards.length > s.wipLimit;
         return (
           <section
@@ -54,6 +59,7 @@ export function Board({
             role="listitem"
             className={`col${over === s.id ? " drop" : ""}`}
             aria-label={`${s.name}, ${cards.length} projects`}
+            // Columns accept drops; a card accepts a drop to insert before itself.
             onDragOver={(e) => {
               if (!onMove || !dragging) return;
               e.preventDefault();
@@ -102,6 +108,7 @@ export function Board({
                   <Health value={p.health} />
                   <span title="Days in this stage">{daysSince(p.stageEnteredAt)}d</span>
                 </div>
+                {/* Keyboard and screen-reader path: the same move as dragging, to the end of the chosen column. */}
                 {onMove && (
                   <label className="sr-focus small" style={{ display: "block", marginTop: 8 }}>
                     <span className="sr">Move {p.key} to</span>

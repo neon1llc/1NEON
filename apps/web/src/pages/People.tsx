@@ -7,6 +7,7 @@ import { api } from "../lib/api.ts";
 import { problem, useMembers, useRefresh } from "../lib/hooks.ts";
 import type { MemberRow } from "../lib/types.ts";
 
+// Plain descriptions of each access level, used in the invite form and the legend.
 const ACCESS: Record<AccessLevel, string> = {
   viewer: "Viewer: reads, comments, approves",
   editor: "Editor: also adds and changes work",
@@ -21,6 +22,7 @@ export function People() {
   const toast = useToast();
   useTopBar(<span>{org.name} · People</span>, [org.name]);
 
+  // Change one member's access or status; the API keeps at least one admin.
   const change = async (m: MemberRow, patch: Record<string, unknown>) => {
     try {
       await api(`/t/${org.id}/members/${m.userId}`, { method: "PATCH", body: { version: m.version, ...patch } });
@@ -31,6 +33,7 @@ export function People() {
     refresh();
   };
 
+  // Active people first, alphabetically; deactivated people at the end.
   const list = (members.data ?? []).slice().sort((a, b) => Number(a.status === "deactivated") - Number(b.status === "deactivated") || (a.name || a.email).localeCompare(b.name || b.email));
   return (
     <>
@@ -46,6 +49,7 @@ export function People() {
                 <td><span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}><Avatar id={m.userId} name={m.name || m.email} /><span>{m.name || "–"}<br /><span className="muted small">{m.title}</span></span></span></td>
                 <td className="mono small">{m.email}</td>
                 <td>
+                  {/* Admins change others' access; nobody changes their own here. */}
                   {canAdmin && m.userId !== me.user.id && m.status !== "deactivated" ? (
                     <select aria-label={`Access for ${m.email}`} value={m.access} onChange={(e) => void change(m, { access: e.target.value })} style={{ minHeight: 32, padding: "2px 8px", maxWidth: 140 }}>
                       <option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option>
@@ -71,6 +75,7 @@ export function People() {
   );
 }
 
+/** Admins invite one or more people by email with one access level. */
 function Invite() {
   const { org } = useOrg();
   const refresh = useRefresh(org.id);
@@ -81,6 +86,7 @@ function Invite() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   if (!open) return <button className="btn btn-primary" style={{ marginBottom: 18 }} onClick={() => setOpen(true)}>Invite people</button>;
+  // Accept commas, semicolons, spaces, or new lines between addresses.
   const list = emails.split(/[\s,;]+/).map((e) => e.trim()).filter(Boolean);
   const submit = async () => {
     setBusy(true);

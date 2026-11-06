@@ -12,6 +12,7 @@ export function AllWorkflow() {
   const [view, setView] = useState<"lanes" | "board">("lanes");
   useTopBar(<span>All clients · Workflow</span>, []);
   const data = all.data;
+  // Cards link into their own organization, where changes are allowed.
   const slugOf = new Map(data?.orgs.map((o) => [o.id, o]) ?? []);
   const href = (tenantId: string, key: string) => `/o/${slugOf.get(tenantId)?.slug}/projects/${key}`;
   return (
@@ -24,9 +25,11 @@ export function AllWorkflow() {
       </div>
       {all.isPending && <p className="muted" aria-busy="true">Loading…</p>}
       {data && data.projects.length === 0 && <Empty text="No projects in any organization yet." />}
+      {/* One board: the default stages, each card tagged with its client ID. */}
       {data && view === "board" && (
         <Board stages={data.stages} projects={data.projects} hrefFor={(p) => href(p.tenantId, p.key)} orgName={(p) => slugOf.get(p.tenantId)?.clientId} />
       )}
+      {/* By organization: one lane per client with its own stages; empty clients are skipped. */}
       {data && view === "lanes" && (
         <div className="lanes">
           {data.orgs.map((o) => {

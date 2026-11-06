@@ -9,19 +9,23 @@ import { Avatar, LayerBadge, LAYERS, layerName } from "./ui.tsx";
 
 // --- Session -----------------------------------------------------------------
 
+/** The signed-in person and their organizations; a 401 here means "show sign-in". */
 export function useMe() {
   return useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me"), retry: false });
 }
 
+// Session context for everything below Root.
 const MeCtx = createContext<Me | null>(null);
 export const useSession = () => useContext(MeCtx)!;
 
+/** Apply the saved theme; "system" defers to the device setting. */
 function applyTheme(theme: string) {
   const root = document.documentElement;
   if (theme === "system") root.removeAttribute("data-theme");
   else root.setAttribute("data-theme", theme);
 }
 
+/** Top-level gate: sign-in, error, first-visit redirect, then the app. */
 export function Root() {
   const me = useMe();
   const loc = useLocation();
@@ -34,6 +38,7 @@ export function Root() {
     return <div className="content">Couldn't reach 1NEON. <button className="linkish" onClick={() => me.refetch()}>Try again</button></div>;
   }
   const data = me.data!;
+  // Landing on /1NEON/: the operator starts at All clients, everyone else in their first client organization.
   if (loc.pathname === "/" || loc.pathname === "") {
     const first = data.orgs.find((o) => o.slug !== "neon1") ?? data.orgs[0];
     if (data.operator) return <Navigate to="/all/workflow" replace />;
@@ -51,6 +56,7 @@ export function Root() {
 
 // --- Sign-in -------------------------------------------------------------------
 
+// Local demo accounts; the buttons only render in a dev build.
 const DEMO = [
   ["pradeep@neon1.tech", "Pradeep (neon1 operator)"],
   ["raj@acmedental.example", "Raj Patel (Acme Dental admin)"],
@@ -58,10 +64,12 @@ const DEMO = [
   ["lee@harborauto.example", "Lee Moreno (Harbor Auto, invited)"],
 ] as const;
 
+/** Sign-in: email first, then Cognito Managed Login (code, passkey, or Google). */
 function SignIn() {
   const [email, setEmail] = useState("");
   const qc = useQueryClient();
   const params = new URLSearchParams(location.search);
+  // The API's callback sends people back here with a reason when sign-in can't finish.
   const problem = params.get("signin");
   const pick = (e: string) => {
     devUser.set(e);
@@ -104,6 +112,7 @@ function SignIn() {
 
 // --- Organization context ---------------------------------------------------------
 
+/** The organization in view, its stages, and what the caller may do in it. */
 interface OrgCtxValue extends OrgResponse {
   summary: OrgSummary;
   canWrite: boolean;
@@ -112,11 +121,13 @@ interface OrgCtxValue extends OrgResponse {
 const OrgCtx = createContext<OrgCtxValue | null>(null);
 export const useOrg = () => useContext(OrgCtx)!;
 
+/** Routes under /o/:slug: resolve the slug from the person's own list, then load the organization. */
 export function OrgLayout() {
   const me = useSession();
   const { slug } = useParams();
   const summary = me.orgs.find((o) => o.slug === slug);
   const org = useQuery({ queryKey: ["org", summary?.id], queryFn: () => api<OrgResponse>(`/t/${summary!.id}`), enabled: Boolean(summary) });
+  // Not in my list: show "not here" without asking the API about an organization I can't see.
   if (!summary) return <Frame><NotMember /></Frame>;
   if (!org.data) return <Frame org={summary}><div className="content muted" aria-busy="true">Loading…</div></Frame>;
   const access = org.data.access;
@@ -130,6 +141,7 @@ export function OrgLayout() {
   );
 }
 
+/** The All clients view, operator only. */
 export function AllLayout() {
   const me = useSession();
   if (!me.operator) return <Frame><NotMember /></Frame>;
@@ -152,6 +164,7 @@ function NotMember() {
 
 // --- Frame: sidebar + top bar ----------------------------------------------------
 
+// The top bar's content is set by the page in view.
 const Crumbs = createContext<(c: ReactNode) => void>(() => undefined);
 /** Pages set their breadcrumb trail and presence avatars in the top bar. */
 export function useTopBar(node: ReactNode, deps: unknown[]) {
@@ -163,11 +176,13 @@ export function useTopBar(node: ReactNode, deps: unknown[]) {
   }, deps);
 }
 
+/** Sidebar, top bar, and content area shared by every signed-in page. */
 function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; children: ReactNode }) {
   const me = useSession();
   const [open, setOpen] = useState(false);
   const [top, setTop] = useState<ReactNode>(null);
   const loc = useLocation();
+  // Close the phone drawer after navigating.
   useEffect(() => setOpen(false), [loc.pathname]);
   const base = org ? `/o/${org.slug}` : "";
   return (
@@ -208,6 +223,7 @@ function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; childr
         </div>
       </aside>
       <div className="main">
+        {/* All clients is read only; say so on every screen of it. */}
         {all && (
           <div className="readonly-bar" role="status">
             <strong>All clients · read only.</strong> Open a client to make changes.
@@ -227,6 +243,7 @@ function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; childr
   );
 }
 
+/** The organization switcher at the top of the sidebar. */
 function OrgChooser({ current, all }: { current?: OrgSummary; all?: boolean }) {
   const me = useSession();
   const nav = useNavigate();

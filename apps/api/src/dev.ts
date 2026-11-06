@@ -8,6 +8,7 @@ import { MemoryDirectory, MemoryMailer } from "./services.ts";
 import { MemoryTable } from "./store/memory.ts";
 import { Repo } from "./store/repo.ts";
 
+// Pradeep is the operator locally, whatever the environment says.
 const cfg = { ...loadConfig(), operatorEmails: ["pradeep@neon1.tech"] };
 const repo = new Repo(new MemoryTable());
 const mailer = new MemoryMailer();

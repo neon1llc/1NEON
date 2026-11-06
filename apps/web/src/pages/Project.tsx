@@ -8,6 +8,7 @@ import { api, HttpError } from "../lib/api.ts";
 import { problem, useMembers, useProject, useProjects, useRefresh } from "../lib/hooks.ts";
 import type { EditMarker } from "../lib/types.ts";
 
+// Singular and plural labels for each kind of item.
 const KIND_LABEL: Record<ItemKind, [string, string]> = {
   request: ["Request", "Requests"],
   discovery: ["Question", "Discovery"],
@@ -29,9 +30,12 @@ const KIND_LABEL: Record<ItemKind, [string, string]> = {
   care: ["Care item", "Care plan"],
   retro: ["Retro note", "Retrospective"],
 };
+// Kinds shown under a layer tab. Decisions appear as banners, never as editable rows.
 const KINDS_IN = (layer: Layer) => (Object.keys(KIND_LAYER) as ItemKind[]).filter((k) => KIND_LAYER[k] === layer && k !== "decision");
+// Kinds that are done or not done, shown with a checkbox.
 const CHECKABLE = new Set<ItemKind>(["task", "milestone", "check", "handoff", "file_request", "requirement", "discovery", "care"]);
 
+/** A project by key (FLOW-1): the key resolves to an ID through the project list. */
 export function ProjectPage() {
   const { org, summary } = useOrg();
   const { key, tab = "overview" } = useParams();
@@ -39,6 +43,7 @@ export function ProjectPage() {
   const pid = projects.data?.find((p) => p.key === key)?.id;
   const detail = useProject(org.id, pid);
   const base = `/o/${summary.slug}/projects/${key}`;
+  // Breadcrumb plus the avatars of anyone editing in this project.
   useTopBar(
     <span>
       <Link to={`/o/${summary.slug}/projects`}>Projects</Link> / {key}
@@ -49,6 +54,7 @@ export function ProjectPage() {
   if (projects.data && !pid) return <Empty text={`There's no project ${key} in ${org.name}.`} action={<Link className="btn btn-ghost" to={`/o/${summary.slug}/projects`}>All projects</Link>} />;
   if (!detail.data) return <p className="muted" aria-busy="true">Loading…</p>;
   const { project: p, items } = detail.data;
+  // Stage progress: earlier stages are done, the current one is lit.
   const stageAt = org.stages.findIndex((s) => s.id === p.stageId);
   const count = (l: Layer) => items.filter((i) => KIND_LAYER[i.kind] === l).length;
   return (
@@ -74,6 +80,7 @@ export function ProjectPage() {
   );
 }
 
+/** Everyone else editing something in this project, once each. */
 function Presence({ edits }: { edits: EditMarker[] }) {
   const me = useSession();
   const others = [...new Map(edits.filter((e) => e.userId !== me.user.id).map((e) => [e.userId, e])).values()];
@@ -87,6 +94,7 @@ function Presence({ edits }: { edits: EditMarker[] }) {
 
 // --- Overview ---------------------------------------------------------------------
 
+/** Overview: decision, summary and outcome, measures, status, and people. */
 function Overview({ project: p, items }: { project: Project; items: Item[] }) {
   const { org, canWrite } = useOrg();
   const members = useMembers(org.id);
@@ -100,6 +108,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
   const update = items.filter((i) => i.kind === "update").at(-1);
   const names = new Map(members.data?.map((m) => [m.userId, m.name || m.email]) ?? []);
 
+  // Save project fields; a 409 opens the conflict dialog with the newer version.
   const save = async (version: number, patch: Record<string, unknown>) => {
     try {
       await api(`/t/${org.id}/projects/${p.id}`, { method: "PATCH", body: { version, ...patch } });
@@ -177,6 +186,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
           </p>
         )}
       </aside>
+      {/* Keep mine saves again over their version; Take theirs drops the draft. */}
       <ConflictDialog
         open={Boolean(conflict)}
         who={names.get(conflict?.updatedBy ?? "") ?? "Someone"}
@@ -189,6 +199,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
   );
 }
 
+/** A measure: latest reading (or the baseline), the range, and progress toward the target. */
 function MetricCard({ item, onReading }: { item: Item; onReading?: (value: number) => void }) {
   const m = MetricFields.parse(item.fields);
   const latest = m.readings.at(-1);
@@ -215,6 +226,7 @@ function MetricCard({ item, onReading }: { item: Item; onReading?: (value: numbe
 
 // --- Layer tabs ---------------------------------------------------------------------
 
+/** One layer's items, grouped by kind, with add forms for people who can write. */
 function LayerTab({ layer, project, items, edits }: { layer: Layer; project: Project; items: Item[]; edits: EditMarker[] }) {
   const { org, canWrite } = useOrg();
   const toast = useToast();
@@ -222,6 +234,7 @@ function LayerTab({ layer, project, items, edits }: { layer: Layer; project: Pro
   const path = `/t/${org.id}/projects/${project.id}`;
   const decisions = items.filter((i) => i.kind === "decision");
 
+  // Quick edits (done, readings): on a conflict, say so and show the latest instead of a dialog.
   const patch = async (item: Item, body: Record<string, unknown>) => {
     try {
       await api(`${path}/items/${item.id}`, { method: "PATCH", body: { version: item.version, ...body } });
@@ -239,6 +252,7 @@ function LayerTab({ layer, project, items, edits }: { layer: Layer; project: Pro
       ))}
       {KINDS_IN(layer).map((kind) => {
         const list = items.filter((i) => i.kind === kind);
+        // Viewers see only groups with content, plus Requests, which they may add to.
         if (!list.length && !canWrite && kind !== "request") return null;
         return (
           <section className="kind-group" key={kind}>
@@ -263,6 +277,7 @@ function LayerTab({ layer, project, items, edits }: { layer: Layer; project: Pro
   );
 }
 
+/** One item: view, edit with presence and conflict handling, check off, or remove. */
 function ItemRow({ item, path, marker, onToggle }: { item: Item; path: string; marker?: EditMarker; onToggle?: () => void }) {
   const { org, canWrite } = useOrg();
   const me = useSession();
@@ -275,6 +290,7 @@ function ItemRow({ item, path, marker, onToggle }: { item: Item; path: string; m
   const nameOf = (uid?: string) => members.data?.find((m) => m.userId === uid)?.name || "Someone";
   const otherEditing = marker && marker.userId !== me.user.id ? marker : undefined;
 
+  // While editing, hold an edit marker so others see it, renew it, and release it on close.
   useEffect(() => {
     if (!editing) return;
     // Advisory marker: others see who is editing; it expires on its own if this tab closes.
@@ -286,6 +302,7 @@ function ItemRow({ item, path, marker, onToggle }: { item: Item; path: string; m
     };
   }, [editing, item.id, path]);
 
+  // Save title and details against the version read; a 409 opens the conflict dialog.
   const save = async (version: number) => {
     try {
       await api(`${path}/items/${item.id}`, { method: "PATCH", body: { version, title: draft.title, body: draft.body } });
@@ -345,6 +362,7 @@ function ItemRow({ item, path, marker, onToggle }: { item: Item; path: string; m
   );
 }
 
+/** The inline form that adds an item of one kind. */
 function AddItem({ kind, path }: { kind: ItemKind; path: string }) {
   const { org } = useOrg();
   const toast = useToast();
@@ -389,6 +407,7 @@ function AddItem({ kind, path }: { kind: ItemKind; path: string }) {
   );
 }
 
+/** A 1 to 5 bar; cost and effort are inverted so more bars always means better. */
 function Meter({ label, value, invert }: { label: string; value: number; invert?: boolean }) {
   const v = invert ? 6 - value : value;
   return (
@@ -399,6 +418,7 @@ function Meter({ label, value, invert }: { label: string; value: number; invert?
   );
 }
 
+/** Options side by side: draft, shared for approval, approved; approving records a decision. */
 function Options({ items, path }: { items: Item[]; path: string }) {
   const { org, canWrite } = useOrg();
   const toast = useToast();
@@ -414,6 +434,7 @@ function Options({ items, path }: { items: Item[]; path: string }) {
     }
     refresh();
   };
+  // Approve the exact version on screen; if it changed meanwhile, the API refuses and we say so.
   const approve = async () => {
     const o = approving;
     setApproving(undefined);
@@ -453,6 +474,7 @@ function Options({ items, path }: { items: Item[]; path: string }) {
           );
         })}
       </div>
+      {/* Approval confirmation with optional conditions. */}
       <Dialog open={Boolean(approving)} onClose={() => setApproving(undefined)} label="Approve option">
         <h2>Approve "{approving?.title}"?</h2>
         <p className="muted small">This records a decision tied to this exact version of the option. It can't be edited afterwards; a later change needs a new approval.</p>

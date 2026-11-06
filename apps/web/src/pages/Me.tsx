@@ -14,6 +14,7 @@ export function MePage() {
   const toast = useToast();
   const [draft, setDraft] = useState({ name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme });
   const [busy, setBusy] = useState(false);
+  // Save the profile; the theme applies immediately and is kept with the account.
   const save = async () => {
     setBusy(true);
     try {
@@ -26,6 +27,7 @@ export function MePage() {
     }
     setBusy(false);
   };
+  // Dev: forget the demo user. Production: the API revokes tokens and returns Cognito's logout URL.
   const signOut = async () => {
     if (isDev) {
       devUser.set("");
@@ -44,6 +46,7 @@ export function MePage() {
         <div><label htmlFor="nm">Name</label><input id="nm" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} maxLength={80} autoComplete="name" /></div>
         <div><label htmlFor="tt">Title</label><input id="tt" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} maxLength={80} autoComplete="organization-title" /></div>
         <div><label htmlFor="ph">Mobile number (for sign-in codes by text)</label><input id="ph" type="tel" value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} maxLength={32} autoComplete="tel" /></div>
+        {/* Theme previews immediately; Save keeps it with the account. */}
         <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
           <legend style={{ marginBottom: 8 }}>Theme</legend>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -55,6 +58,7 @@ export function MePage() {
             ))}
           </div>
         </fieldset>
+        {/* Strong sign-in status: admins need it for people and settings. */}
         <div className="card small" style={{ display: "grid", gap: 4 }}>
           <b>Sign-in security</b>
           <span className="muted">{me.user.strongAuth ? "You have an authenticator app or passkey. Admin actions are open to you." : "Add an authenticator app (such as Authy) or a passkey at your next sign-in. Admins need one to manage people and settings."}</span>
