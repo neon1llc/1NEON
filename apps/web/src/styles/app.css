@@ -5,13 +5,14 @@
 /* Semantic tokens every component uses, built on the shared brand tokens */
 :root {
   --r: 14px; --r-sm: 10px;
-  --amber: #B26A00; --red: #B3261E; --ok: #1E7B34;
+  --amber: #8F5500; --red: #B3261E; --ok: #18692C;
 
   /* Awake (light) is the working surface */
   --bg: var(--paper); --frame: #E8ECE8; --panel: #FFFFFF; --text: var(--ink); --muted: #56665C;
   --line: rgba(3, 87, 4, .16); --line-strong: rgba(3, 87, 4, .32); --accent: var(--brand); --accent-ink: #FFFFFF;
   --accent-soft: rgba(3, 87, 4, .08); --focus: var(--brand); --shadow: 0 1px 2px rgba(16, 36, 26, .05);
-  --l1: #003B00; --l2: #1E6B2E; --l3: #2E8B46; --l4: #4FA968;
+  /* Layer greens, each at least 4.5:1 against the white letter on its badge */
+  --l1: #003B00; --l2: #17562A; --l3: #267038; --l4: #3A8550; --badge-ink: #FFFFFF;
   color-scheme: light;
 }
 
@@ -21,12 +22,12 @@
   :root:not([data-theme="awake"]) { --bg: #0F0A0D; --frame: var(--void); --panel: #15100F; --text: #D6F5DC; --muted: #84A98C;
     --line: rgba(0, 255, 65, .14); --line-strong: rgba(0, 255, 65, .3); --accent: var(--neon); --accent-ink: var(--void);
     --accent-soft: rgba(0, 230, 118, .08); --focus: var(--glow); --shadow: none; --amber: #FFB547; --red: #FF8A80; --ok: #6CFFA8;
-    --l1: #008F11; --l2: #00B84F; --l3: #00E676; --l4: #6CFFA8; }
+    --l1: #008F11; --l2: #00B84F; --l3: #00E676; --l4: #6CFFA8; --badge-ink: var(--void); }
 }
 :root[data-theme="matrix"] { color-scheme: dark; --bg: #0F0A0D; --frame: var(--void); --panel: #15100F; --text: #D6F5DC; --muted: #84A98C;
   --line: rgba(0, 255, 65, .14); --line-strong: rgba(0, 255, 65, .3); --accent: var(--neon); --accent-ink: var(--void);
   --accent-soft: rgba(0, 230, 118, .08); --focus: var(--glow); --shadow: none; --amber: #FFB547; --red: #FF8A80; --ok: #6CFFA8;
-  --l1: #008F11; --l2: #00B84F; --l3: #00E676; --l4: #6CFFA8; }
+  --l1: #008F11; --l2: #00B84F; --l3: #00E676; --l4: #6CFFA8; --badge-ink: var(--void); }
 
 /* Base elements and utilities */
 * { box-sizing: border-box; }
@@ -58,6 +59,8 @@ label.field { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
 label.field > span { font-family: var(--mono); font-size: 12px; }
 input, textarea, select { font: 15px var(--sans); color: var(--text); background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: 9px 12px; min-height: 40px; width: 100%; }
 textarea { min-height: 96px; resize: vertical; }
+/* Placeholders at the muted color, which passes contrast in both themes */
+::placeholder { color: var(--muted); opacity: 1; }
 input:focus, textarea:focus, select:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: transparent; }
 
 /* App shell: a slim icon rail (or none, by preference), and the full menu over the page */
@@ -193,7 +196,7 @@ a.row:hover { background: var(--accent-soft); }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 18px 0 22px; overflow-x: auto; }
 .tabs a { padding: 10px 14px; font: 13px var(--mono); color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; display: inline-flex; gap: 8px; align-items: center; white-space: nowrap; }
 .tabs a.active { color: var(--accent); border-color: var(--accent); }
-.badge { font: 700 10px var(--mono); width: 18px; height: 18px; border-radius: 5px; display: inline-grid; place-items: center; color: #fff; }
+.badge { font: 700 10px var(--mono); width: 18px; height: 18px; border-radius: 5px; display: inline-grid; place-items: center; color: var(--badge-ink); }
 /* Item groups and rows inside a layer tab */
 .kind-group { margin-bottom: 26px; }
 .item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px 4px; border-bottom: 1px solid var(--line); }
