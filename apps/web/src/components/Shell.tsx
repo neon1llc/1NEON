@@ -90,9 +90,17 @@ function SignIn() {
   };
   return (
     <main className="signin">
-      <Rain />
+      <Rain panes=".signin .panel, .signin .home, .rainctl button" />
       <div className="veil" />
-      <div className="panel">
+      {/* Back to neon1.tech, where the site's own logo sits */}
+      <a className="home glass" href="/" aria-label="neon1.tech home">
+        <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+          <path d="M6 6a24 24 0 0 1 24 24v30M6 12a18 18 0 0 1 18 18v30M6 18a12 12 0 0 1 12 12v30M6 24a6 6 0 0 1 6 6v30" />
+          <path d="M34 6a24 24 0 0 1 24 24v30M34 12a18 18 0 0 1 18 18v30M34 18a12 12 0 0 1 12 12v30M34 24a6 6 0 0 1 6 6v30" />
+        </svg>
+        <span><span className="ne">neon</span><span className="one">1</span></span>
+      </a>
+      <div className="panel glass">
         <h1 className="word">1NEON</h1>
         <span className="tag">1 portal. Needs. Execution. Observation. Next.</span>
         {/* Sign-in problems from the callback, then the email form */}
@@ -108,8 +116,10 @@ function SignIn() {
           <input id="email" type="email" autoComplete="email webauthn" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
           <button className="btn btn-primary" type="submit">Continue</button>
         </form>
-        <p className="fine">
-          Sign in with a code by email, a passkey, or Google. 1NEON uses only the cookies it needs to keep you signed in. <Link to="/cookies">Cookies</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
+        <p className="fine">Sign in with a code by email, a passkey, or Google. 1NEON uses only the cookies it needs to keep you signed in.</p>
+        {/* The three policies on one line of their own */}
+        <p className="fine legal-links">
+          <Link to="/cookies">Cookies</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
         </p>
         {/* Demo accounts exist only in local builds */}
         {isDev && (
@@ -242,6 +252,14 @@ function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; childr
             <li><NavLink to="/all/workflow"><span className="ico" aria-hidden="true">▦</span>Workflow</NavLink></li>
           ) : null}
         </ul>
+        {/* The way back to the neon1.tech site, outside the app's routes */}
+        <a className="site-link" href="/">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+              <path d="M6 6a24 24 0 0 1 24 24v30M6 12a18 18 0 0 1 18 18v30M6 18a12 12 0 0 1 12 12v30M6 24a6 6 0 0 1 6 6v30" />
+              <path d="M34 6a24 24 0 0 1 24 24v30M34 12a18 18 0 0 1 18 18v30M34 18a12 12 0 0 1 12 12v30M34 24a6 6 0 0 1 6 6v30" />
+            </svg>
+          neon1.tech
+        </a>
         {/* The signed-in person links to their profile */}
         <div className="foot">
           <Link to="/me" className="who" style={{ color: "inherit", textDecoration: "none" }}>
