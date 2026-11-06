@@ -25,8 +25,9 @@ export async function uploadFiles(tid: string, files: File[], target: FileTarget
       method: "POST",
       body: { name: f.name, contentType: f.type || "application/octet-stream", size: f.size, ...target },
     });
-    const r = await fetch(upload, { method: "PUT", headers: { "content-type": f.type || "application/octet-stream" }, body: f });
-    if (!r.ok) throw new Error(`Upload of ${f.name} didn't finish.`);
+    // A blocked or dropped connection throws rather than returning a status; both get a plain message
+    const r = await fetch(upload, { method: "PUT", headers: { "content-type": f.type || "application/octet-stream" }, body: f }).catch(() => undefined);
+    if (!r?.ok) throw new Error(`Couldn't send ${f.name} to storage. Check your connection and try again.`);
     await api(`/t/${tid}/docs/${doc.id}/done${doc.projectId ? `?p=${doc.projectId}` : ""}`, { method: "POST" });
   }
 }
