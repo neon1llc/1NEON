@@ -1,12 +1,16 @@
-// Request bodies for the API, shared with the web client.
+// packages/domain/src/api.ts - Request bodies for the API, shared with the web client.
+
+
 import { z } from "zod";
 import { AccessLevel, Health, ItemKind, ProjectRole, email, id } from "./model.ts";
+
 
 // Organizations (operator only)
 export const CreateTenantInput = z.object({
   name: z.string().trim().min(1).max(80),
   slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/).optional(),
 });
+
 
 // People
 export const InviteInput = z.object({
@@ -23,6 +27,8 @@ export const InviteInput = z.object({
     .max(50),
 });
 
+
+// Admins change access, title, or status; the version guards against stale edits
 export const UpdateMemberInput = z.object({
   version: z.number().int(),
   access: AccessLevel.optional(),
@@ -30,7 +36,8 @@ export const UpdateMemberInput = z.object({
   status: z.enum(["joined", "deactivated"]).optional(),
 });
 
-// Projects. Every update carries the version the client read, for conflict checks.
+
+// Projects. Every update carries the version the client read, for conflict checks
 export const CreateProjectInput = z.object({
   name: z.string().trim().min(1).max(120),
   template: z.string().max(40).default("blank"),
@@ -46,6 +53,8 @@ export const CreateProjectInput = z.object({
     .default([]),
 });
 
+
+// Partial project edit; null clears the target date
 export const UpdateProjectInput = z.object({
   version: z.number().int(),
   name: z.string().trim().min(1).max(120).optional(),
@@ -56,7 +65,8 @@ export const UpdateProjectInput = z.object({
   archived: z.boolean().optional(),
 });
 
-// A move names its neighbours; the API computes the new rank between them.
+
+// A move names its neighbours; the API computes the new rank between them
 export const MoveProjectInput = z.object({
   version: z.number().int(),
   stageId: id,
@@ -64,6 +74,7 @@ export const MoveProjectInput = z.object({
   after: z.string().max(64).optional(),
   reason: z.string().max(300).optional(),
 });
+
 
 // Items inside a layer
 export const CreateItemInput = z.object({
@@ -76,6 +87,8 @@ export const CreateItemInput = z.object({
   fields: z.record(z.string(), z.unknown()).default({}),
 });
 
+
+// Partial item edit; null clears the assignee or due date
 export const UpdateItemInput = z.object({
   version: z.number().int(),
   title: z.string().trim().min(1).max(160).optional(),
@@ -87,16 +100,19 @@ export const UpdateItemInput = z.object({
   fields: z.record(z.string(), z.unknown()).optional(),
 });
 
-// Approval pins the option version shown to the approver.
+
+// Approval pins the option version shown to the approver
 export const ApproveInput = z.object({ version: z.number().int(), conditions: z.string().max(2000).default("") });
 
-// Documents: the API answers with a presigned upload URL.
+
+// Documents: the API answers with a presigned upload URL
 export const UploadInput = z.object({
   name: z.string().trim().min(1).max(200),
   contentType: z.string().max(120),
   size: z.number().int().positive().max(250 * 1024 * 1024),
   layer: z.enum(["needs", "execution", "observation", "next"]),
 });
+
 
 // The signed-in person's own profile
 export const UpdateMeInput = z.object({
@@ -107,7 +123,8 @@ export const UpdateMeInput = z.object({
   theme: z.enum(["system", "awake", "matrix"]).optional(),
 });
 
-/** Every error the API returns has this shape. */
+
+/** Every error the API returns has this shape */
 export interface ApiError {
   error: string;
   message: string;

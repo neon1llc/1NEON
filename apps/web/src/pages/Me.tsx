@@ -1,4 +1,6 @@
-// Your profile: name, title, phone, theme, and signing out.
+// apps/web/src/pages/Me.tsx - Your profile: name, title, phone, theme, and signing out.
+
+
 import type { User } from "@1neon/domain";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -8,13 +10,16 @@ import { Avatar, useToast } from "../components/ui.tsx";
 import { api, devUser, isDev } from "../lib/api.ts";
 import { problem } from "../lib/hooks.ts";
 
+
+// The signed-in person's own profile, outside any organization
 export function MePage() {
   const me = useSession();
   const qc = useQueryClient();
   const toast = useToast();
+  // Edits stay local until Save
   const [draft, setDraft] = useState({ name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme });
   const [busy, setBusy] = useState(false);
-  // Save the profile; the theme applies immediately and is kept with the account.
+  // Save the profile; the theme applies immediately and is kept with the account
   const save = async () => {
     setBusy(true);
     try {
@@ -27,7 +32,7 @@ export function MePage() {
     }
     setBusy(false);
   };
-  // Dev: forget the demo user. Production: the API revokes tokens and returns Cognito's logout URL.
+  // Dev: forget the demo user. Production: the API revokes tokens and returns Cognito's logout URL
   const signOut = async () => {
     if (isDev) {
       devUser.set("");
@@ -39,14 +44,16 @@ export function MePage() {
   };
   return (
     <main className="content" style={{ maxWidth: 720, margin: "0 auto" }}>
+      {/* Back link, then who this is */}
       <p><Link to="/" className="small">← Back to 1NEON</Link></p>
       <h1 className="page-title" style={{ display: "flex", gap: 12, alignItems: "center" }}><Avatar id={me.user.id} name={me.user.name || me.user.email} size={40} />Your profile</h1>
       <p className="lead">{me.user.email}{me.operator ? " · neon1 operator" : ""}</p>
+      {/* Name, title, and mobile number */}
       <form className="form" onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <div><label htmlFor="nm">Name</label><input id="nm" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} maxLength={80} autoComplete="name" /></div>
         <div><label htmlFor="tt">Title</label><input id="tt" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} maxLength={80} autoComplete="organization-title" /></div>
         <div><label htmlFor="ph">Mobile number (for sign-in codes by text)</label><input id="ph" type="tel" value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} maxLength={32} autoComplete="tel" /></div>
-        {/* Theme previews immediately; Save keeps it with the account. */}
+        {/* Theme previews immediately; Save keeps it with the account */}
         <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
           <legend style={{ marginBottom: 8 }}>Theme</legend>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -58,11 +65,12 @@ export function MePage() {
             ))}
           </div>
         </fieldset>
-        {/* Strong sign-in status: admins need it for people and settings. */}
+        {/* Strong sign-in status: admins need it for people and settings */}
         <div className="card small" style={{ display: "grid", gap: 4 }}>
           <b>Sign-in security</b>
           <span className="muted">{me.user.strongAuth ? "You have an authenticator app or passkey. Admin actions are open to you." : "Add an authenticator app (such as Authy) or a passkey at your next sign-in. Admins need one to manage people and settings."}</span>
         </div>
+        {/* Save, and sign out */}
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
           <button className="btn btn-ghost" type="button" onClick={() => void signOut()}>Sign out</button>

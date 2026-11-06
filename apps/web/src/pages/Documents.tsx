@@ -1,8 +1,12 @@
-// Documents hub. Uploads go straight to the organization's folder with a presigned link and are scanned before anyone can open them.
+// apps/web/src/pages/Documents.tsx - Documents hub. Until uploads open it shows the layers files
+// will be filed under, in the organization's private folder.
+
+
 import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { Empty, LayerBadge, LAYERS, layerName } from "../components/ui.tsx";
 
-/** Placeholder until uploads open: shows the layers files will be filed under. */
+
+/** Placeholder until uploads open: shows the layers files will be filed under */
 export function Documents() {
   const { org } = useOrg();
   useTopBar(<span>{org.name} · Documents</span>, [org.name]);
@@ -10,6 +14,7 @@ export function Documents() {
     <>
       <h1 className="page-title">Documents</h1>
       <p className="lead">Files for {org.name}, kept in its own private folder and filed by layer. Every upload is checked for malware before anyone can open it.</p>
+      {/* One card per layer with the kinds of files it holds */}
       <div className="grid" style={{ marginBottom: 24 }}>
         {LAYERS.map((l) => (
           <div key={l} className="card hub">

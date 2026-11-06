@@ -1,4 +1,6 @@
-# Names the deploy workflow and people need after an apply.
+# infra/envs/prod/outputs.tf - Names the deploy workflow and people need after an apply.
+
+
 output "app_bucket" { value = module.hosting.bucket }
 output "docs_bucket" { value = module.storage.bucket }
 output "api_function" { value = module.api.api_function }

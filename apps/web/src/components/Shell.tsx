@@ -1,4 +1,7 @@
-// App frame: sign-in gate, sidebar with the organization chooser, top bar, and the org context.
+// apps/web/src/components/Shell.tsx - App frame: sign-in gate, sidebar with the organization
+// chooser, top bar, and the org context.
+
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
@@ -7,25 +10,31 @@ import type { Me, OrgResponse, OrgSummary } from "../lib/types.ts";
 import { Rain } from "./Rain.tsx";
 import { Avatar, LayerBadge, LAYERS, layerName } from "./ui.tsx";
 
+
 // --- Session -----------------------------------------------------------------
 
-/** The signed-in person and their organizations; a 401 here means "show sign-in". */
+
+/** The signed-in person and their organizations; a 401 here means "show sign-in" */
 export function useMe() {
   return useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me"), retry: false });
 }
 
-// Session context for everything below Root.
+
+// Session context for everything below Root
 const MeCtx = createContext<Me | null>(null);
+// Only valid inside Root, after sign-in
 export const useSession = () => useContext(MeCtx)!;
 
-/** Apply the saved theme; "system" defers to the device setting. */
+
+/** Apply the saved theme; "system" defers to the device setting */
 function applyTheme(theme: string) {
   const root = document.documentElement;
   if (theme === "system") root.removeAttribute("data-theme");
   else root.setAttribute("data-theme", theme);
 }
 
-/** Top-level gate: sign-in, error, first-visit redirect, then the app. */
+
+/** Top-level gate: sign-in, error, first-visit redirect, then the app */
 export function Root() {
   const me = useMe();
   const loc = useLocation();
@@ -38,7 +47,7 @@ export function Root() {
     return <div className="content">Couldn't reach 1NEON. <button className="linkish" onClick={() => me.refetch()}>Try again</button></div>;
   }
   const data = me.data!;
-  // Landing on /1NEON/: the operator starts at All clients, everyone else in their first client organization.
+  // Landing on /1NEON/: the operator starts at All clients, everyone else in their first client organization
   if (loc.pathname === "/" || loc.pathname === "") {
     const first = data.orgs.find((o) => o.slug !== "neon1") ?? data.orgs[0];
     if (data.operator) return <Navigate to="/all/workflow" replace />;
@@ -54,9 +63,11 @@ export function Root() {
   );
 }
 
+
 // --- Sign-in -------------------------------------------------------------------
 
-// Local demo accounts; the buttons only render in a dev build.
+
+// Local demo accounts; the buttons only render in a dev build
 const DEMO = [
   ["pradeep@neon1.tech", "Pradeep (neon1 operator)"],
   ["raj@acmedental.example", "Raj Patel (Acme Dental admin)"],
@@ -64,13 +75,15 @@ const DEMO = [
   ["lee@harborauto.example", "Lee Moreno (Harbor Auto, invited)"],
 ] as const;
 
-/** Sign-in: email first, then Cognito Managed Login (code, passkey, or Google). */
+
+/** Sign-in: email first, then Cognito Managed Login (code, passkey, or Google) */
 function SignIn() {
   const [email, setEmail] = useState("");
   const qc = useQueryClient();
   const params = new URLSearchParams(location.search);
-  // The API's callback sends people back here with a reason when sign-in can't finish.
+  // The API's callback sends people back here with a reason when sign-in can't finish
   const problem = params.get("signin");
+  // Dev sign-in: remember the demo email and refetch everything as that person
   const pick = (e: string) => {
     devUser.set(e);
     qc.invalidateQueries();
@@ -82,6 +95,7 @@ function SignIn() {
       <div className="panel">
         <h1 className="word">1NEON</h1>
         <span className="tag">1 portal. Needs. Execution. Observation. Next.</span>
+        {/* Sign-in problems from the callback, then the email form */}
         {problem === "not_invited" && <p className="notice" role="alert">That email hasn't been invited yet. Ask your organization's admin, or neon1.</p>}
         {problem === "failed" && <p className="notice" role="alert">Sign-in didn't finish. Please try again.</p>}
         <form
@@ -97,6 +111,7 @@ function SignIn() {
         <p className="fine">
           Sign in with a code by email, a passkey, or Google. 1NEON uses only the cookies it needs to keep you signed in. <Link to="/cookies">Cookies</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
         </p>
+        {/* Demo accounts exist only in local builds */}
         {isDev && (
           <div className="dev" aria-label="Local demo accounts">
             <p className="fine" style={{ margin: "6px 0 0" }}>Local demo: sign in as</p>
@@ -110,24 +125,29 @@ function SignIn() {
   );
 }
 
+
 // --- Organization context ---------------------------------------------------------
 
-/** The organization in view, its stages, and what the caller may do in it. */
+
+/** The organization in view, its stages, and what the caller may do in it */
 interface OrgCtxValue extends OrgResponse {
   summary: OrgSummary;
   canWrite: boolean;
   canAdmin: boolean;
 }
+// Organization context for everything inside OrgLayout
 const OrgCtx = createContext<OrgCtxValue | null>(null);
+// Only valid inside OrgLayout
 export const useOrg = () => useContext(OrgCtx)!;
 
-/** Routes under /o/:slug: resolve the slug from the person's own list, then load the organization. */
+
+/** Routes under /o/:slug: resolve the slug from the person's own list, then load the organization */
 export function OrgLayout() {
   const me = useSession();
   const { slug } = useParams();
   const summary = me.orgs.find((o) => o.slug === slug);
   const org = useQuery({ queryKey: ["org", summary?.id], queryFn: () => api<OrgResponse>(`/t/${summary!.id}`), enabled: Boolean(summary) });
-  // Not in my list: show "not here" without asking the API about an organization I can't see.
+  // Not in my list: show "not here" without asking the API about an organization I can't see
   if (!summary) return <Frame><NotMember /></Frame>;
   if (!org.data) return <Frame org={summary}><div className="content muted" aria-busy="true">Loading…</div></Frame>;
   const access = org.data.access;
@@ -141,7 +161,8 @@ export function OrgLayout() {
   );
 }
 
-/** The All clients view, operator only. */
+
+/** The All clients view, operator only */
 export function AllLayout() {
   const me = useSession();
   if (!me.operator) return <Frame><NotMember /></Frame>;
@@ -152,6 +173,8 @@ export function AllLayout() {
   );
 }
 
+
+// One answer for missing and forbidden, so nobody learns which organizations exist
 function NotMember() {
   return (
     <div className="content">
@@ -162,11 +185,13 @@ function NotMember() {
   );
 }
 
+
 // --- Frame: sidebar + top bar ----------------------------------------------------
 
-// The top bar's content is set by the page in view.
+
+// The top bar's content is set by the page in view
 const Crumbs = createContext<(c: ReactNode) => void>(() => undefined);
-/** Pages set their breadcrumb trail and presence avatars in the top bar. */
+/** Pages set their breadcrumb trail and presence avatars in the top bar */
 export function useTopBar(node: ReactNode, deps: unknown[]) {
   const set = useContext(Crumbs);
   useEffect(() => {
@@ -176,17 +201,19 @@ export function useTopBar(node: ReactNode, deps: unknown[]) {
   }, deps);
 }
 
-/** Sidebar, top bar, and content area shared by every signed-in page. */
+
+/** Sidebar, top bar, and content area shared by every signed-in page */
 function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; children: ReactNode }) {
   const me = useSession();
   const [open, setOpen] = useState(false);
   const [top, setTop] = useState<ReactNode>(null);
   const loc = useLocation();
-  // Close the phone drawer after navigating.
+  // Close the phone drawer after navigating
   useEffect(() => setOpen(false), [loc.pathname]);
   const base = org ? `/o/${org.slug}` : "";
   return (
     <div className="shell">
+      {/* Sidebar: brand, organization chooser, navigation, and the signed-in person */}
       <aside className={`side${open ? " open" : ""}`} aria-label="Sidebar">
         <Link className="brand" to="/">
           <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="5" aria-hidden="true">
@@ -194,6 +221,7 @@ function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; childr
           </svg>
           1NEON
         </Link>
+        {/* Organization pages get the hubs and layers; All clients gets only its board */}
         <OrgChooser current={org} all={all} />
         <ul className="nav">
           {org ? (
@@ -214,6 +242,7 @@ function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; childr
             <li><NavLink to="/all/workflow"><span className="ico" aria-hidden="true">▦</span>Workflow</NavLink></li>
           ) : null}
         </ul>
+        {/* The signed-in person links to their profile */}
         <div className="foot">
           <Link to="/me" className="who" style={{ color: "inherit", textDecoration: "none" }}>
             <Avatar id={me.user.id} name={me.user.name || me.user.email} />
@@ -223,12 +252,13 @@ function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; childr
         </div>
       </aside>
       <div className="main">
-        {/* All clients is read only; say so on every screen of it. */}
+        {/* All clients is read only; say so on every screen of it */}
         {all && (
           <div className="readonly-bar" role="status">
             <strong>All clients · read only.</strong> Open a client to make changes.
           </div>
         )}
+        {/* Top bar: the phone menu button and whatever the page put in the crumb slot */}
         <header className="top">
           <button className="chip only-sm" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Menu">menu</button>
           <div className="crumb">{top}</div>
@@ -243,19 +273,21 @@ function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; childr
   );
 }
 
-/** The organization switcher at the top of the sidebar. */
+
+/** The organization switcher at the top of the sidebar */
 function OrgChooser({ current, all }: { current?: OrgSummary; all?: boolean }) {
   const me = useSession();
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  // Close the menu on any click outside it
   useEffect(() => {
     const close = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
     addEventListener("mousedown", close);
     return () => removeEventListener("mousedown", close);
   }, []);
-  // People in one organization see its name, not a chooser.
+  // People in one organization see its name, not a chooser
   const many = me.operator || me.orgs.length > 1;
   const label = all ? "All clients" : current?.name ?? "Choose";
   const sub = all ? "read only" : current?.clientId ?? "";
@@ -269,6 +301,7 @@ function OrgChooser({ current, all }: { current?: OrgSummary; all?: boolean }) {
       {open && (
         <div className="menu" role="listbox" style={{ top: "calc(100% + 6px)", left: 0, right: 0 }}>
           {me.orgs.length > 6 && <input aria-label="Search organizations" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 6 }} autoFocus />}
+          {/* The operator can always jump to All clients */}
           {me.operator && (
             <>
               <button role="option" aria-selected={all} onClick={() => { setOpen(false); nav("/all/workflow"); }}>

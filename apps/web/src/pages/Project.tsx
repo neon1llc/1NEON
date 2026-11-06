@@ -1,4 +1,7 @@
-// One project: an overview, then a tab per layer (Needs, Execution, Observation, Next).
+// apps/web/src/pages/Project.tsx - One project: an overview, then a tab per layer (Needs,
+// Execution, Observation, Next).
+
+
 import { KIND_LAYER, metricProgress, MetricFields, OptionFields, type Item, type ItemKind, type Layer, type Project } from "@1neon/domain";
 import { useEffect, useState } from "react";
 import { Link, NavLink, useParams } from "react-router";
@@ -8,7 +11,8 @@ import { api, HttpError } from "../lib/api.ts";
 import { problem, useMembers, useProject, useProjects, useRefresh } from "../lib/hooks.ts";
 import type { EditMarker } from "../lib/types.ts";
 
-// Singular and plural labels for each kind of item.
+
+// Singular and plural labels for each kind of item
 const KIND_LABEL: Record<ItemKind, [string, string]> = {
   request: ["Request", "Requests"],
   discovery: ["Question", "Discovery"],
@@ -30,20 +34,22 @@ const KIND_LABEL: Record<ItemKind, [string, string]> = {
   care: ["Care item", "Care plan"],
   retro: ["Retro note", "Retrospective"],
 };
-// Kinds shown under a layer tab. Decisions appear as banners, never as editable rows.
+// Kinds shown under a layer tab. Decisions appear as banners, never as editable rows
 const KINDS_IN = (layer: Layer) => (Object.keys(KIND_LAYER) as ItemKind[]).filter((k) => KIND_LAYER[k] === layer && k !== "decision");
-// Kinds that are done or not done, shown with a checkbox.
+// Kinds that are done or not done, shown with a checkbox
 const CHECKABLE = new Set<ItemKind>(["task", "milestone", "check", "handoff", "file_request", "requirement", "discovery", "care"]);
 
-/** A project by key (FLOW-1): the key resolves to an ID through the project list. */
+
+/** A project by key (FLOW-1): the key resolves to an ID through the project list */
 export function ProjectPage() {
   const { org, summary } = useOrg();
   const { key, tab = "overview" } = useParams();
   const projects = useProjects(org.id);
+  // The key resolves to an ID through the project list
   const pid = projects.data?.find((p) => p.key === key)?.id;
   const detail = useProject(org.id, pid);
   const base = `/o/${summary.slug}/projects/${key}`;
-  // Breadcrumb plus the avatars of anyone editing in this project.
+  // Breadcrumb plus the avatars of anyone editing in this project
   useTopBar(
     <span>
       <Link to={`/o/${summary.slug}/projects`}>Projects</Link> / {key}
@@ -51,24 +57,29 @@ export function ProjectPage() {
     </span>,
     [key, summary.slug, detail.data?.edits.map((e) => e.userId + e.recordId).join()],
   );
+  // An unknown key gets a clear empty state, not a spinner
   if (projects.data && !pid) return <Empty text={`There's no project ${key} in ${org.name}.`} action={<Link className="btn btn-ghost" to={`/o/${summary.slug}/projects`}>All projects</Link>} />;
   if (!detail.data) return <p className="muted" aria-busy="true">Loading…</p>;
   const { project: p, items } = detail.data;
-  // Stage progress: earlier stages are done, the current one is lit.
+  // Stage progress: earlier stages are done, the current one is lit
   const stageAt = org.stages.findIndex((s) => s.id === p.stageId);
+  // Item counts for each layer tab
   const count = (l: Layer) => items.filter((i) => KIND_LAYER[i.kind] === l).length;
   return (
     <>
+      {/* Key, current stage with its age, then the name with health and archive state */}
       <p className="mono small muted" style={{ margin: 0 }}>{p.key} · {org.stages[stageAt]?.name} for {daysSince(p.stageEnteredAt)}d</p>
       <h1 className="page-title" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         {p.name} <Health value={p.health} />
         {p.archived && <span className="tag warn">archived</span>}
       </h1>
+      {/* Visible stages, with the current one marked for screen readers */}
       <div className="steps" aria-label="Stage">
         {org.stages.filter((s) => !s.hidden).map((s, i) => (
           <span key={s.id} className={s.id === p.stageId ? "on" : i < stageAt ? "done" : ""} aria-current={s.id === p.stageId ? "step" : undefined}>{s.name}</span>
         ))}
       </div>
+      {/* Overview, then one tab per layer with its item count */}
       <nav className="tabs" aria-label="Project sections">
         <NavLink to={base} end className={() => (tab === "overview" ? "active" : "")}>Overview</NavLink>
         {LAYERS.map((l) => (
@@ -80,8 +91,10 @@ export function ProjectPage() {
   );
 }
 
-/** Everyone else editing something in this project, once each. */
+
+/** Everyone else editing something in this project, once each */
 function Presence({ edits }: { edits: EditMarker[] }) {
+  // The caller's own markers aren't shown back to them
   const me = useSession();
   const others = [...new Map(edits.filter((e) => e.userId !== me.user.id).map((e) => [e.userId, e])).values()];
   if (!others.length) return null;
@@ -92,23 +105,27 @@ function Presence({ edits }: { edits: EditMarker[] }) {
   );
 }
 
+
 // --- Overview ---------------------------------------------------------------------
 
-/** Overview: decision, summary and outcome, measures, status, and people. */
+
+/** Overview: decision, summary and outcome, measures, status, and people */
 function Overview({ project: p, items }: { project: Project; items: Item[] }) {
   const { org, canWrite } = useOrg();
   const members = useMembers(org.id);
   const toast = useToast();
   const refresh = useRefresh(org.id);
+  // Inline edit of summary and outcome, and the newer version when a save conflicts
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ summary: p.summary, outcome: p.outcome });
   const [conflict, setConflict] = useState<Project>();
+  // The latest decision, measures, and status update feed the overview
   const decision = items.filter((i) => i.kind === "decision").at(-1);
   const metrics = items.filter((i) => i.kind === "metric");
   const update = items.filter((i) => i.kind === "update").at(-1);
   const names = new Map(members.data?.map((m) => [m.userId, m.name || m.email]) ?? []);
 
-  // Save project fields; a 409 opens the conflict dialog with the newer version.
+  // Save project fields; a 409 opens the conflict dialog with the newer version
   const save = async (version: number, patch: Record<string, unknown>) => {
     try {
       await api(`/t/${org.id}/projects/${p.id}`, { method: "PATCH", body: { version, ...patch } });
@@ -124,6 +141,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
 
   return (
     <div className="two">
+      {/* Main column: the decision banner, summary and outcome, and measures */}
       <section>
         {decision && (
           <div className="decision">
@@ -134,6 +152,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
             {decision.body && <p className="small" style={{ margin: "6px 0 0" }}>Conditions: {decision.body}</p>}
           </div>
         )}
+        {/* Editors can change the summary and outcome in place */}
         {editing ? (
           <form className="form" onSubmit={(e) => { e.preventDefault(); void save(p.version, draft); }}>
             <div><label htmlFor="ps">What is this?</label><textarea id="ps" value={draft.summary} onChange={(e) => setDraft({ ...draft, summary: e.target.value })} maxLength={500} /></div>
@@ -153,6 +172,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
         <h2 className="section-h">Measures <small>baseline → target</small></h2>
         {metrics.length === 0 ? <Empty text="No measures yet. Add them under Observation." /> : <div className="scores">{metrics.map((m) => <MetricCard key={m.id} item={m} />)}</div>}
       </section>
+      {/* Side column: health, dates, latest update, flags, people, and archiving */}
       <aside>
         <h2 className="section-h" style={{ marginTop: 0 }}>Status</h2>
         <div className="card" style={{ display: "grid", gap: 10 }}>
@@ -168,6 +188,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
           {update && <div className="small"><span className="muted">Latest update ({ago(update.updatedAt)})</span><br />{update.title}</div>}
           {p.flags.length > 0 && <div className="small"><span className="tag warn">sensitive data: {p.flags.join(", ")}</span></div>}
         </div>
+        {/* Project roles, with a fallback for people who left the organization */}
         <h2 className="section-h">People</h2>
         {p.people.length === 0 ? <p className="muted small">No roles assigned yet.</p> : (
           <div className="rows">
@@ -186,7 +207,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
           </p>
         )}
       </aside>
-      {/* Keep mine saves again over their version; Take theirs drops the draft. */}
+      {/* Keep mine saves again over their version; Take theirs drops the draft */}
       <ConflictDialog
         open={Boolean(conflict)}
         who={names.get(conflict?.updatedBy ?? "") ?? "Someone"}
@@ -199,11 +220,14 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
   );
 }
 
-/** A measure: latest reading (or the baseline), the range, and progress toward the target. */
+
+/** A measure: latest reading (or the baseline), the range, and progress toward the target */
 function MetricCard({ item, onReading }: { item: Item; onReading?: (value: number) => void }) {
+  // Fields are validated on read, so a malformed record can't break the page
   const m = MetricFields.parse(item.fields);
   const latest = m.readings.at(-1);
   const pct = metricProgress(m);
+  // The reading being typed
   const [value, setValue] = useState("");
   return (
     <div className="card metric">
@@ -214,6 +238,7 @@ function MetricCard({ item, onReading }: { item: Item; onReading?: (value: numbe
         {m.baseline ?? "?"} → {m.target ?? "?"} {m.unit} · {m.direction === "down" ? "lower is better" : "higher is better"}
       </div>
       {pct !== undefined && <div className="progress" role="img" aria-label={`${Math.round(pct * 100)} percent of the way`}><i style={{ width: `${pct * 100}%` }} /></div>}
+      {/* Editors log a reading dated today */}
       {onReading && (
         <form style={{ display: "flex", gap: 6, marginTop: 10 }} onSubmit={(e) => { e.preventDefault(); const n = Number(value); if (value.trim() && !Number.isNaN(n)) { onReading(n); setValue(""); } }}>
           <input aria-label={`New reading for ${item.title}`} inputMode="decimal" placeholder="Today's reading" value={value} onChange={(e) => setValue(e.target.value)} style={{ minHeight: 32, padding: "4px 10px" }} />
@@ -224,17 +249,20 @@ function MetricCard({ item, onReading }: { item: Item; onReading?: (value: numbe
   );
 }
 
+
 // --- Layer tabs ---------------------------------------------------------------------
 
-/** One layer's items, grouped by kind, with add forms for people who can write. */
+
+/** One layer's items, grouped by kind, with add forms for people who can write */
 function LayerTab({ layer, project, items, edits }: { layer: Layer; project: Project; items: Item[]; edits: EditMarker[] }) {
   const { org, canWrite } = useOrg();
   const toast = useToast();
   const refresh = useRefresh(org.id);
+  // Every item call goes through this project's API path
   const path = `/t/${org.id}/projects/${project.id}`;
   const decisions = items.filter((i) => i.kind === "decision");
 
-  // Quick edits (done, readings): on a conflict, say so and show the latest instead of a dialog.
+  // Quick edits (done, readings): on a conflict, say so and show the latest instead of a dialog
   const patch = async (item: Item, body: Record<string, unknown>) => {
     try {
       await api(`${path}/items/${item.id}`, { method: "PATCH", body: { version: item.version, ...body } });
@@ -247,16 +275,18 @@ function LayerTab({ layer, project, items, edits }: { layer: Layer; project: Pro
 
   return (
     <>
+      {/* Approved decisions sit at the top of Needs as read-only banners */}
       {layer === "needs" && decisions.map((d) => (
         <div className="decision" key={d.id}><b>{d.title}</b><div className="small muted">{ago(String(d.fields.approvedAt))} · option version {String(d.fields.optionVersion)}</div></div>
       ))}
       {KINDS_IN(layer).map((kind) => {
         const list = items.filter((i) => i.kind === kind);
-        // Viewers see only groups with content, plus Requests, which they may add to.
+        // Viewers see only groups with content, plus Requests, which they may add to
         if (!list.length && !canWrite && kind !== "request") return null;
         return (
           <section className="kind-group" key={kind}>
             <h2 className="section-h">{KIND_LABEL[kind][1]} <small>{list.length}</small></h2>
+            {/* Options compare side by side, measures show as cards, everything else as rows */}
             {kind === "option" ? (
               <Options items={list} path={path} />
             ) : kind === "metric" ? (
@@ -277,24 +307,29 @@ function LayerTab({ layer, project, items, edits }: { layer: Layer; project: Pro
   );
 }
 
-/** One item: view, edit with presence and conflict handling, check off, or remove. */
+
+/** One item: view, edit with presence and conflict handling, check off, or remove */
 function ItemRow({ item, path, marker, onToggle }: { item: Item; path: string; marker?: EditMarker; onToggle?: () => void }) {
   const { org, canWrite } = useOrg();
   const me = useSession();
   const toast = useToast();
   const refresh = useRefresh(org.id);
+  // Inline edit state, and the newer version when a save conflicts
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ title: item.title, body: item.body });
   const [conflict, setConflict] = useState<Item>();
   const members = useMembers(org.id);
+  // Names for the conflict dialog; anyone unknown is "Someone"
   const nameOf = (uid?: string) => members.data?.find((m) => m.userId === uid)?.name || "Someone";
+  // Someone else's live marker on this item, if any
   const otherEditing = marker && marker.userId !== me.user.id ? marker : undefined;
 
-  // While editing, hold an edit marker so others see it, renew it, and release it on close.
+  // While editing, hold an edit marker so others see it, renew it, and release it on close
   useEffect(() => {
     if (!editing) return;
-    // Advisory marker: others see who is editing; it expires on its own if this tab closes.
+    // Advisory marker: others see who is editing; it expires on its own if this tab closes
     void api<{ ok: boolean; holder?: EditMarker }>(`${path}/edits`, { method: "POST", body: { recordId: item.id } }).catch(() => undefined);
+    // Renew the marker every minute, well inside its two-minute expiry
     const beat = window.setInterval(() => void api(`${path}/edits`, { method: "POST", body: { recordId: item.id } }).catch(() => undefined), 45_000);
     return () => {
       window.clearInterval(beat);
@@ -302,7 +337,7 @@ function ItemRow({ item, path, marker, onToggle }: { item: Item; path: string; m
     };
   }, [editing, item.id, path]);
 
-  // Save title and details against the version read; a 409 opens the conflict dialog.
+  // Save title and details against the version read; a 409 opens the conflict dialog
   const save = async (version: number) => {
     try {
       await api(`${path}/items/${item.id}`, { method: "PATCH", body: { version, title: draft.title, body: draft.body } });
@@ -314,6 +349,7 @@ function ItemRow({ item, path, marker, onToggle }: { item: Item; path: string; m
     }
     refresh();
   };
+  // Remove after confirming; the version guard stops removing an item someone just changed
   const remove = async () => {
     if (!confirm(`Remove "${item.title}"?`)) return;
     try {
@@ -326,7 +362,9 @@ function ItemRow({ item, path, marker, onToggle }: { item: Item; path: string; m
 
   return (
     <div className="item">
+      {/* A checkbox for checkable kinds, an empty cell otherwise */}
       {onToggle ? <input type="checkbox" checked={item.status === "done"} onChange={onToggle} aria-label={`Done: ${item.title}`} /> : <span style={{ width: 18 }} />}
+      {/* Edit form with a warning when someone else is editing too; otherwise the item and who is on it */}
       {editing ? (
         <form onSubmit={(e) => { e.preventDefault(); void save(item.version); }} style={{ display: "grid", gap: 8 }}>
           {otherEditing && <p className="notice small" style={{ margin: 0 }}>{otherEditing.name} is editing this too. If you both save, you'll choose which to keep.</p>}
@@ -344,6 +382,7 @@ function ItemRow({ item, path, marker, onToggle }: { item: Item; path: string; m
           {otherEditing && <div className="small" style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}><Avatar id={otherEditing.userId} name={otherEditing.name} editing size={18} /> {otherEditing.name} is editing</div>}
         </div>
       )}
+      {/* Edit and Remove for editors */}
       {!editing && canWrite ? (
         <span style={{ display: "flex", gap: 6 }}>
           <button className="linkish small" onClick={() => { setDraft({ title: item.title, body: item.body }); setEditing(true); }}>Edit</button>
@@ -362,17 +401,21 @@ function ItemRow({ item, path, marker, onToggle }: { item: Item; path: string; m
   );
 }
 
-/** The inline form that adds an item of one kind. */
+
+/** The inline form that adds an item of one kind */
 function AddItem({ kind, path }: { kind: ItemKind; path: string }) {
   const { org } = useOrg();
   const toast = useToast();
   const refresh = useRefresh(org.id);
+  // Closed to a link until someone adds; extra holds the measure and option fields
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [extra, setExtra] = useState({ unit: "", baseline: "", target: "", cost: "" });
   if (!open) return <button className="linkish small" style={{ marginTop: 8 }} onClick={() => setOpen(true)}>+ Add {KIND_LABEL[kind][0].toLowerCase()}</button>;
+  // Blank or non-numeric values are left unset
   const num = (s: string) => (s.trim() === "" || Number.isNaN(Number(s)) ? undefined : Number(s));
+  // Measures and options carry extra fields; every kind gets a title and details
   const submit = async () => {
     const fields: Record<string, unknown> = {};
     if (kind === "metric") Object.assign(fields, { unit: extra.unit, baseline: num(extra.baseline), target: num(extra.target) });
@@ -391,6 +434,7 @@ function AddItem({ kind, path }: { kind: ItemKind; path: string }) {
     <form className="card" style={{ display: "grid", gap: 8, marginTop: 10, padding: 14 }} onSubmit={(e) => { e.preventDefault(); if (title.trim()) void submit(); }}>
       <input aria-label={`${KIND_LABEL[kind][0]} title`} placeholder={`${KIND_LABEL[kind][0]}`} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} required autoFocus />
       <textarea aria-label="Details" placeholder="Details (optional)" value={body} onChange={(e) => setBody(e.target.value)} style={{ minHeight: 60 }} />
+      {/* Measures need a unit, a baseline, and a target; options need a cost */}
       {kind === "metric" && (
         <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr 1fr" }}>
           <input aria-label="Unit" placeholder="Unit" value={extra.unit} onChange={(e) => setExtra({ ...extra, unit: e.target.value })} />
@@ -407,7 +451,8 @@ function AddItem({ kind, path }: { kind: ItemKind; path: string }) {
   );
 }
 
-/** A 1 to 5 bar; cost and effort are inverted so more bars always means better. */
+
+/** A 1 to 5 bar; cost and effort are inverted so more bars always means better */
 function Meter({ label, value, invert }: { label: string; value: number; invert?: boolean }) {
   const v = invert ? 6 - value : value;
   return (
@@ -418,14 +463,17 @@ function Meter({ label, value, invert }: { label: string; value: number; invert?
   );
 }
 
-/** Options side by side: draft, shared for approval, approved; approving records a decision. */
+
+/** Options side by side: draft, shared for approval, approved; approving records a decision */
 function Options({ items, path }: { items: Item[]; path: string }) {
   const { org, canWrite } = useOrg();
   const toast = useToast();
   const refresh = useRefresh(org.id);
+  // The option waiting on approval, and the conditions being typed
   const [approving, setApproving] = useState<Item>();
   const [conditions, setConditions] = useState("");
   if (!items.length) return null;
+  // Move an option between draft, proposed, and declined
   const setStatus = async (o: Item, status: string) => {
     try {
       await api(`${path}/items/${o.id}`, { method: "PATCH", body: { version: o.version, status } });
@@ -434,7 +482,7 @@ function Options({ items, path }: { items: Item[]; path: string }) {
     }
     refresh();
   };
-  // Approve the exact version on screen; if it changed meanwhile, the API refuses and we say so.
+  // Approve the exact version on screen; if it changed meanwhile, the API refuses and we say so
   const approve = async () => {
     const o = approving;
     setApproving(undefined);
@@ -452,6 +500,7 @@ function Options({ items, path }: { items: Item[]; path: string }) {
     <>
       <div className="options">
         {items.map((o) => {
+          // Fields are validated on read, so a malformed option can't break the board
           const f = OptionFields.parse(o.fields);
           return (
             <article key={o.id} className={`card option${f.recommended ? " rec" : ""}`}>
@@ -462,9 +511,11 @@ function Options({ items, path }: { items: Item[]; path: string }) {
               <h4>{o.title}</h4>
               {o.body && <p className="small muted" style={{ marginTop: 0, whiteSpace: "pre-wrap" }}>{o.body}</p>}
               {f.cost && <p className="mono small" style={{ margin: "0 0 8px" }}>{f.cost}{f.timeline ? ` · ${f.timeline}` : ""}</p>}
+              {/* Cost, quality, and effort, scored so more bars is always better */}
               <Meter label="Cost" value={f.costScore} invert />
               <Meter label="Quality" value={f.qualityScore} />
               <Meter label="Effort" value={f.effortScore} invert />
+              {/* Anyone may approve a proposed option; editors move drafts along */}
               <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
                 {o.status === "proposed" && <button className="btn btn-primary" onClick={() => { setConditions(""); setApproving(o); }}>Approve</button>}
                 {canWrite && o.status === "draft" && <button className="btn btn-ghost" onClick={() => void setStatus(o, "proposed")}>Share with client</button>}
@@ -474,7 +525,7 @@ function Options({ items, path }: { items: Item[]; path: string }) {
           );
         })}
       </div>
-      {/* Approval confirmation with optional conditions. */}
+      {/* Approval confirmation with optional conditions */}
       <Dialog open={Boolean(approving)} onClose={() => setApproving(undefined)} label="Approve option">
         <h2>Approve "{approving?.title}"?</h2>
         <p className="muted small">This records a decision tied to this exact version of the option. It can't be edited afterwards; a later change needs a new approval.</p>

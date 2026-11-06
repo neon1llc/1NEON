@@ -1,11 +1,16 @@
-// Thin client for the 1NEON API. Same origin, cookies only; no tokens in JavaScript.
+// apps/web/src/lib/api.ts - Thin client for the 1NEON API. Same origin, cookies only; no tokens in
+// JavaScript.
+
+
 import type { ApiError } from "@1neon/domain";
 
-// Every API call is same-origin under /1NEON/api; the dev user lives in localStorage.
+
+// Every API call is same-origin under /1NEON/api; the dev user lives in localStorage
 const BASE = "/1NEON/api";
 const DEV_KEY = "1neon.devUser";
 
-/** A non-2xx reply, carrying the API's { error, message, current? } body. */
+
+/** A non-2xx reply, carrying the API's { error, message, current? } body */
 export class HttpError extends Error {
   constructor(
     readonly status: number,
@@ -15,8 +20,10 @@ export class HttpError extends Error {
   }
 }
 
-/** Local development only: the API trusts this header when DEV_AUTH=1. */
+
+/** Local development only: the API trusts this header when DEV_AUTH=1 */
 export const devUser = {
+  // Storage can throw in private browsing; treat that as no dev user
   get: () => {
     try {
       return localStorage.getItem(DEV_KEY) ?? "";
@@ -34,9 +41,12 @@ export const devUser = {
   },
 };
 
+
+// True only in Vite's dev server; production builds drop the dev paths
 export const isDev = import.meta.env.DEV;
 
-/** Call the API. The x-1neon header satisfies the CSRF check; cookies ride along automatically. */
+
+/** Call the API. The x-1neon header satisfies the CSRF check; cookies ride along automatically */
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const headers: Record<string, string> = { "x-1neon": "1" };
   if (init.body !== undefined) headers["content-type"] = "application/json";
@@ -47,11 +57,13 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
     credentials: "same-origin",
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
   });
+  // Empty bodies (204) come back as undefined
   const text = await r.text();
   const data = text ? JSON.parse(text) : undefined;
   if (!r.ok) throw new HttpError(r.status, data ?? { error: "http", message: r.statusText });
   return data as T;
 }
 
-/** Start sign-in through the API, optionally pre-filling the email at Cognito. */
+
+/** Start sign-in through the API, optionally pre-filling the email at Cognito */
 export const signInUrl = (email?: string) => `${BASE}/auth/login${email ? `?email=${encodeURIComponent(email)}` : ""}`;

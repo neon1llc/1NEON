@@ -1,6 +1,8 @@
-# Client documents: one private bucket, one folder per organization (t/{tenantId}/...).
-# Downloads are refused until GuardDuty tags an object clean.
+# infra/modules/storage/main.tf - Client documents: one private bucket, one folder per organization
+# (t/{tenantId}/...). Downloads are refused until GuardDuty tags an object clean.
 
+
+# Inputs: the bucket name, the scanning switch, and the origin allowed to upload
 variable "name" { type = string }
 variable "malware_scan" {
   description = "Turn on GuardDuty Malware Protection for this bucket (about $0.09 per GB scanned)."
@@ -9,18 +11,22 @@ variable "malware_scan" {
 }
 variable "allowed_origin" { type = string }
 
-# Client files outlive any apply; never force-destroy.
+
+# Client files outlive any apply; never force-destroy
 resource "aws_s3_bucket" "docs" {
   bucket        = var.name
   force_destroy = false
 }
 
-# Private by every switch S3 has.
+
+# Private by every switch S3 has
 resource "aws_s3_bucket_ownership_controls" "docs" {
   bucket = aws_s3_bucket.docs.id
   rule { object_ownership = "BucketOwnerEnforced" }
 }
 
+
+# No public ACLs or policies, ever
 resource "aws_s3_bucket_public_access_block" "docs" {
   bucket                  = aws_s3_bucket.docs.id
   block_public_acls       = true
@@ -29,13 +35,15 @@ resource "aws_s3_bucket_public_access_block" "docs" {
   restrict_public_buckets = true
 }
 
-# Versions protect against overwrites and deletes; old ones expire after 90 days.
+
+# Versions protect against overwrites and deletes; old ones expire after 90 days
 resource "aws_s3_bucket_versioning" "docs" {
   bucket = aws_s3_bucket.docs.id
   versioning_configuration { status = "Enabled" }
 }
 
-# SSE-S3 now; a customer-managed KMS key when a client asks for key control.
+
+# SSE-S3 now; a customer-managed KMS key when a client asks for key control
 resource "aws_s3_bucket_server_side_encryption_configuration" "docs" {
   bucket = aws_s3_bucket.docs.id
   rule {
@@ -43,6 +51,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "docs" {
   }
 }
 
+
+# Expire old versions after 90 days and clean up abandoned uploads
 resource "aws_s3_bucket_lifecycle_configuration" "docs" {
   bucket = aws_s3_bucket.docs.id
   rule {
@@ -55,7 +65,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "docs" {
   depends_on = [aws_s3_bucket_versioning.docs]
 }
 
-# Browsers upload straight to S3 with presigned URLs from the API.
+
+# Browsers upload straight to S3 with presigned URLs from the API
 resource "aws_s3_bucket_cors_configuration" "docs" {
   bucket = aws_s3_bucket.docs.id
   cors_rule {
@@ -66,7 +77,8 @@ resource "aws_s3_bucket_cors_configuration" "docs" {
   }
 }
 
-# TLS only, and with scanning on, no download of anything not tagged clean.
+
+# TLS only, and with scanning on, no download of anything not tagged clean
 resource "aws_s3_bucket_policy" "docs" {
   bucket = aws_s3_bucket.docs.id
   policy = jsonencode({
@@ -95,9 +107,11 @@ resource "aws_s3_bucket_policy" "docs" {
   })
 }
 
+
 # --- GuardDuty Malware Protection for S3 (optional until the first client uploads) ---
 
-# GuardDuty assumes this role to read new objects and tag the result.
+
+# GuardDuty assumes this role to read new objects and tag the result
 data "aws_iam_policy_document" "scan_trust" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -108,17 +122,22 @@ data "aws_iam_policy_document" "scan_trust" {
   }
 }
 
+
+# The scanning role and its policy exist only while scanning is on
 resource "aws_iam_role" "scan" {
   count              = var.malware_scan ? 1 : 0
   name               = "${var.name}-malware-scan"
   assume_role_policy = data.aws_iam_policy_document.scan_trust.json
 }
 
+
+# The access GuardDuty documents for S3 malware scanning, scoped to this bucket
 resource "aws_iam_role_policy" "scan" {
   count = var.malware_scan ? 1 : 0
   role  = aws_iam_role.scan[0].id
   policy = jsonencode({
     Version = "2012-10-17"
+    # EventBridge rules GuardDuty manages, bucket notifications, object reads and tags, and its own test object
     Statement = [
       {
         Effect    = "Allow"
@@ -133,6 +152,8 @@ resource "aws_iam_role_policy" "scan" {
   })
 }
 
+
+# Scan every new object and tag it with the result
 resource "aws_guardduty_malware_protection_plan" "docs" {
   count = var.malware_scan ? 1 : 0
   role  = aws_iam_role.scan[0].arn
@@ -145,6 +166,7 @@ resource "aws_guardduty_malware_protection_plan" "docs" {
   depends_on = [aws_iam_role_policy.scan]
 }
 
-# The API presigns uploads and downloads under t/{tenantId}/.
+
+# The API presigns uploads and downloads under t/{tenantId}/
 output "bucket" { value = aws_s3_bucket.docs.id }
 output "bucket_arn" { value = aws_s3_bucket.docs.arn }

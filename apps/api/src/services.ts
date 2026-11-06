@@ -1,4 +1,7 @@
-// Outside services behind small interfaces, so local dev and tests run without AWS.
+// apps/api/src/services.ts - Outside services behind small interfaces, so local dev and tests run
+// without AWS.
+
+
 import {
   AdminCreateUserCommand,
   AdminGetUserCommand,
@@ -9,26 +12,30 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
 
-/** The sign-in directory (Cognito). */
-/** The identity directory: create sign-in accounts for invitees and check strong sign-in. */
+
+/** The identity directory: create sign-in accounts for invitees and check strong sign-in */
 export interface Directory {
-  /** Create a passwordless user for an invited email; no-op if they already exist. */
+  /** Create a passwordless user for an invited email; no-op if they already exist */
   ensureUser(email: string): Promise<void>;
   /** Has the user set up a passkey or an authenticator app? */
   hasStrongAuth(accessToken: string): Promise<boolean>;
 }
 
-/** Outbound email. */
+
+/** Outbound email */
 export interface Mailer {
+  // Send one message with plain text and HTML bodies
   send(to: string, subject: string, text: string, html: string): Promise<void>;
 }
 
-/** Cognito user pool as the directory. */
+
+/** Cognito user pool as the directory */
 export class CognitoDirectory implements Directory {
+  // Region and credentials come from the Lambda environment
   private idp = new CognitoIdentityProviderClient({});
   constructor(private userPoolId: string) {}
 
-  // Create the Cognito user for an invitee if missing; an existing user is fine.
+  // Create the Cognito user for an invitee if missing; an existing user is fine
   async ensureUser(email: string) {
     try {
       await this.idp.send(new AdminGetUserCommand({ UserPoolId: this.userPoolId, Username: email }));
@@ -44,7 +51,7 @@ export class CognitoDirectory implements Directory {
           MessageAction: "SUPPRESS", // 1NEON sends its own invite email
           UserAttributes: [
             { Name: "email", Value: email },
-            // The invite proves the address belongs to the person we invited.
+            // The invite proves the address belongs to the person we invited
             { Name: "email_verified", Value: "true" },
           ],
         }),
@@ -54,7 +61,7 @@ export class CognitoDirectory implements Directory {
     }
   }
 
-  // Strong sign-in means an authenticator app (TOTP) or at least one passkey.
+  // Strong sign-in means an authenticator app (TOTP) or at least one passkey
   async hasStrongAuth(accessToken: string) {
     const [user, keys] = await Promise.all([
       this.idp.send(new GetUserCommand({ AccessToken: accessToken })),
@@ -65,11 +72,14 @@ export class CognitoDirectory implements Directory {
   }
 }
 
-/** SES v2 sender for invites and notices. */
+
+/** SES v2 sender for invites and notices */
 export class SesMailer implements Mailer {
+  // Region and credentials come from the Lambda environment
   private ses = new SESv2Client({});
   constructor(private from: string) {}
 
+  // One recipient per message, so addresses never leak between invitees
   async send(to: string, subject: string, text: string, html: string) {
     await this.ses.send(
       new SendEmailCommand({
@@ -81,28 +91,38 @@ export class SesMailer implements Mailer {
   }
 }
 
-/** Local and test stand-ins. */
+
+/** Local and test stand-ins */
 export class MemoryDirectory implements Directory {
+  // Emails that would have accounts, for assertions in tests
   readonly users = new Set<string>();
+  // Record the invitee instead of calling Cognito
   async ensureUser(email: string) {
     this.users.add(email);
   }
+  // Local and test users count as strongly signed in, so admin actions can be exercised
   async hasStrongAuth() {
     return true;
   }
 }
 
+
+// Keeps sent mail in memory so tests can read invites
 export class MemoryMailer implements Mailer {
+  // Every message sent, oldest first
   readonly sent: { to: string; subject: string; text: string }[] = [];
+  // Record the message instead of sending it
   async send(to: string, subject: string, text: string) {
     this.sent.push({ to, subject, text });
   }
 }
 
-// HTML-escape values placed into the invite email.
+
+// HTML-escape values placed into the invite email
 const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
-/** The invite email: plain text plus a small branded HTML version. */
+
+/** The invite email: plain text plus a small branded HTML version */
 export function inviteEmail(opts: { orgName: string; inviter: string; url: string }) {
   const subject = `You're invited to ${opts.orgName} on 1NEON`;
   const text = [
@@ -116,6 +136,7 @@ export function inviteEmail(opts: { orgName: string; inviter: string; url: strin
     "",
     "neon1 · 1 is glad to be of service.",
   ].join("\n");
+  // Inline styles only: mail clients strip style sheets
   const html = `<!doctype html><html><body style="margin:0;background:#F2F4F2;font:16px/1.6 -apple-system,Segoe UI,Inter,sans-serif;color:#12241A">
 <div style="max-width:520px;margin:0 auto;padding:40px 24px">
 <p style="font:600 15px ui-monospace,Menlo,monospace;color:#035704;letter-spacing:.06em;margin:0 0 24px">1NEON</p>

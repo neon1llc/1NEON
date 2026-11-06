@@ -1,6 +1,10 @@
-// Fallback for unknown URLs under /1NEON.
+// apps/web/src/pages/NotFound.tsx - Fallback for unknown URLs under /1NEON.
+
+
 import { Link } from "react-router";
 
+
+// Inside Root, so only signed-in people reach it
 export function NotFound() {
   return (
     <main className="content">

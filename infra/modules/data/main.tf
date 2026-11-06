@@ -1,7 +1,12 @@
-# One DynamoDB table for everything (single-table design), on demand, with point-in-time recovery.
+# infra/modules/data/main.tf - One DynamoDB table for everything (single-table design), on demand,
+# with point-in-time recovery.
 
+
+# Inputs
 variable "name" { type = string }
 
+
+# On-demand billing and deletion protection; the repository owns the key layout
 resource "aws_dynamodb_table" "main" {
   name                        = var.name
   billing_mode                = "PAY_PER_REQUEST"
@@ -9,7 +14,7 @@ resource "aws_dynamodb_table" "main" {
   range_key                   = "SK"
   deletion_protection_enabled = true
 
-  # Key attributes only; every other field is schemaless.
+  # Key attributes only; every other field is schemaless
   attribute {
     name = "PK"
     type = "S"
@@ -35,7 +40,7 @@ resource "aws_dynamodb_table" "main" {
     type = "S"
   }
 
-  # GSI1: a person's organizations. GSI2: every tenant and every project, for the All clients view.
+  # GSI1: a person's organizations. GSI2: every tenant and every project, for the All clients view
   global_secondary_index {
     name            = "GSI1"
     hash_key        = "GSI1PK"
@@ -49,16 +54,19 @@ resource "aws_dynamodb_table" "main" {
     projection_type = "ALL"
   }
 
-  # Edit markers and old audit rows expire on their own.
+  # Edit markers and old audit rows expire on their own
   ttl {
     attribute_name = "ttl"
     enabled        = true
   }
 
-  # Restore to any second in the last 35 days.
+  # Restore to any second in the last 35 days
   point_in_time_recovery { enabled = true }
+  # Encrypted with the AWS-owned DynamoDB key
   server_side_encryption { enabled = true }
 }
 
+
+# The API and alarms need the table's name and ARN
 output "name" { value = aws_dynamodb_table.main.name }
 output "arn" { value = aws_dynamodb_table.main.arn }

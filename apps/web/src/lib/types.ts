@@ -1,7 +1,10 @@
-// Response shapes from the API, built on the shared domain types.
+// apps/web/src/lib/types.ts - Response shapes from the API, built on the shared domain types.
+
+
 import type { AccessLevel, AuditEvent, DocumentRecord, Item, Member, Project, Stage, Tenant, User } from "@1neon/domain";
 
-/** An organization in the chooser: its handles and the caller's access. */
+
+/** An organization in the chooser: its handles and the caller's access */
 export interface OrgSummary {
   id: string;
   slug: string;
@@ -10,6 +13,7 @@ export interface OrgSummary {
   access?: AccessLevel;
 }
 
+
 /** GET /me */
 export interface Me {
   user: User;
@@ -17,11 +21,13 @@ export interface Me {
   orgs: OrgSummary[];
 }
 
+
 /** GET /t/:tid */
 export interface OrgResponse {
   org: Tenant;
   access: AccessLevel;
 }
+
 
 /** GET /t/:tid/workspace */
 export interface Workspace {
@@ -30,13 +36,15 @@ export interface Workspace {
   activity: AuditEvent[];
 }
 
-/** Someone editing a record right now (expires on its own). */
+
+/** Someone editing a record right now (expires on its own) */
 export interface EditMarker {
   recordId: string;
   userId: string;
   name: string;
   expiresAt: string;
 }
+
 
 /** GET /t/:tid/projects/:pid */
 export interface ProjectDetail {
@@ -46,6 +54,7 @@ export interface ProjectDetail {
   edits: EditMarker[];
 }
 
+
 /** GET /all/projects (operator, read only) */
 export interface AllProjects {
   orgs: (OrgSummary & { stages: Stage[] })[];
@@ -53,5 +62,7 @@ export interface AllProjects {
   stages: Stage[];
 }
 
+
 /** GET /t/:tid/members */
+// Membership plus the contact number admins see in People
 export type MemberRow = Member & { phone: string };

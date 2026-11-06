@@ -1,20 +1,28 @@
-// The neon1.tech rain, trimmed for the sign-in screen. Still frame for reduced motion.
+// apps/web/src/components/Rain.tsx - The neon1.tech rain, trimmed for the sign-in screen. Still
+// frame for reduced motion.
+
+
 import { useEffect, useRef } from "react";
 
-// Katakana and digits as on neon1.tech; WORDS surface now and then as readable columns.
+
+// Katakana and digits as on neon1.tech; WORDS surface now and then as readable columns
 const CHARS = [..."ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789neon1"];
 const WORDS = ["1NEON", "needs", "execution", "observation", "next", "onion", "neon1", "listen", "propose", "decide", "build", "hand over"];
 
-/** Full-screen canvas rain behind the sign-in panel; decorative, hidden from assistive tech. */
+
+/** Full-screen canvas rain behind the sign-in panel; decorative, hidden from assistive tech */
 export function Rain() {
+  // The canvas is drawn imperatively; React only mounts it
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = ref.current!;
     const ctx = canvas.getContext("2d")!;
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Cell size, grid height, frame counter, and the pending animation frame
     let size = 20, rows = 0, frame = 0, raf = 0;
+    // Per column: the falling head, and an optional word being spelled with its hold time
     let cols: { y: number; word?: string; wi: number; wy: number; hold: number }[] = [];
-    // Size the canvas to the window at up to 2x pixel density, and restart the columns.
+    // Size the canvas to the window at up to 2x pixel density, and restart the columns
     const resize = () => {
       const dpr = Math.min(devicePixelRatio || 1, 2);
       size = innerWidth < 640 ? 17 : 21;
@@ -28,17 +36,18 @@ export function Rain() {
       ctx.fillStyle = "#0D0208";
       ctx.fillRect(0, 0, innerWidth, innerHeight);
     };
-    // One frame: fade the old frame a little, then draw a character (or a word) per column.
+    // One frame: fade the old frame a little, then draw a character (or a word) per column
     const draw = () => {
       ctx.fillStyle = "rgba(13, 2, 8, 0.05)";
       ctx.fillRect(0, 0, innerWidth, innerHeight);
       ctx.font = `500 ${size}px "JetBrains Mono", ui-monospace, monospace`;
-      // Occasionally start spelling a word down a free column.
+      // Occasionally start spelling a word down a free column
       if (Math.random() < 0.05) {
         const c = cols[(Math.random() * cols.length) | 0];
         const w = WORDS[(Math.random() * WORDS.length) | 0]!;
         if (c && !c.word && c.y > 1 && c.y + w.length < rows) Object.assign(c, { word: w, wi: 0, wy: Math.floor(c.y), hold: 45 });
       }
+      // Word columns spell one letter per frame, hold, then resume falling below the word
       cols.forEach((c, i) => {
         const x = i * size + size / 2;
         if (c.word) {
@@ -57,6 +66,7 @@ export function Rain() {
           if (c.hold <= 0) { c.y = c.wy + c.wi; c.word = undefined; }
           return;
         }
+        // Plain columns: one random character in a random shade, wrapping back to the top now and then
         const r = Math.random();
         ctx.fillStyle = r > 0.96 ? "#e9ffee" : r > 0.45 ? "#22ff7a" : "#00b84f";
         ctx.fillText(CHARS[(Math.random() * CHARS.length) | 0]!, x, Math.floor(c.y) * size + size / 2);
@@ -64,15 +74,16 @@ export function Rain() {
         if (c.y > rows && Math.random() > 0.97) c.y = 0;
       });
     };
-    // Every third animation frame, and nothing while the tab is hidden.
+    // Every third animation frame, and nothing while the tab is hidden
     const loop = () => {
       if (!document.hidden && ++frame % 3 === 0) draw();
       raf = requestAnimationFrame(loop);
     };
     resize();
-    // Reduced motion: paint a settled still frame once instead of animating.
+    // Reduced motion: paint a settled still frame once instead of animating
     if (reduce) for (let i = 0; i < 60; i++) draw();
     else raf = requestAnimationFrame(loop);
+    // Resize restarts the grid; cleanup stops the loop and the listener
     addEventListener("resize", resize);
     return () => {
       cancelAnimationFrame(raf);

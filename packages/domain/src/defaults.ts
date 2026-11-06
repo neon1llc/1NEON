@@ -1,7 +1,11 @@
-// Defaults every new organization and project starts from: stages, names, and templates.
+// packages/domain/src/defaults.ts - Defaults every new organization and project starts from:
+// stages, names, and templates.
+
+
 import type { ItemKind, Stage } from "./model.ts";
 
-/** Default workflow: the neon1 lifecycle, each stage tied to one layer. */
+
+/** Default workflow: the neon1 lifecycle, each stage tied to one layer */
 export const DEFAULT_STAGES: Stage[] = [
   { id: "intake", name: "Intake", layer: "needs", exit: "Fit call held", hidden: false },
   { id: "listen", name: "Listen", layer: "needs", exit: "Discovery complete, baseline metrics recorded", hidden: false },
@@ -14,7 +18,8 @@ export const DEFAULT_STAGES: Stage[] = [
   { id: "closed", name: "Closed", layer: "next", exit: "", hidden: false },
 ];
 
-// Display names. The two N layers share a letter, so badges also use color.
+
+// Display names. The two N layers share a letter, so badges also use color
 export const LAYER_NAMES = {
   needs: "Needs",
   execution: "Execution",
@@ -22,9 +27,12 @@ export const LAYER_NAMES = {
   next: "Next",
 } as const;
 
+
+// One letter per layer for badges
 export const LAYER_LETTER = { needs: "N", execution: "E", observation: "O", next: "N" } as const;
 
-// Labels for project roles in the People list and project sidebar.
+
+// Labels for project roles in the People list and project sidebar
 export const PROJECT_ROLE_NAMES = {
   lead_engineer: "Lead engineer",
   sponsor: "Sponsor",
@@ -34,7 +42,8 @@ export const PROJECT_ROLE_NAMES = {
   observer: "Observer",
 } as const;
 
-/** An item a template adds to a new project. */
+
+/** An item a template adds to a new project */
 export interface TemplateItem {
   kind: ItemKind;
   title: string;
@@ -42,7 +51,8 @@ export interface TemplateItem {
   fields?: Record<string, unknown>;
 }
 
-/** A project template: key prefix for project keys and the items it starts with. */
+
+/** A project template: key prefix for project keys and the items it starts with */
 export interface Template {
   id: string;
   name: string;
@@ -51,7 +61,8 @@ export interface Template {
   items: TemplateItem[];
 }
 
-// Discovery questions and the handoff checklist every real project needs.
+
+// Discovery questions and the handoff checklist every real project needs
 const common: TemplateItem[] = [
   { kind: "discovery", title: "Show me one real example of how this works today" },
   { kind: "discovery", title: "Who does this work, and how often?" },
@@ -62,7 +73,8 @@ const common: TemplateItem[] = [
   { kind: "handoff", title: "neon1 access reduced or removed" },
 ];
 
-/** The template gallery shown in the New project wizard. */
+
+/** The template gallery shown in the New project wizard */
 export const TEMPLATES: Template[] = [
   {
     id: "blank",
@@ -138,7 +150,8 @@ export const TEMPLATES: Template[] = [
   },
 ];
 
-/** The template with this ID, or Blank for unknown IDs. */
+
+/** The template with this ID, or Blank for unknown IDs */
 export function templateById(id: string): Template {
   return TEMPLATES.find((t) => t.id === id) ?? TEMPLATES[0]!;
 }

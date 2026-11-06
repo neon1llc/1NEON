@@ -1,12 +1,15 @@
-// The workflow board: one column per stage, projects as cards, ordered by rank.
-// Drag and drop for pointers, a "Move to" menu for keyboards and screen readers.
+// apps/web/src/components/Board.tsx - The workflow board: one column per stage, projects as cards,
+// ordered by rank. Drag and drop for pointers, a "Move to" menu for keyboards and screen readers.
+
+
 import type { Project, Stage } from "@1neon/domain";
 import { useState } from "react";
 import { Link } from "react-router";
 import { byRank } from "../lib/hooks.ts";
 import { daysSince, Health, LayerBadge } from "./ui.tsx";
 
-/** A requested move: target stage and the ranks of the neighbours it lands between. */
+
+/** A requested move: target stage and the ranks of the neighbours it lands between */
 export interface MoveRequest {
   project: Project;
   stageId: string;
@@ -14,7 +17,8 @@ export interface MoveRequest {
   before?: string;
 }
 
-/** The board. Without `onMove` it's read only (viewers and the All clients view). */
+
+/** The board. Without `onMove` it's read only (viewers and the All clients view) */
 export function Board({
   stages,
   projects,
@@ -28,13 +32,15 @@ export function Board({
   onMove?: (m: MoveRequest) => void;
   orgName?: (p: Project) => string | undefined;
 }) {
+  // The card being dragged and the column under the pointer
   const [dragging, setDragging] = useState<string>();
   const [over, setOver] = useState<string>();
+  // Hidden stages keep their projects but don't get a column
   const visible = stages.filter((s) => !s.hidden);
-  // Cards in one column, in rank order.
+  // Cards in one column, in rank order
   const byStage = (sid: string) => projects.filter((p) => p.stageId === sid).sort(byRank);
 
-  // Drop before `beforeId`, or at the end of the column; a drop onto the card's own place is ignored.
+  // Drop before `beforeId`, or at the end of the column; a drop onto the card's own place is ignored
   const drop = (stageId: string, beforeId?: string) => {
     const p = projects.find((x) => x.id === dragging);
     setDragging(undefined);
@@ -51,7 +57,7 @@ export function Board({
     <div className="board" role="list" aria-label="Workflow board">
       {visible.map((s) => {
         const cards = byStage(s.id);
-        // Work-in-progress limits are advice: the count turns amber, nothing is blocked.
+        // Work-in-progress limits are advice: the count turns amber, nothing is blocked
         const overLimit = s.wipLimit !== undefined && cards.length > s.wipLimit;
         return (
           <section
@@ -59,7 +65,7 @@ export function Board({
             role="listitem"
             className={`col${over === s.id ? " drop" : ""}`}
             aria-label={`${s.name}, ${cards.length} projects`}
-            // Columns accept drops; a card accepts a drop to insert before itself.
+            // Columns accept drops; a card accepts a drop to insert before itself
             onDragOver={(e) => {
               if (!onMove || !dragging) return;
               e.preventDefault();
@@ -71,6 +77,7 @@ export function Board({
               drop(s.id);
             }}
           >
+            {/* Column header: layer, name, and count against its limit */}
             <header>
               <h3><LayerBadge layer={s.layer} />{s.name}</h3>
               <span className={`n${overLimit ? " over" : ""}`} title={s.wipLimit ? `Limit ${s.wipLimit}` : undefined}>
@@ -78,6 +85,7 @@ export function Board({
               </span>
             </header>
             {s.exit && <div className="exit">Done when: {s.exit}</div>}
+            {/* Cards drag when the board is editable; a drop onto a card inserts before it */}
             {cards.map((p) => (
               <article
                 key={p.id}
@@ -99,6 +107,7 @@ export function Board({
                   drop(s.id, p.id);
                 }}
               >
+                {/* Project key, its organization on All clients, name, health, and days in stage */}
                 <div className="k">
                   <span>{p.key}</span>
                   {orgName?.(p) && <span className="tag client">{orgName(p)}</span>}
@@ -108,7 +117,7 @@ export function Board({
                   <Health value={p.health} />
                   <span title="Days in this stage">{daysSince(p.stageEnteredAt)}d</span>
                 </div>
-                {/* Keyboard and screen-reader path: the same move as dragging, to the end of the chosen column. */}
+                {/* Keyboard and screen-reader path: the same move as dragging, to the end of the chosen column */}
                 {onMove && (
                   <label className="sr-focus small" style={{ display: "block", marginTop: 8 }}>
                     <span className="sr">Move {p.key} to</span>

@@ -1,4 +1,7 @@
-// New project: a short wizard. Template, the basics, how we'll measure it, then review.
+// apps/web/src/pages/NewProject.tsx - New project: a short wizard. Template, the basics, how we'll
+// measure it, then review.
+
+
 import { TEMPLATES } from "@1neon/domain";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -8,10 +11,12 @@ import { api } from "../lib/api.ts";
 import { problem, useRefresh } from "../lib/hooks.ts";
 import type { Project } from "@1neon/domain";
 
-// The wizard's steps, in order.
+
+// The wizard's steps, in order
 const STEPS = ["Template", "Basics", "Measures", "Review"] as const;
 
-/** A measure as typed; numbers are parsed on submit. */
+
+/** A measure as typed; numbers are parsed on submit */
 interface MetricDraft {
   title: string;
   unit: string;
@@ -19,12 +24,15 @@ interface MetricDraft {
   target: string;
 }
 
+
+// Four steps, then one create call; only editors and admins get the form
 export function NewProject() {
   const { org, summary, canWrite } = useOrg();
   const nav = useNavigate();
   const toast = useToast();
   const refresh = useRefresh(org.id);
   const [step, setStep] = useState(0);
+  // Answers from every step, kept until Create
   const [template, setTemplate] = useState("blank");
   const [name, setName] = useState("");
   const [projectSummary, setSummary] = useState("");
@@ -36,14 +44,16 @@ export function NewProject() {
   const [error, setError] = useState("");
   useTopBar(<span><Link to={`/o/${summary.slug}/projects`}>Projects</Link> / New</span>, [summary.slug]);
 
-  // Viewers can open the page by URL but can't create.
+  // Viewers can open the page by URL but can't create
   if (!canWrite) return <p className="lead">Viewers can't start projects. Ask an editor or admin in {org.name}.</p>;
+  // The chosen template, falling back to the first (blank)
   const t = TEMPLATES.find((x) => x.id === template) ?? TEMPLATES[0]!;
+  // Blank or non-numeric measure values are left unset
   const num = (s: string) => (s.trim() === "" || Number.isNaN(Number(s)) ? undefined : Number(s));
-  // Only the Basics step has a required field.
+  // Only the Basics step has a required field
   const ready = [true, name.trim().length > 0, true, true];
 
-  // Create the project with its starter items and measures, then open it.
+  // Create the project with its starter items and measures, then open it
   const create = async () => {
     setBusy(true);
     setError("");
@@ -72,11 +82,13 @@ export function NewProject() {
   return (
     <>
       <h1 className="page-title">New project</h1>
+      {/* Progress through the steps; the current one is marked for screen readers */}
       <div className="steps" aria-label="Steps">
         {STEPS.map((s, i) => (
           <span key={s} className={i === step ? "on" : i < step ? "done" : ""} aria-current={i === step ? "step" : undefined}>{i + 1}. {s}</span>
         ))}
       </div>
+      {/* Enter moves to the next step; on the last step it creates the project */}
       <form
         className="form"
         onSubmit={(e) => {
@@ -116,6 +128,7 @@ export function NewProject() {
           <>
             <p className="muted small" style={{ margin: 0 }}>How will we know it worked? Add a measure with where it is now and where it should be. You can add readings later.</p>
             {metrics.map((m, i) => {
+              // Change one field of this measure
               const set = (patch: Partial<MetricDraft>) => setMetrics(metrics.map((x, j) => (j === i ? { ...x, ...patch } : x)));
               return (
                 <div key={i} className="card" style={{ padding: 14, display: "grid", gap: 10, gridTemplateColumns: "2fr 1fr 1fr 1fr" }}>
@@ -140,6 +153,7 @@ export function NewProject() {
           </div>
         )}
         {error && <p className="notice" role="alert">{error}</p>}
+        {/* Back, then Next or Create */}
         <div className="actions" style={{ justifyContent: "flex-start" }}>
           {step > 0 && <button type="button" className="btn btn-ghost" onClick={() => setStep(step - 1)}>Back</button>}
           <button className="btn btn-primary" type="submit" disabled={!ready[step] || busy}>{step < STEPS.length - 1 ? "Next" : busy ? "Creating…" : "Create project"}</button>

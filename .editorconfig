@@ -1,6 +1,10 @@
-# One formatting baseline for every file in the monorepo.
+# .editorconfig - One formatting baseline for every file in the monorepo.
+
+
+# Settings stop here; no parent folder applies
 root = true
 
+# Every file: UTF-8, LF, two-space indents, and tidy line ends
 [*]
 charset = utf-8
 end_of_line = lf

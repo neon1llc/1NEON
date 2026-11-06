@@ -1,5 +1,8 @@
-# Alarms that email Pradeep, and a budget for the portal's own spend.
+# infra/modules/observability/main.tf - Alarms that email Pradeep, and a budget for the portal's own
+# spend.
 
+
+# Inputs: who to tell, what to watch, and the monthly budget
 variable "name" { type = string }
 variable "alert_email" { type = string }
 variable "api_function" { type = string }
@@ -11,18 +14,22 @@ variable "monthly_budget_usd" {
   default = 10
 }
 
-# Alarm emails. The subscription must be confirmed once from the inbox.
+
+# Alarm emails. The subscription must be confirmed once from the inbox
 resource "aws_sns_topic" "alerts" {
   name = "${var.name}-alerts"
 }
 
+
+# One email subscriber; AWS emails a confirmation link first
 resource "aws_sns_topic_subscription" "email" {
   topic_arn = aws_sns_topic.alerts.arn
   protocol  = "email"
   endpoint  = var.alert_email
 }
 
-# Each alarm: metric, threshold over five minutes, and what it means in plain words.
+
+# Each alarm: metric, threshold over five minutes, and what it means in plain words
 locals {
   alarms = {
     api-errors = {
@@ -53,7 +60,8 @@ locals {
   }
 }
 
-# Alarm on breach and on recovery; quiet periods count as fine.
+
+# Alarm on breach and on recovery; quiet periods count as fine
 resource "aws_cloudwatch_metric_alarm" "this" {
   for_each            = local.alarms
   alarm_name          = "${var.name}-${each.key}"
@@ -71,7 +79,8 @@ resource "aws_cloudwatch_metric_alarm" "this" {
   ok_actions          = [aws_sns_topic.alerts.arn]
 }
 
-# Counts only resources tagged Project=1neon (activate that cost allocation tag once in Billing).
+
+# Counts only resources tagged Project=1neon (activate that cost allocation tag once in Billing)
 resource "aws_budgets_budget" "portal" {
   name         = var.name
   budget_type  = "COST"
@@ -79,11 +88,13 @@ resource "aws_budgets_budget" "portal" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
+  # Only the portal's own tagged spend
   cost_filter {
     name   = "TagKeyValue"
     values = ["user:Project$1neon"]
   }
 
+  # Warn at 80 percent forecast and again at 100 percent actual
   notification {
     comparison_operator        = "GREATER_THAN"
     threshold                  = 80
@@ -101,4 +112,6 @@ resource "aws_budgets_budget" "portal" {
   }
 }
 
+
+# Other alarms can publish to the same topic
 output "topic_arn" { value = aws_sns_topic.alerts.arn }

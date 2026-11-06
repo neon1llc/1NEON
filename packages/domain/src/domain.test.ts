@@ -1,15 +1,23 @@
-// Domain rules that everything else trusts: permissions, ordering, IDs, and metric progress.
+// packages/domain/src/domain.test.ts - Domain rules that everything else trusts: permissions,
+// ordering, IDs, and metric progress.
+
+
 import { describe, expect, it } from "vitest";
 import { can, type Action } from "./access.ts";
 import { initialRanks, rankBetween } from "./rank.ts";
 import { formatClientId, newId, slugify } from "./ids.ts";
 import { metricProgress, MetricFields } from "./model.ts";
 
+
+// Actors: a plain member, the same member with strong sign-in, and the operator
 const member = { userId: "u1", operator: false, strongAuth: false };
 const strong = { ...member, strongAuth: true };
 const operator = { userId: "op", operator: true, strongAuth: true };
 
+
+// The permission table, level by level
 describe("can()", () => {
+  // Every action, so each case checks the full table
   const all: Action[] = ["read", "comment", "write", "approve", "delete", "manage_people", "manage_settings", "manage_orgs"];
 
   it("refuses non-members everything", () => {
@@ -45,7 +53,8 @@ describe("can()", () => {
   });
 });
 
-// Ranks must keep strict order however cards are shuffled.
+
+// Ranks must keep strict order however cards are shuffled
 describe("rankBetween()", () => {
   it("orders correctly under many random inserts", () => {
     let ranks = initialRanks(5);
@@ -68,6 +77,8 @@ describe("rankBetween()", () => {
   });
 });
 
+
+// ID order and uniqueness, slugs, and client ID formatting
 describe("ids", () => {
   it("makes sortable unique ids", () => {
     const a = newId("t_");
@@ -80,7 +91,8 @@ describe("ids", () => {
   });
 });
 
-// Progress drives the bars on measures; direction comes from baseline vs target.
+
+// Progress drives the bars on measures; direction comes from baseline vs target
 describe("metricProgress()", () => {
   it("measures progress toward a lower-is-better target", () => {
     const m = MetricFields.parse({ baseline: 62, target: 4, direction: "down", readings: [{ at: "2026-11-01", value: 33 }] });

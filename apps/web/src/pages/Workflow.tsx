@@ -1,4 +1,6 @@
-// Workflow: this organization's projects on the stage board.
+// apps/web/src/pages/Workflow.tsx - Workflow: this organization's projects on the stage board.
+
+
 import { useState } from "react";
 import { Link } from "react-router";
 import { Board, type MoveRequest } from "../components/Board.tsx";
@@ -7,16 +9,19 @@ import { Dialog, Empty, useToast } from "../components/ui.tsx";
 import { api, HttpError } from "../lib/api.ts";
 import { problem, useProjects, useRefresh } from "../lib/hooks.ts";
 
+
+// The organization's board; editors can move cards
 export function Workflow() {
   const { org, summary, canWrite } = useOrg();
   const projects = useProjects(org.id);
   const refresh = useRefresh(org.id);
   const toast = useToast();
+  // A move waiting on a reason, and the reason being typed
   const [pending, setPending] = useState<{ move: MoveRequest; message: string }>();
   const [reason, setReason] = useState("");
   useTopBar(<span>{org.name} · Workflow</span>, [org.name]);
 
-  // Ask the API to move; it may need a reason (428) or report that someone moved the card first (409).
+  // Ask the API to move; it may need a reason (428) or report that someone moved the card first (409)
   const move = async (m: MoveRequest, why?: string) => {
     try {
       await api(`/t/${org.id}/projects/${m.project.id}/move`, {
@@ -26,7 +31,7 @@ export function Workflow() {
       const to = org.stages.find((s) => s.id === m.stageId)?.name;
       if (m.stageId !== m.project.stageId) toast(`${m.project.key} moved to ${to}`);
     } catch (e) {
-      // Past Decide with no approved option: collect a reason and try again with it.
+      // Past Decide with no approved option: collect a reason and try again with it
       if (e instanceof HttpError && e.status === 428) {
         setReason("");
         setPending({ move: m, message: e.body.message });
@@ -38,6 +43,7 @@ export function Workflow() {
     refresh();
   };
 
+  // Archived projects leave the board
   const live = (projects.data ?? []).filter((p) => !p.archived);
   return (
     <>
@@ -45,12 +51,13 @@ export function Workflow() {
       <p className="lead">
         {canWrite ? "Drag a card, or use its Move menu, to change a project's stage." : "Every project and where it stands."}
       </p>
+      {/* Read-only board for viewers: no onMove */}
       {projects.data && live.length === 0 ? (
         <Empty text="No projects yet." action={canWrite && <Link className="btn btn-primary" to={`/o/${summary.slug}/projects/new`}>New project</Link>} />
       ) : (
         <Board stages={org.stages} projects={live} hrefFor={(p) => `/o/${summary.slug}/projects/${p.key}`} onMove={canWrite ? (m) => void move(m) : undefined} />
       )}
-      {/* The reason prompt for moving past Decide without a decision. */}
+      {/* The reason prompt for moving past Decide without a decision */}
       <Dialog open={Boolean(pending)} onClose={() => setPending(undefined)} label="Reason needed">
         <h2>Move on without a decision?</h2>
         <p className="muted small">{pending?.message}</p>

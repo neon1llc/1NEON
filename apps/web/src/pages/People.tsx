@@ -1,4 +1,7 @@
-// People: who belongs to the organization, their access, and invitations.
+// apps/web/src/pages/People.tsx - People: who belongs to the organization, their access, and
+// invitations.
+
+
 import type { AccessLevel } from "@1neon/domain";
 import { useState } from "react";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
@@ -7,13 +10,16 @@ import { api } from "../lib/api.ts";
 import { problem, useMembers, useRefresh } from "../lib/hooks.ts";
 import type { MemberRow } from "../lib/types.ts";
 
-// Plain descriptions of each access level, used in the invite form and the legend.
+
+// Plain descriptions of each access level, used in the invite form and the legend
 const ACCESS: Record<AccessLevel, string> = {
   viewer: "Viewer: reads, comments, approves",
   editor: "Editor: also adds and changes work",
   admin: "Admin: also manages people and settings",
 };
 
+
+// The member table for everyone; invites and access changes for admins
 export function People() {
   const { org, canAdmin } = useOrg();
   const me = useSession();
@@ -22,7 +28,7 @@ export function People() {
   const toast = useToast();
   useTopBar(<span>{org.name} · People</span>, [org.name]);
 
-  // Change one member's access or status; the API keeps at least one admin.
+  // Change one member's access or status; the API keeps at least one admin
   const change = async (m: MemberRow, patch: Record<string, unknown>) => {
     try {
       await api(`/t/${org.id}/members/${m.userId}`, { method: "PATCH", body: { version: m.version, ...patch } });
@@ -33,7 +39,7 @@ export function People() {
     refresh();
   };
 
-  // Active people first, alphabetically; deactivated people at the end.
+  // Active people first, alphabetically; deactivated people at the end
   const list = (members.data ?? []).slice().sort((a, b) => Number(a.status === "deactivated") - Number(b.status === "deactivated") || (a.name || a.email).localeCompare(b.name || b.email));
   return (
     <>
@@ -41,6 +47,7 @@ export function People() {
       <p className="lead">Everyone in {org.name} sees the same projects. Access decides what they can change.</p>
       {canAdmin && <Invite />}
       <div style={{ overflowX: "auto" }}>
+        {/* One row per member: who, email, access, and status with its action */}
         <table className="people">
           <thead><tr><th>Name</th><th>Email</th><th>Access</th><th>Status</th></tr></thead>
           <tbody>
@@ -49,7 +56,7 @@ export function People() {
                 <td><span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}><Avatar id={m.userId} name={m.name || m.email} /><span>{m.name || "–"}<br /><span className="muted small">{m.title}</span></span></span></td>
                 <td className="mono small">{m.email}</td>
                 <td>
-                  {/* Admins change others' access; nobody changes their own here. */}
+                  {/* Admins change others' access; nobody changes their own here */}
                   {canAdmin && m.userId !== me.user.id && m.status !== "deactivated" ? (
                     <select aria-label={`Access for ${m.email}`} value={m.access} onChange={(e) => void change(m, { access: e.target.value })} style={{ minHeight: 32, padding: "2px 8px", maxWidth: 140 }}>
                       <option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option>
@@ -58,6 +65,7 @@ export function People() {
                 </td>
                 <td className="small">
                   {m.status === "invited" ? <span className="tag warn">invited {ago(m.invitedAt)}</span> : m.status === "deactivated" ? "deactivated" : <span className="muted">seen {ago(m.lastSeenAt)}</span>}
+                  {/* Deactivate keeps the person's history; reactivate restores their access */}
                   {canAdmin && m.userId !== me.user.id && (
                     <button className="linkish small" style={{ marginLeft: 10 }} onClick={() => void change(m, { status: m.status === "deactivated" ? "joined" : "deactivated" })}>
                       {m.status === "deactivated" ? "Reactivate" : "Deactivate"}
@@ -69,25 +77,29 @@ export function People() {
           </tbody>
         </table>
       </div>
+      {/* Legend for the access levels */}
       <h2 className="section-h">What each access level can do</h2>
       <ul className="small muted">{Object.values(ACCESS).map((a) => <li key={a}>{a}</li>)}</ul>
     </>
   );
 }
 
-/** Admins invite one or more people by email with one access level. */
+
+/** Admins invite one or more people by email with one access level */
 function Invite() {
   const { org } = useOrg();
   const refresh = useRefresh(org.id);
   const toast = useToast();
+  // Collapsed to a button until an admin starts an invite
   const [open, setOpen] = useState(false);
   const [emails, setEmails] = useState("");
   const [access, setAccess] = useState<AccessLevel>("editor");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   if (!open) return <button className="btn btn-primary" style={{ marginBottom: 18 }} onClick={() => setOpen(true)}>Invite people</button>;
-  // Accept commas, semicolons, spaces, or new lines between addresses.
+  // Accept commas, semicolons, spaces, or new lines between addresses
   const list = emails.split(/[\s,;]+/).map((e) => e.trim()).filter(Boolean);
+  // One request for every address; the API emails each person
   const submit = async () => {
     setBusy(true);
     setError("");
@@ -104,6 +116,7 @@ function Invite() {
   };
   return (
     <form className="card form" style={{ marginBottom: 22 }} onSubmit={(e) => { e.preventDefault(); if (list.length) void submit(); }}>
+      {/* Addresses, then the access level they all get */}
       <div>
         <label htmlFor="emails">Email addresses</label>
         <textarea id="emails" value={emails} onChange={(e) => setEmails(e.target.value)} placeholder="dana@example.com, lee@example.com" style={{ minHeight: 64 }} autoFocus />

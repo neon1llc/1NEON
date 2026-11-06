@@ -1,24 +1,31 @@
-// Small shared pieces: avatars, health, the 1NEON rings mark, layer badges, toasts, conflict dialog.
+// apps/web/src/components/ui.tsx - Small shared pieces: avatars, health, the 1NEON rings mark,
+// layer badges, toasts, conflict dialog.
+
+
 import { LAYER_LETTER, LAYER_NAMES, type Health as HealthT, type Layer } from "@1neon/domain";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
-// Avatar colors: brand greens and calm accents, all readable with white initials.
+
+// Avatar colors: brand greens and calm accents, all readable with white initials
 const PALETTE = ["#035704", "#1E6B8A", "#7A4FA0", "#A0522D", "#2E7D6B", "#8A6D1E", "#3D5AA8", "#9C3D54"];
 
-/** A stable color per person, from their ID. */
+
+/** A stable color per person, from their ID */
 export function colorFor(id: string) {
   let h = 0;
   for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return PALETTE[h % PALETTE.length]!;
 }
 
-/** Up to two initials from a name or an email's local part. */
+
+/** Up to two initials from a name or an email's local part */
 export function initials(name: string) {
   const parts = name.replace(/@.*/, "").split(/[\s._-]+/).filter(Boolean);
   return ((parts[0]?.[0] ?? "?") + (parts[1]?.[0] ?? "")).toUpperCase();
 }
 
-/** A person's initials; a ring marks someone editing right now. */
+
+/** A person's initials; a ring marks someone editing right now */
 export function Avatar({ id, name, editing, size = 26 }: { id: string; name: string; editing?: boolean; size?: number }) {
   return (
     <span className={`av${editing ? " editing" : ""}`} style={{ background: colorFor(id), width: size, height: size }} title={editing ? `${name} is editing` : name} aria-label={editing ? `${name}, editing` : name} role="img">
@@ -27,10 +34,12 @@ export function Avatar({ id, name, editing, size = 26 }: { id: string; name: str
   );
 }
 
-// Project health, as a colored dot plus words (never color alone).
+
+// Project health, as a colored dot plus words (never color alone)
 const HEALTH_LABEL: Record<HealthT, string> = { on_track: "On track", at_risk: "At risk", off_track: "Off track", not_started: "Not started" };
 
-/** Health as a colored dot plus its label. */
+
+/** Health as a colored dot plus its label */
 export function Health({ value }: { value: HealthT }) {
   return (
     <span className={`health h-${value}`}>
@@ -40,11 +49,13 @@ export function Health({ value }: { value: HealthT }) {
   );
 }
 
-// The four layers in order, each with its shade of green.
+
+// The four layers in order, each with its shade of green
 export const LAYERS: Layer[] = ["needs", "execution", "observation", "next"];
 export const LAYER_COLOR: Record<Layer, string> = { needs: "var(--l1)", execution: "var(--l2)", observation: "var(--l3)", next: "var(--l4)" };
 
-/** The layer's letter on its color; decorative next to the layer's name. */
+
+/** The layer's letter on its color; decorative next to the layer's name */
 export function LayerBadge({ layer }: { layer: Layer }) {
   return (
     <span className="badge" style={{ background: LAYER_COLOR[layer] }} aria-hidden="true">
@@ -53,7 +64,8 @@ export function LayerBadge({ layer }: { layer: Layer }) {
   );
 }
 
-/** The 1NEON mark: four rings, an onion from above; the current layer is lit. */
+
+/** The 1NEON mark: four rings, an onion from above; the current layer is lit */
 export function Rings({ active, title }: { active?: Layer; title?: string }) {
   const r = [28, 20, 12, 4];
   return (
@@ -65,12 +77,14 @@ export function Rings({ active, title }: { active?: Layer; title?: string }) {
   );
 }
 
-/** Display name for a layer. */
+
+/** Display name for a layer */
 export function layerName(l: Layer) {
   return LAYER_NAMES[l];
 }
 
-/** "just now", "5m ago", "yesterday": relative times for activity and presence. */
+
+/** "just now", "5m ago", "yesterday": relative times for activity and presence */
 export function ago(iso?: string) {
   if (!iso) return "never";
   const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
@@ -81,19 +95,25 @@ export function ago(iso?: string) {
   return d === 1 ? "yesterday" : `${d} days ago`;
 }
 
-/** Whole days since a date, for "days in stage". */
+
+/** Whole days since a date, for "days in stage" */
 export function daysSince(iso: string) {
   return Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 86_400_000));
 }
 
+
 // --- Toasts ----------------------------------------------------------------
 
-// One toast at a time; also announced to screen readers through a polite live region.
+
+// One toast at a time; also announced to screen readers through a polite live region
 const ToastCtx = createContext<(msg: string) => void>(() => undefined);
+// Show a short message; outside the provider it does nothing
 export const useToast = () => useContext(ToastCtx);
 
-/** Provides `useToast()`; a toast clears itself after about three seconds. */
+
+/** Provides `useToast()`; a toast clears itself after about three seconds */
 export function ToastProvider({ children }: { children: ReactNode }) {
+  // A new toast replaces the current one and restarts its timer
   const [msg, setMsg] = useState<string>();
   const timer = useRef<number>(undefined);
   const show = useCallback((m: string) => {
@@ -110,9 +130,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
+
 // --- Dialog ------------------------------------------------------------------
 
-/** A native modal dialog: focus trapping, Escape, and the backdrop come from the browser. */
+
+/** A native modal dialog: focus trapping, Escape, and the backdrop come from the browser */
 export function Dialog({ open, onClose, children, label }: { open: boolean; onClose: () => void; children: ReactNode; label: string }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -128,7 +150,8 @@ export function Dialog({ open, onClose, children, label }: { open: boolean; onCl
   );
 }
 
-/** Shown when a save hits a newer version: nothing is lost, the person chooses. */
+
+/** Shown when a save hits a newer version: nothing is lost, the person chooses */
 export function ConflictDialog({
   open,
   who,
@@ -146,6 +169,7 @@ export function ConflictDialog({
 }) {
   return (
     <Dialog open={open} onClose={onClose} label="Someone else changed this">
+      {/* Side by side, field by field, so the person can compare before choosing */}
       <h2>{who} changed this while you were editing</h2>
       <p className="muted small">Your text is kept. Choose which version to save.</p>
       {fields.map((f) => (
@@ -160,6 +184,7 @@ export function ConflictDialog({
           </div>
         </div>
       ))}
+      {/* Keep mine saves again over the newer version; take theirs drops the local edit */}
       <div className="actions">
         <button className="btn btn-primary" onClick={onKeepMine}>Keep mine</button>
         <button className="btn btn-ghost" onClick={onTakeTheirs}>Take theirs</button>
@@ -168,7 +193,8 @@ export function ConflictDialog({
   );
 }
 
-/** Empty state with an optional next step. */
+
+/** Empty state with an optional next step */
 export function Empty({ text, action }: { text: string; action?: ReactNode }) {
   return (
     <div className="empty">

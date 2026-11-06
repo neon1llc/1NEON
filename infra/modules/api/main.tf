@@ -1,6 +1,9 @@
-# The API: one Lambda behind an HTTP API, reached through CloudFront at /1NEON/api/*.
-# Terraform creates the functions with a placeholder; the deploy workflow ships the real code.
+# infra/modules/api/main.tf - The API: one Lambda behind an HTTP API, reached through CloudFront at
+# /1NEON/api/*. Terraform creates the functions with a placeholder; the deploy workflow ships the
+# real code.
 
+
+# Inputs: names, the table, the documents bucket, mail, and the user pool
 variable "name" { type = string }
 variable "env" { type = string }
 variable "table_arn" { type = string }
@@ -21,11 +24,13 @@ variable "log_retention_days" {
   default = 90
 }
 
-# Account and region, for ARNs that can't come from another resource.
+
+# Account and region, for ARNs that can't come from another resource
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
-# Placeholders until the first deploy. The trigger lets only our own invites through.
+
+# Placeholders until the first deploy. The trigger lets only our own invites through
 data "archive_file" "api_placeholder" {
   type                    = "zip"
   output_path             = "${path.module}/.placeholder-api.zip"
@@ -33,6 +38,8 @@ data "archive_file" "api_placeholder" {
   source_content          = "export const handler = async () => ({ statusCode: 503, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ error: 'starting', message: '1NEON is starting. Try again in a minute.' }) });\n"
 }
 
+
+# Admits only AdminCreateUser, so nobody self-registers before real code ships
 data "archive_file" "trigger_placeholder" {
   type                    = "zip"
   output_path             = "${path.module}/.placeholder-trigger.zip"
@@ -40,7 +47,9 @@ data "archive_file" "trigger_placeholder" {
   source_content          = "export const handler = async (e) => { if (e.triggerSource === 'PreSignUp_AdminCreateUser') return e; throw new Error('Not invited'); };\n"
 }
 
+
 # --- Roles ---
+
 
 data "aws_iam_policy_document" "lambda_trust" {
   statement {
@@ -52,18 +61,22 @@ data "aws_iam_policy_document" "lambda_trust" {
   }
 }
 
-# One role per function, each with only what that function does.
+
+# One role per function, each with only what that function does
 resource "aws_iam_role" "api" {
   name               = "${var.name}-api"
   assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
 }
 
+
+# The pre sign-up trigger's role
 resource "aws_iam_role" "trigger" {
   name               = "${var.name}-auth-trigger"
   assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
 }
 
-# The API: its table, client files under t/, invites in Cognito, and mail from our identity.
+
+# The API: its table, client files under t/, invites in Cognito, and mail from our identity
 data "aws_iam_policy_document" "api" {
   statement {
     sid       = "Logs"
@@ -92,12 +105,15 @@ data "aws_iam_policy_document" "api" {
   }
 }
 
+
+# Attach the API policy to the API role
 resource "aws_iam_role_policy" "api" {
   role   = aws_iam_role.api.id
   policy = data.aws_iam_policy_document.api.json
 }
 
-# The trigger only looks up whether an email was invited.
+
+# The trigger only looks up whether an email was invited
 data "aws_iam_policy_document" "trigger" {
   statement {
     actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
@@ -109,25 +125,32 @@ data "aws_iam_policy_document" "trigger" {
   }
 }
 
+
+# Attach the trigger policy to the trigger role
 resource "aws_iam_role_policy" "trigger" {
   role   = aws_iam_role.trigger.id
   policy = data.aws_iam_policy_document.trigger.json
 }
 
+
 # --- Functions ---
 
-# Log groups are declared so retention is set; the default keeps logs forever.
+
+# Log groups are declared so retention is set; the default keeps logs forever
 resource "aws_cloudwatch_log_group" "api" {
   name              = "/aws/lambda/${var.name}-api"
   retention_in_days = var.log_retention_days
 }
 
+
+# The trigger's logs, kept as long as the API's
 resource "aws_cloudwatch_log_group" "trigger" {
   name              = "/aws/lambda/${var.name}-auth-trigger"
   retention_in_days = var.log_retention_days
 }
 
-# 1 GB arm64: faster cold starts for pennies at this traffic.
+
+# 1 GB arm64: faster cold starts for pennies at this traffic
 resource "aws_lambda_function" "api" {
   function_name = "${var.name}-api"
   role          = aws_iam_role.api.arn
@@ -138,6 +161,7 @@ resource "aws_lambda_function" "api" {
   timeout       = 15
   filename      = data.archive_file.api_placeholder.output_path
 
+  # Everything config.ts reads; connection reuse keeps SDK calls fast between invocations
   environment {
     variables = {
       APP_ENV                             = var.env
@@ -154,16 +178,18 @@ resource "aws_lambda_function" "api" {
     }
   }
 
+  # JSON logs into the declared group, so retention applies
   logging_config {
     log_format = "JSON"
     log_group  = aws_cloudwatch_log_group.api.name
   }
 
-  # Code ships through the deploy workflow, not Terraform.
+  # Code ships through the deploy workflow, not Terraform
   lifecycle { ignore_changes = [filename, source_code_hash] }
 }
 
-# Cognito waits on this during sign-up, so keep it small and quick.
+
+# Cognito waits on this during sign-up, so keep it small and quick
 resource "aws_lambda_function" "trigger" {
   function_name = "${var.name}-auth-trigger"
   role          = aws_iam_role.trigger.arn
@@ -186,15 +212,19 @@ resource "aws_lambda_function" "trigger" {
   lifecycle { ignore_changes = [filename, source_code_hash] }
 }
 
+
 # --- HTTP API ---
 
-# HTTP API: the cheapest API Gateway, enough for a Lambda proxy.
+
+# HTTP API: the cheapest API Gateway, enough for a Lambda proxy
 resource "aws_apigatewayv2_api" "main" {
   name          = var.name
   protocol_type = "HTTP"
-  # Only CloudFront should call this; the execute-api URL serves no cookies and no CORS.
+  # Only CloudFront should call this; the execute-api URL serves no cookies and no CORS
 }
 
+
+# Lambda proxy with the 2.0 payload Hono's adapter expects; timeout matches the function
 resource "aws_apigatewayv2_integration" "api" {
   api_id                 = aws_apigatewayv2_api.main.id
   integration_type       = "AWS_PROXY"
@@ -203,30 +233,35 @@ resource "aws_apigatewayv2_integration" "api" {
   timeout_milliseconds   = 15000
 }
 
-# The path keeps its /1NEON/api prefix all the way to Hono.
+
+# The path keeps its /1NEON/api prefix all the way to Hono
 resource "aws_apigatewayv2_route" "api" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "ANY /1NEON/api/{proxy+}"
   target    = "integrations/${aws_apigatewayv2_integration.api.id}"
 }
 
-# One JSON line per request, for incident review.
+
+# One JSON line per request, for incident review
 resource "aws_cloudwatch_log_group" "access" {
   name              = "/aws/apigateway/${var.name}"
   retention_in_days = var.log_retention_days
 }
 
+
+# The default stage deploys every change on its own
 resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.main.id
   name        = "$default"
   auto_deploy = true
 
-  # A cheap abuse limit until WAF is worth turning on.
+  # A cheap abuse limit until WAF is worth turning on
   default_route_settings {
     throttling_rate_limit  = 50
     throttling_burst_limit = 100
   }
 
+  # Request ID, caller, route, status, latency, and integration errors; no bodies or cookies
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.access.arn
     format = jsonencode({
@@ -236,7 +271,8 @@ resource "aws_apigatewayv2_stage" "default" {
   }
 }
 
-# Let this API, and only this API, invoke the function.
+
+# Let this API, and only this API, invoke the function
 resource "aws_lambda_permission" "apigw" {
   statement_id  = "AllowHttpApi"
   action        = "lambda:InvokeFunction"
@@ -245,7 +281,8 @@ resource "aws_lambda_permission" "apigw" {
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
 }
 
-# The edge stack reads the API domain from SSM; deploys need the function names.
+
+# The edge stack reads the API domain from SSM; deploys need the function names
 output "api_domain" { value = replace(aws_apigatewayv2_api.main.api_endpoint, "https://", "") }
 output "api_function" { value = aws_lambda_function.api.function_name }
 output "trigger_function" { value = aws_lambda_function.trigger.function_name }

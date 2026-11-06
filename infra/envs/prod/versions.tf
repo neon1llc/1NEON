@@ -1,3 +1,8 @@
+# infra/envs/prod/versions.tf - Terraform and provider versions, the shared S3 state, and the
+# AWS provider with default tags.
+
+
+# State lives in the shared bucket with native S3 locking
 terraform {
   required_version = ">= 1.10"
 
@@ -21,7 +26,8 @@ terraform {
   }
 }
 
-# CloudFront, ACM for Cognito's custom domain, and everything else: one region.
+
+# CloudFront, ACM for Cognito's custom domain, and everything else: one region
 provider "aws" {
   region = "us-east-1"
 

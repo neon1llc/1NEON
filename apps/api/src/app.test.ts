@@ -1,4 +1,7 @@
-// API behavior that matters most: identity, tenant isolation, access levels, and conflict handling.
+// apps/api/src/app.test.ts - API behavior that matters most: identity, tenant isolation, access
+// levels, and conflict handling.
+
+
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app.ts";
 import { seed } from "./seed.ts";
@@ -6,12 +9,15 @@ import { MemoryDirectory, MemoryMailer } from "./services.ts";
 import { MemoryTable } from "./store/memory.ts";
 import { Repo } from "./store/repo.ts";
 
-// Each test gets a fresh in-memory store with the demo data, and calls the app as a given person.
+
+// Each test gets a fresh in-memory store with the demo data, and calls the app as a given person
 const OP = "pradeep@neon1.tech";
 let app: ReturnType<typeof createApp>;
 let mailer: MemoryMailer;
 let s: Awaited<ReturnType<typeof seed>>;
 
+
+// Fresh store, seed, and app for every test; dev auth stands in for Cognito
 beforeEach(async () => {
   const repo = new Repo(new MemoryTable());
   mailer = new MemoryMailer();
@@ -24,7 +30,8 @@ beforeEach(async () => {
   });
 });
 
-/** Call the API as `as` (an email, or undefined for anonymous) and parse the JSON reply. */
+
+/** Call the API as `as` (an email, or undefined for anonymous) and parse the JSON reply */
 async function call(as: string | undefined, method: string, path: string, body?: unknown) {
   const headers: Record<string, string> = { "content-type": "application/json", "x-1neon": "1" };
   if (as) headers["x-dev-user"] = as;
@@ -33,6 +40,8 @@ async function call(as: string | undefined, method: string, path: string, body?:
   return { status: r.status, json: text ? JSON.parse(text) : undefined };
 }
 
+
+// Who may call at all, and what the first visit records
 describe("identity", () => {
   it("refuses anonymous callers", async () => {
     expect((await call(undefined, "GET", "/me")).status).toBe(401);
@@ -58,6 +67,8 @@ describe("identity", () => {
   });
 });
 
+
+// Nothing crosses from one organization into another
 describe("tenant isolation", () => {
   it("hides other organizations entirely", async () => {
     for (const path of [`/t/${s.harbor.id}`, `/t/${s.harbor.id}/projects`, `/t/${s.harbor.id}/members`, `/t/${s.harbor.id}/workspace`]) {
@@ -73,6 +84,8 @@ describe("tenant isolation", () => {
   });
 });
 
+
+// The operator's cross-client view stays read only
 describe("All clients view", () => {
   it("is operator only and read only", async () => {
     expect((await call("raj@acmedental.example", "GET", "/all/projects")).status).toBe(403);
@@ -85,6 +98,8 @@ describe("All clients view", () => {
   });
 });
 
+
+// Viewer, editor, and admin limits, and the last-admin rule
 describe("access levels", () => {
   it("lets viewers read and submit requests but not edit", async () => {
     await call(OP, "POST", `/t/${s.acme.id}/members/invite`, { people: [{ email: "viewer@acmedental.example", access: "viewer" }] });
@@ -96,7 +111,7 @@ describe("access levels", () => {
   });
 
   it("requires strong sign-in for people management", async () => {
-    // Raj has strong auth; Dana is an editor.
+    // Raj has strong auth; Dana is an editor
     expect((await call("dana@acmedental.example", "POST", `/t/${s.acme.id}/members/invite`, { people: [{ email: "x@y.example" }] })).status).toBe(403);
     expect((await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/members/invite`, { people: [{ email: "x@y.example" }] })).status).toBe(201);
     expect(mailer.sent.at(-1)?.subject).toBe("You're invited to Acme Dental on 1NEON");
@@ -110,6 +125,8 @@ describe("access levels", () => {
   });
 });
 
+
+// Project lifecycle, version conflicts, stage gates, decisions, and edit markers
 describe("projects and concurrency", () => {
   it("creates a project from a template in the first stage", async () => {
     const r = await call("dana@acmedental.example", "POST", `/t/${s.acme.id}/projects`, {
