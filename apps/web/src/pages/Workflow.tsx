@@ -1,0 +1,72 @@
+// Workflow: this organization's projects on the stage board.
+import { useState } from "react";
+import { Link } from "react-router";
+import { Board, type MoveRequest } from "../components/Board.tsx";
+import { useOrg, useTopBar } from "../components/Shell.tsx";
+import { Dialog, Empty, useToast } from "../components/ui.tsx";
+import { api, HttpError } from "../lib/api.ts";
+import { problem, useProjects, useRefresh } from "../lib/hooks.ts";
+
+export function Workflow() {
+  const { org, summary, canWrite } = useOrg();
+  const projects = useProjects(org.id);
+  const refresh = useRefresh(org.id);
+  const toast = useToast();
+  const [pending, setPending] = useState<{ move: MoveRequest; message: string }>();
+  const [reason, setReason] = useState("");
+  useTopBar(<span>{org.name} · Workflow</span>, [org.name]);
+
+  const move = async (m: MoveRequest, why?: string) => {
+    try {
+      await api(`/t/${org.id}/projects/${m.project.id}/move`, {
+        method: "POST",
+        body: { version: m.project.version, stageId: m.stageId, after: m.after, before: m.before, reason: why },
+      });
+      const to = org.stages.find((s) => s.id === m.stageId)?.name;
+      if (m.stageId !== m.project.stageId) toast(`${m.project.key} moved to ${to}`);
+    } catch (e) {
+      if (e instanceof HttpError && e.status === 428) {
+        setReason("");
+        setPending({ move: m, message: e.body.message });
+        return;
+      }
+      if (e instanceof HttpError && e.status === 409) toast(`${m.project.key} changed while you were moving it. The board is up to date now.`);
+      else toast(problem(e));
+    }
+    refresh();
+  };
+
+  const live = (projects.data ?? []).filter((p) => !p.archived);
+  return (
+    <>
+      <h1 className="page-title">Workflow</h1>
+      <p className="lead">
+        {canWrite ? "Drag a card, or use its Move menu, to change a project's stage." : "Every project and where it stands."}
+      </p>
+      {projects.data && live.length === 0 ? (
+        <Empty text="No projects yet." action={canWrite && <Link className="btn btn-primary" to={`/o/${summary.slug}/projects/new`}>New project</Link>} />
+      ) : (
+        <Board stages={org.stages} projects={live} hrefFor={(p) => `/o/${summary.slug}/projects/${p.key}`} onMove={canWrite ? (m) => void move(m) : undefined} />
+      )}
+      <Dialog open={Boolean(pending)} onClose={() => setPending(undefined)} label="Reason needed">
+        <h2>Move on without a decision?</h2>
+        <p className="muted small">{pending?.message}</p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const p = pending;
+            setPending(undefined);
+            if (p && reason.trim()) void move(p.move, reason.trim());
+          }}
+        >
+          <label htmlFor="why">Reason</label>
+          <input id="why" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} required autoFocus />
+          <div className="actions">
+            <button className="btn btn-primary" type="submit">Move anyway</button>
+            <button className="btn btn-ghost" type="button" onClick={() => setPending(undefined)}>Cancel</button>
+          </div>
+        </form>
+      </Dialog>
+    </>
+  );
+}

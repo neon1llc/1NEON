@@ -1,0 +1,272 @@
+// App frame: sign-in gate, sidebar with the organization chooser, top bar, and the org context.
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
+import { api, devUser, HttpError, isDev, signInUrl } from "../lib/api.ts";
+import type { Me, OrgResponse, OrgSummary } from "../lib/types.ts";
+import { Rain } from "./Rain.tsx";
+import { Avatar, LayerBadge, LAYERS, layerName } from "./ui.tsx";
+
+// --- Session -----------------------------------------------------------------
+
+export function useMe() {
+  return useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me"), retry: false });
+}
+
+const MeCtx = createContext<Me | null>(null);
+export const useSession = () => useContext(MeCtx)!;
+
+function applyTheme(theme: string) {
+  const root = document.documentElement;
+  if (theme === "system") root.removeAttribute("data-theme");
+  else root.setAttribute("data-theme", theme);
+}
+
+export function Root() {
+  const me = useMe();
+  const loc = useLocation();
+  useEffect(() => {
+    if (me.data) applyTheme(me.data.user.theme);
+  }, [me.data]);
+  if (me.isPending) return <div className="content muted" aria-busy="true">Loading…</div>;
+  if (me.error) {
+    if (me.error instanceof HttpError && me.error.status === 401) return <SignIn />;
+    return <div className="content">Couldn't reach 1NEON. <button className="linkish" onClick={() => me.refetch()}>Try again</button></div>;
+  }
+  const data = me.data!;
+  if (loc.pathname === "/" || loc.pathname === "") {
+    const first = data.orgs.find((o) => o.slug !== "neon1") ?? data.orgs[0];
+    if (data.operator) return <Navigate to="/all/workflow" replace />;
+    if (first) return <Navigate to={`/o/${first.slug}/workspace`} replace />;
+    return <div className="content"><h1 className="page-title">1NEON</h1><p className="lead">You're signed in, but not part of any organization yet. Ask neon1 or your organization's admin for an invite.</p></div>;
+  }
+  return (
+    <MeCtx.Provider value={data}>
+      <div className="wake" style={{ height: "100%" }}>
+        <Outlet />
+      </div>
+    </MeCtx.Provider>
+  );
+}
+
+// --- Sign-in -------------------------------------------------------------------
+
+const DEMO = [
+  ["pradeep@neon1.tech", "Pradeep (neon1 operator)"],
+  ["raj@acmedental.example", "Raj Patel (Acme Dental admin)"],
+  ["dana@acmedental.example", "Dana Kim (Acme Dental editor)"],
+  ["lee@harborauto.example", "Lee Moreno (Harbor Auto, invited)"],
+] as const;
+
+function SignIn() {
+  const [email, setEmail] = useState("");
+  const qc = useQueryClient();
+  const params = new URLSearchParams(location.search);
+  const problem = params.get("signin");
+  const pick = (e: string) => {
+    devUser.set(e);
+    qc.invalidateQueries();
+  };
+  return (
+    <main className="signin">
+      <Rain />
+      <div className="veil" />
+      <div className="panel">
+        <h1 className="word">1NEON</h1>
+        <span className="tag">1 portal. Needs. Execution. Observation. Next.</span>
+        {problem === "not_invited" && <p className="notice" role="alert">That email hasn't been invited yet. Ask your organization's admin, or neon1.</p>}
+        {problem === "failed" && <p className="notice" role="alert">Sign-in didn't finish. Please try again.</p>}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            location.href = signInUrl(email.trim());
+          }}
+        >
+          <label className="sr" htmlFor="email">Your email</label>
+          <input id="email" type="email" autoComplete="email webauthn" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <button className="btn btn-primary" type="submit">Continue</button>
+        </form>
+        <p className="fine">
+          Sign in with a code by email, a passkey, or Google. 1NEON uses only the cookies it needs to keep you signed in. <a href="/1NEON/cookies">Cookies</a> · <a href="/privacy">Privacy</a>
+        </p>
+        {isDev && (
+          <div className="dev" aria-label="Local demo accounts">
+            <p className="fine" style={{ margin: "6px 0 0" }}>Local demo: sign in as</p>
+            {DEMO.map(([e, label]) => (
+              <button key={e} onClick={() => pick(e)}>{label}</button>
+            ))}
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}
+
+// --- Organization context ---------------------------------------------------------
+
+interface OrgCtxValue extends OrgResponse {
+  summary: OrgSummary;
+  canWrite: boolean;
+  canAdmin: boolean;
+}
+const OrgCtx = createContext<OrgCtxValue | null>(null);
+export const useOrg = () => useContext(OrgCtx)!;
+
+export function OrgLayout() {
+  const me = useSession();
+  const { slug } = useParams();
+  const summary = me.orgs.find((o) => o.slug === slug);
+  const org = useQuery({ queryKey: ["org", summary?.id], queryFn: () => api<OrgResponse>(`/t/${summary!.id}`), enabled: Boolean(summary) });
+  if (!summary) return <Frame><NotMember /></Frame>;
+  if (!org.data) return <Frame org={summary}><div className="content muted" aria-busy="true">Loading…</div></Frame>;
+  const access = org.data.access;
+  const value: OrgCtxValue = { ...org.data, summary, canWrite: access !== "viewer", canAdmin: access === "admin" };
+  return (
+    <OrgCtx.Provider value={value}>
+      <Frame org={summary}>
+        <Outlet />
+      </Frame>
+    </OrgCtx.Provider>
+  );
+}
+
+export function AllLayout() {
+  const me = useSession();
+  if (!me.operator) return <Frame><NotMember /></Frame>;
+  return (
+    <Frame all>
+      <Outlet />
+    </Frame>
+  );
+}
+
+function NotMember() {
+  return (
+    <div className="content">
+      <h1 className="page-title">Not here</h1>
+      <p className="lead">That organization doesn't exist, or you don't have access to it.</p>
+      <Link className="btn btn-ghost" to="/">Go to my workspace</Link>
+    </div>
+  );
+}
+
+// --- Frame: sidebar + top bar ----------------------------------------------------
+
+const Crumbs = createContext<(c: ReactNode) => void>(() => undefined);
+/** Pages set their breadcrumb trail and presence avatars in the top bar. */
+export function useTopBar(node: ReactNode, deps: unknown[]) {
+  const set = useContext(Crumbs);
+  useEffect(() => {
+    set(node);
+    return () => set(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
+
+function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; children: ReactNode }) {
+  const me = useSession();
+  const [open, setOpen] = useState(false);
+  const [top, setTop] = useState<ReactNode>(null);
+  const loc = useLocation();
+  useEffect(() => setOpen(false), [loc.pathname]);
+  const base = org ? `/o/${org.slug}` : "";
+  return (
+    <div className="shell">
+      <aside className={`side${open ? " open" : ""}`} aria-label="Sidebar">
+        <Link className="brand" to="/">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="5" aria-hidden="true">
+            <circle cx="32" cy="32" r="28" /><circle cx="32" cy="32" r="19" /><circle cx="32" cy="32" r="10" /><circle cx="32" cy="32" r="2" />
+          </svg>
+          1NEON
+        </Link>
+        <OrgChooser current={org} all={all} />
+        <ul className="nav">
+          {org ? (
+            <>
+              <li><NavLink to={`${base}/workspace`}><span className="ico" aria-hidden="true">⌂</span>Workspace</NavLink></li>
+              <li><NavLink to={`${base}/workflow`}><span className="ico" aria-hidden="true">▦</span>Workflow</NavLink></li>
+              <li className="sep" aria-hidden="true">LAYERS</li>
+              {LAYERS.map((l) => (
+                <li key={l}><NavLink to={`${base}/layer/${l}`}><LayerBadge layer={l} />{layerName(l)}</NavLink></li>
+              ))}
+              <li className="sep" aria-hidden="true">HUBS</li>
+              <li><NavLink to={`${base}/projects`} end={false}><span className="ico" aria-hidden="true">◫</span>Projects</NavLink></li>
+              <li><NavLink to={`${base}/people`}><span className="ico" aria-hidden="true">◍</span>People</NavLink></li>
+              <li><NavLink to={`${base}/documents`}><span className="ico" aria-hidden="true">▤</span>Documents</NavLink></li>
+              <li><NavLink to={`${base}/settings`}><span className="ico" aria-hidden="true">⚙</span>Settings</NavLink></li>
+            </>
+          ) : all ? (
+            <li><NavLink to="/all/workflow"><span className="ico" aria-hidden="true">▦</span>Workflow</NavLink></li>
+          ) : null}
+        </ul>
+        <div className="foot">
+          <Link to="/me" className="who" style={{ color: "inherit", textDecoration: "none" }}>
+            <Avatar id={me.user.id} name={me.user.name || me.user.email} />
+            <span>{me.user.name || me.user.email}</span>
+          </Link>
+          <span style={{ marginLeft: "auto" }} title="Connected"><span className="dot" aria-hidden="true" /><span className="sr">Connected</span></span>
+        </div>
+      </aside>
+      <div className="main">
+        {all && (
+          <div className="readonly-bar" role="status">
+            <strong>All clients · read only.</strong> Open a client to make changes.
+          </div>
+        )}
+        <header className="top">
+          <button className="chip only-sm" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Menu">menu</button>
+          <div className="crumb">{top}</div>
+          <span className="spacer" />
+          <span className="hide-sm muted small">Commands <span className="kbd">⌘K</span></span>
+        </header>
+        <Crumbs.Provider value={setTop}>
+          <main className="content" id="main">{children}</main>
+        </Crumbs.Provider>
+      </div>
+    </div>
+  );
+}
+
+function OrgChooser({ current, all }: { current?: OrgSummary; all?: boolean }) {
+  const me = useSession();
+  const nav = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const close = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
+    addEventListener("mousedown", close);
+    return () => removeEventListener("mousedown", close);
+  }, []);
+  // People in one organization see its name, not a chooser.
+  const many = me.operator || me.orgs.length > 1;
+  const label = all ? "All clients" : current?.name ?? "Choose";
+  const sub = all ? "read only" : current?.clientId ?? "";
+  const list = me.orgs.filter((o) => (o.name + o.clientId).toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button className={`org${all ? " all" : ""}`} onClick={() => many && setOpen(!open)} aria-haspopup={many ? "listbox" : undefined} aria-expanded={open} disabled={!many && !current}>
+        <b>{label}{many && <span aria-hidden="true">▾</span>}</b>
+        <small>{sub}</small>
+      </button>
+      {open && (
+        <div className="menu" role="listbox" style={{ top: "calc(100% + 6px)", left: 0, right: 0 }}>
+          {me.orgs.length > 6 && <input aria-label="Search organizations" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 6 }} autoFocus />}
+          {me.operator && (
+            <>
+              <button role="option" aria-selected={all} onClick={() => { setOpen(false); nav("/all/workflow"); }}>
+                All clients <small>read only</small>
+              </button>
+              <hr />
+            </>
+          )}
+          {list.map((o) => (
+            <button key={o.id} role="option" aria-selected={o.id === current?.id} onClick={() => { setOpen(false); nav(`/o/${o.slug}/workspace`); }}>
+              {o.name} <small>{o.clientId}</small>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

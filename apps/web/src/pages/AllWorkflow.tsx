@@ -1,0 +1,46 @@
+// All clients: every organization's projects in one read-only view, one lane per organization.
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { Board } from "../components/Board.tsx";
+import { useTopBar } from "../components/Shell.tsx";
+import { Empty } from "../components/ui.tsx";
+import { api } from "../lib/api.ts";
+import type { AllProjects } from "../lib/types.ts";
+
+export function AllWorkflow() {
+  const all = useQuery({ queryKey: ["all-projects"], queryFn: () => api<AllProjects>("/all/projects"), refetchInterval: 30_000 });
+  const [view, setView] = useState<"lanes" | "board">("lanes");
+  useTopBar(<span>All clients · Workflow</span>, []);
+  const data = all.data;
+  const slugOf = new Map(data?.orgs.map((o) => [o.id, o]) ?? []);
+  const href = (tenantId: string, key: string) => `/o/${slugOf.get(tenantId)?.slug}/projects/${key}`;
+  return (
+    <>
+      <h1 className="page-title">All clients</h1>
+      <p className="lead">Every active project across organizations. Open a project to make changes inside its organization.</p>
+      <div className="tabs" role="tablist">
+        <a href="#lanes" role="tab" aria-selected={view === "lanes"} className={view === "lanes" ? "active" : ""} onClick={(e) => { e.preventDefault(); setView("lanes"); }}>By organization</a>
+        <a href="#board" role="tab" aria-selected={view === "board"} className={view === "board" ? "active" : ""} onClick={(e) => { e.preventDefault(); setView("board"); }}>One board</a>
+      </div>
+      {all.isPending && <p className="muted" aria-busy="true">Loading…</p>}
+      {data && data.projects.length === 0 && <Empty text="No projects in any organization yet." />}
+      {data && view === "board" && (
+        <Board stages={data.stages} projects={data.projects} hrefFor={(p) => href(p.tenantId, p.key)} orgName={(p) => slugOf.get(p.tenantId)?.clientId} />
+      )}
+      {data && view === "lanes" && (
+        <div className="lanes">
+          {data.orgs.map((o) => {
+            const mine = data.projects.filter((p) => p.tenantId === o.id);
+            if (mine.length === 0) return null;
+            return (
+              <section className="lane" key={o.id}>
+                <h3>{o.name} <span className="tag client">{o.clientId}</span> <span className="muted small">{mine.length} active</span></h3>
+                <Board stages={o.stages} projects={mine} hrefFor={(p) => href(p.tenantId, p.key)} />
+              </section>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
