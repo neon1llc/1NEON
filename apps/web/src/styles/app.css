@@ -57,7 +57,7 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 600; letter-spacing: .01em; 
 /* Form fields */
 label.field { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
 label.field > span { font-family: var(--mono); font-size: 12px; }
-input, textarea, select { font: 15px var(--sans); color: var(--text); background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: 9px 12px; min-height: 40px; width: 100%; }
+input, textarea, select { font: 16px var(--sans); color: var(--text); background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: 9px 12px; min-height: 40px; width: 100%; }
 textarea { min-height: 96px; resize: vertical; }
 /* Placeholders at the muted color, which passes contrast in both themes */
 ::placeholder { color: var(--muted); opacity: 1; }
@@ -274,9 +274,9 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
 /* The email, with remember me opening under it, at its right edge, once the address looks real */
 .signin .email-row { display: grid; justify-items: end; }
 .signin .email-row input[type="email"] { width: 100%; }
-.signin .remember { display: inline-flex; align-items: center; gap: 8px; max-height: 0; overflow: hidden; opacity: 0; margin-top: 0; padding-right: 2px;
+.signin form .email-row label.remember { display: inline-flex; align-items: center; gap: 8px; max-height: 0; overflow: hidden; opacity: 0; margin-top: 0; padding-right: 2px;
   font: 12px/1 var(--mono); color: #84A98C; cursor: pointer; transition: max-height .35s ease, opacity .35s ease, margin-top .35s ease; }
-.signin .email-row.ok .remember { max-height: 28px; opacity: 1; margin-top: 10px; }
+.signin form .email-row.ok label.remember { max-height: 28px; opacity: 1; margin-top: 10px; }
 /* A square neon checkbox, drawn the same in every browser */
 .signin .remember input { appearance: none; -webkit-appearance: none; width: 15px; height: 15px; min-height: 0; margin: 0; padding: 0; flex: none;
   border: 1px solid rgba(108, 255, 168, .55); border-radius: 3px; background: transparent; display: grid; place-items: center; cursor: pointer; }
@@ -356,7 +356,7 @@ html.from-site, html.from-site body { background: var(--void); }
 }
 
 /* Plain labels in forms and dialogs */
-form label:not(.card):not(.chip):not(.field), dialog label { display: block; font: 12px var(--mono); color: var(--muted); margin-bottom: 6px; }
+form label:not(.card):not(.chip):not(.field):not(.remember), dialog label { display: block; font: 12px var(--mono); color: var(--muted); margin-bottom: 6px; }
 fieldset legend { font: 12px var(--mono); color: var(--muted); }
 .chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
