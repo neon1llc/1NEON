@@ -393,7 +393,7 @@ body:has(.signin) .n1chat-launch.n1chat-portal { bottom: 64px; }
   .shell.has-rail .side .lbl { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
   .shell.has-rail .side .org-full { display: block; }
   .shell.has-rail .side .org-mini { display: none; }
-  .shell.has-rail .side:not(.open) .nav .sep { padding: 12px 6px 4px; margin: 0; border-top: 0; }
+  .shell.has-rail .side:not(.open) .nav .sep { padding: 12px 0 4px; margin: 0; border-top: 0; }
   .shell.has-rail .side .brand { pointer-events: none; }
 }
 /* Top bar controls: search with its shortcut, and the round help button */
@@ -529,3 +529,9 @@ details.faq p { margin: 0 0 12px; }
 .totp { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin: 8px 0 16px; }
 .totp img { background: #fff; border-radius: var(--r-sm); padding: 6px; }
 .totp .key { font-size: 13px; word-break: break-all; }
+/* Every icon and layer badge starts at the same column, open or collapsed: section labels carry
+   their own inset, so the layers listed under one don't shift right */
+.nav .sep { padding-left: 0; padding-right: 0; }
+.nav .sep > .lbl { display: block; padding: 0 6px; }
+.side:not(.open) .nav .sep { margin: 6px 0; }
+.nav .sep .nav { margin-left: 0; margin-right: 0; }
