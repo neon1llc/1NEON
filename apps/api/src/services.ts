@@ -255,11 +255,12 @@ export function inviteEmail(opts: { orgName: string; inviter: string; url: strin
 
 
 /** Notice that a passkey was added, with where to check */
-export function passkeyEmail(opts: { url: string; at?: Date }) {
+export function passkeyEmail(opts: { url: string; what?: string; at?: Date }) {
   const at = opts.at ?? new Date();
-  const subject = "A passkey was added to your 1NEON account";
+  const what = opts.what ?? "A passkey";
+  const subject = `${what} was added to your 1NEON account`;
   const text = [
-    "A passkey was just added to your 1NEON account. You can now sign in with it and use admin actions.",
+    `${what} was just added to your 1NEON account. You can now use it to confirm it's you for admin actions.`,
     "",
     `If this wasn't you, reply to this email right away. Your profile: ${opts.url}`,
     "",
@@ -267,10 +268,10 @@ export function passkeyEmail(opts: { url: string; at?: Date }) {
     sentAt(at),
   ].join("\n");
   const html = branded({
-    label: "a passkey was added",
-    preheader: "A passkey was just added to your account.",
-    heading: "A passkey was added",
-    body: `<p style="margin:0">A passkey was just added to your 1NEON account. You can now sign in with it and use admin actions.</p>`,
+    label: "a sign-in method was added",
+    preheader: `${what} was just added to your account.`,
+    heading: `${what} was added`,
+    body: `<p style="margin:0">${what} was just added to your 1NEON account. You can now use it to confirm it's you for admin actions.</p>`,
     button: { label: "Open your profile", url: opts.url },
     note: "If this wasn't you, reply to this email right away.",
     at,

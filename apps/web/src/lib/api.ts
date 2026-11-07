@@ -58,9 +58,17 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
   });
   // Empty bodies (204) come back as undefined
+  // A non-JSON reply (a gateway error page) still becomes a readable error
   const text = await r.text();
-  const data = text ? JSON.parse(text) : undefined;
-  if (!r.ok) throw new HttpError(r.status, data ?? { error: "http", message: r.statusText });
+  let data: unknown;
+  try {
+    data = text ? JSON.parse(text) : undefined;
+  } catch {
+    data = r.ok ? undefined : { error: "http", message: "The server didn't answer properly. Please try again." };
+  }
+  // Admin actions from an unconfirmed session open the "Confirm it's you" dialog
+  if (r.status === 403 && (data as ApiError | undefined)?.error === "strong_auth_required") dispatchEvent(new CustomEvent("1neon:confirm"));
+  if (!r.ok) throw new HttpError(r.status, (data as ApiError | undefined) ?? { error: "http", message: r.statusText });
   return data as T;
 }
 

@@ -521,3 +521,11 @@ details.faq p { margin: 0 0 12px; }
 .item .title.is-done { color: var(--muted); }
 .pcard .move select { max-width: 120px; }
 @media (max-width: 640px) { .steps { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; } .steps::-webkit-scrollbar { display: none; } .steps span { flex: none; } }
+
+/* --- Sign-in security: the two second steps, and the authenticator setup --- */
+.card.security { display: grid; gap: 10px; }
+.factors { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.factors li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.totp { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin: 8px 0 16px; }
+.totp img { background: #fff; border-radius: var(--r-sm); padding: 6px; }
+.totp .key { font-size: 13px; word-break: break-all; }

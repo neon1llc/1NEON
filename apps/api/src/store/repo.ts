@@ -20,6 +20,8 @@ export const keys = {
   subject: (sub: string) => ({ PK: `SUB#${sub}`, SK: "USER" }),
   // One sign-in session, by the token family's origin_jti: how strongly it was signed in
   session: (jti: string) => ({ PK: `SESSION#${jti}`, SK: "META" }),
+  // A person's authenticator app secret, kept apart from the profile so it never leaves the API
+  totp: (uid: string) => ({ PK: `USER#${uid}`, SK: "TOTP" }),
   // Inside one tenant
   member: (tid: string, uid: string) => ({ PK: `T#${tid}`, SK: `MEMBER#${uid}` }),
   project: (tid: string, pid: string) => ({ PK: `T#${tid}`, SK: `PROJ#${pid}` }),
@@ -38,6 +40,17 @@ function entity<T>(row: Row | undefined): T | undefined {
   if (!row) return undefined;
   const { PK: _pk, SK: _sk, GSI1PK: _a, GSI1SK: _b, GSI2PK: _c, GSI2SK: _d, ttl: _t, type: _type, n: _n, ...rest } = row;
   return rest as T;
+}
+
+
+/** An authenticator app: its secret, whether setup finished, the last code used, and lockout state */
+export interface TotpRecord {
+  secret: string;
+  confirmed: boolean;
+  lastCounter: number;
+  fails: number;
+  lockedUntil?: string;
+  version: number;
 }
 
 
@@ -126,6 +139,22 @@ export class Repo {
     if (!jti) return false;
     const row = await this.table.get(keys.session(jti).PK, "META");
     return row?.userId === userId && row?.strong === true;
+  }
+
+  // The authenticator app record, if any
+  async getTotp(uid: string): Promise<TotpRecord | undefined> {
+    const row = await this.table.get(keys.totp(uid).PK, "TOTP");
+    return row ? { secret: String(row.secret), confirmed: row.confirmed === true, lastCounter: Number(row.lastCounter ?? -1), fails: Number(row.fails ?? 0), lockedUntil: row.lockedUntil as string | undefined, version: Number(row.version ?? 0) } : undefined;
+  }
+
+  // Save it, guarded by version so two code checks can't both count
+  async saveTotp(uid: string, t: TotpRecord, guard: Guard) {
+    await this.table.write([{ put: { ...keys.totp(uid), ...t }, guard }]);
+  }
+
+  // Remove the authenticator app
+  async deleteTotp(uid: string) {
+    await this.table.write([{ delete: keys.totp(uid) }]);
   }
 
   // User and email claim land together, so an email maps to exactly one person

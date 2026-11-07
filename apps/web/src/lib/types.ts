@@ -20,6 +20,8 @@ export interface Me {
   operator: boolean;
   // This session signed in with a passkey, so admin actions are open
   strongSession?: boolean;
+  // Second steps set up: an authenticator app, a passkey added here, or any (including older ones)
+  factors?: { totp: boolean; passkey: boolean; any: boolean };
   orgs: OrgSummary[];
 }
 

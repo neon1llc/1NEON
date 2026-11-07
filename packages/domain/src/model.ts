@@ -92,6 +92,8 @@ export const User = z.object({
   menu: z.enum(["rail", "hidden"]).default("rail"),
   // The welcome tour: not yet seen, asked to see it at the next sign-in, or finished or skipped
   tour: Tour.optional(),
+  // Set once a passkey is added through the profile, so the portal can offer it to confirm
+  passkey: z.boolean().optional(),
   ...versioned,
 });
 export type User = z.infer<typeof User>;

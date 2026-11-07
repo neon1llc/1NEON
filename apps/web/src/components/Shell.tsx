@@ -12,6 +12,7 @@ import type { Me, OrgResponse, OrgSummary } from "../lib/types.ts";
 import { Offline } from "./Glitch.tsx";
 import { Rain } from "./Rain.tsx";
 import { FileText as FileIcon, Folder as FolderIcon, Home as HomeIcon, Kanban as KanbanIcon, Menu as MenuIcon, Search as SearchIcon } from "lucide-react";
+import { ConfirmDialog } from "./Confirm.tsx";
 import { HelpProvider, useHelp } from "./Help.tsx";
 import { Palette } from "./Palette.tsx";
 import { Avatar, Icon, initials, LayerBadge, LAYERS, layerName } from "./ui.tsx";
@@ -502,6 +503,7 @@ function FrameBody({ org, all, children }: { org?: OrgSummary; all?: boolean; ch
         <button type="button" onClick={() => setOpen(true)} data-tour="nav-layers"><MenuIcon size={20} aria-hidden="true" /><span>More</span></button>
       </nav>
       <Palette me={me} org={org} open={search} setOpen={setSearch} onHelp={help.open} onTour={help.welcomeTour} />
+      <ConfirmDialog me={me} />
     </div>
   );
 }

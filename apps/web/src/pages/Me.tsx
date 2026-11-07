@@ -11,6 +11,7 @@ import { api, devUser, isDev } from "../lib/api.ts";
 import { problem } from "../lib/hooks.ts";
 import { passkeyCreation } from "../lib/passkey.ts";
 import { useHelp } from "../components/Help.tsx";
+import { askToConfirm, TotpSetup } from "../components/Confirm.tsx";
 
 
 // The signed-in person's own profile, outside any organization
@@ -19,6 +20,7 @@ export function MePage() {
   const qc = useQueryClient();
   const toast = useToast();
   const help = useHelp();
+  const [totpOpen, setTotpOpen] = useState(false);
   useTopBar(<span>Your profile</span>, []);
   // Edits stay local until Save
   const [draft, setDraft] = useState({ name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme, menu: me.user.menu ?? "rail" });
@@ -46,6 +48,17 @@ export function MePage() {
       qc.invalidateQueries({ queryKey: ["me"] });
     } catch (e) {
       toast(e instanceof DOMException ? "The passkey wasn't made. Try again when you're ready." : problem(e));
+    }
+  };
+  // Remove the authenticator app (the API asks to confirm first when needed)
+  const removeTotp = async () => {
+    if (!confirm("Remove the authenticator app from your account?")) return;
+    try {
+      await api("/me/totp", { method: "DELETE" });
+      toast("Authenticator app removed.");
+      qc.invalidateQueries({ queryKey: ["me"] });
+    } catch (e) {
+      toast(problem(e));
     }
   };
   // Dev: forget the demo user. Production: the API revokes tokens and returns Cognito's logout URL
@@ -93,17 +106,28 @@ export function MePage() {
           </div>
         </fieldset>
         {/* Strong sign-in status: admins need it for people and settings */}
-        <div className="card small" data-tour="passkey" style={{ display: "grid", gap: 8, justifyItems: "start" }}>
-          <b>Passkey</b>
+        <div className="card small security" data-tour="passkey">
+          <b>Sign-in security</b>
+          <span className="muted">Inviting people and changing settings need a second check: a passkey or an authenticator app. Set up both if you like.</span>
+          <ul className="factors">
+            <li>
+              <span><b>Passkey</b><br /><span className="muted">Your face, fingerprint, or device PIN. Works on iPhone, Android, Mac, and Windows.</span></span>
+              {me.factors?.passkey ? <span className="tag client">on</span> : null}
+              <button className="btn btn-ghost btn-sm" type="button" onClick={() => void addPasskey()}>{me.factors?.passkey ? "Add another" : "Add"}</button>
+            </li>
+            <li>
+              <span><b>Authenticator app</b><br /><span className="muted">A 6-digit code from Google Authenticator, Authy, or similar.</span></span>
+              {me.factors?.totp ? <span className="tag client">on</span> : null}
+              {me.factors?.totp
+                ? <button className="btn btn-ghost btn-sm" type="button" onClick={() => void removeTotp()}>Remove</button>
+                : <button className="btn btn-ghost btn-sm" type="button" onClick={() => setTotpOpen(true)}>Set up</button>}
+            </li>
+          </ul>
           <span className="muted">
-            {!me.user.strongAuth
-              ? "Add a passkey to sign in with your face, fingerprint, or device PIN. Admins need one to manage people and settings."
-              : me.strongSession
-                ? "You signed in with your passkey. Admin actions are open."
-                : "You have a passkey. Sign in with it to use admin actions."}
+            {me.strongSession ? "This session is confirmed. Admin actions are open." : me.factors?.any ? <>To use admin actions, <button type="button" className="link" onClick={askToConfirm}>confirm it's you</button>.</> : "Add one of these to use admin actions."}
           </span>
-          {(!me.user.strongAuth || me.strongSession) && <button className="btn btn-ghost" type="button" onClick={() => void addPasskey()}>{me.user.strongAuth ? "Add another passkey" : "Add a passkey"}</button>}
         </div>
+        <TotpSetup open={totpOpen} onClose={() => setTotpOpen(false)} onDone={() => { setTotpOpen(false); qc.invalidateQueries({ queryKey: ["me"] }); }} />
         {/* The tutorial: replay the welcome tour, or read the FAQs */}
         <div className="card small" style={{ display: "grid", gap: 8, justifyItems: "start" }}>
           <b>Tutorial</b>

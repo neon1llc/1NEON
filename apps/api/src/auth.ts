@@ -209,11 +209,13 @@ export class CognitoAuth {
   }
 
   /** POST /auth/start: begin with an email; Cognito answers the same way whether or not it knows the person */
-  async start(c: Context, email: string, remember = true) {
+  async start(c: Context, email: string, remember = true, prefer?: "passkey") {
     // Held for the steps to come, like Cognito's own session
     setCookie(c, COOKIE.remember, remember ? "1" : "0", this.cookieOpts(300));
-    const r = await this.idp.send(new InitiateAuthCommand({ ClientId: this.cfg.clientId, AuthFlow: "USER_AUTH", AuthParameters: { USERNAME: email } }));
-    return this.next(c, email, "code", r);
+    // Confirming with a passkey asks Cognito for it straight away, skipping the choice
+    const params: Record<string, string> = { USERNAME: email, ...(prefer === "passkey" ? { PREFERRED_CHALLENGE: "WEB_AUTHN" } : {}) };
+    const r = await this.idp.send(new InitiateAuthCommand({ ClientId: this.cfg.clientId, AuthFlow: "USER_AUTH", AuthParameters: params }));
+    return this.next(c, email, prefer === "passkey" ? "passkey" : "code", r);
   }
 
   /** POST /auth/choose: pick a code by email or a passkey */

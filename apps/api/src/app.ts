@@ -43,6 +43,7 @@ import { CognitoAuth, type Verified } from "./auth.ts";
 import type { Config } from "./config.ts";
 import type { Directory, Mailer, Storage } from "./services.ts";
 import { inviteEmail, MemoryStorage, passkeyEmail } from "./services.ts";
+import { checkTotp, newTotp } from "./totp.ts";
 import { keys, Repo } from "./store/repo.ts";
 import { ConflictError } from "./store/types.ts";
 
@@ -62,6 +63,8 @@ export interface Deps {
 interface Who {
   user: User;
   actor: Actor;
+  // The sign-in session, for marking it strong after a passkey or authenticator check
+  jti?: string;
 }
 
 
@@ -76,7 +79,7 @@ const EDIT_MS = 2 * 60 * 1000;
 
 
 /** Stop the request with a JSON error the web app can show as written */
-function fail(status: 400 | 401 | 403 | 404 | 409 | 410 | 412 | 428, error: string, message: string, current?: unknown): never {
+function fail(status: 400 | 401 | 403 | 404 | 409 | 410 | 412 | 428 | 429, error: string, message: string, current?: unknown): never {
   throw new HTTPException(status, { res: Response.json({ error, message, current }, { status }) });
 }
 
@@ -178,14 +181,14 @@ export function createApp(d: Deps) {
 
   // On-page sign-in: each call returns the next step; "done" means the cookies are set
   const SignInBody = z.discriminatedUnion("op", [
-    z.object({ op: z.literal("start"), email: z.string().trim().toLowerCase().email().max(254), remember: z.boolean().default(true) }),
+    z.object({ op: z.literal("start"), email: z.string().trim().toLowerCase().email().max(254), remember: z.boolean().default(true), prefer: z.enum(["passkey"]).optional() }),
     z.object({ op: z.literal("choose"), method: z.enum(["code", "passkey"]) }),
     z.object({ op: z.literal("answer"), kind: z.enum(["code", "totp", "passkey"]), value: z.string().min(1).max(20000) }),
   ]);
   app.post("/auth/step", async (c) => {
     if (!d.auth) fail(404, "not_found", "Sign-in runs through the demo accounts locally.");
     const b = await body(c, SignInBody);
-    const r = b.op === "start" ? await d.auth.start(c, b.email, b.remember) : b.op === "choose" ? await d.auth.choose(c, b.method) : await d.auth.answer(c, b.kind, b.value);
+    const r = b.op === "start" ? await d.auth.start(c, b.email, b.remember, b.prefer) : b.op === "choose" ? await d.auth.choose(c, b.method) : await d.auth.answer(c, b.kind, b.value);
     if (r.next.step !== "done") return c.json({ ...r.next, wrong: "wrong" in r ? r.wrong : undefined });
     const result = await admit("verified" in r ? r.verified : undefined);
     // Not invited: drop the cookies Cognito's tokens just set
@@ -209,7 +212,7 @@ export function createApp(d: Deps) {
     const operator = cfg.operatorEmails.includes(user.email);
     // Strong means this session signed in with a passkey; locally the seeded flag stands in
     const strongAuth = cfg.devAuth ? user.strongAuth || operator : await repo.sessionStrong(jti, user.id);
-    c.set("who", { user, actor: { userId: user.id, operator, strongAuth } });
+    c.set("who", { user, actor: { userId: user.id, operator, strongAuth }, jti });
     await next();
   });
 
@@ -255,8 +258,10 @@ export function createApp(d: Deps) {
     return c.json({
       user,
       operator: actor.operator,
-      // Whether this session signed in with a passkey, which admin actions need
+      // Whether this session is confirmed with a passkey or authenticator, which admin actions need
       strongSession: actor.strongAuth,
+      // Which second steps the person has set up
+      factors: { totp: Boolean((await repo.getTotp(user.id))?.confirmed), passkey: Boolean(user.passkey), any: user.strongAuth },
       orgs: tenants
         .filter((t) => t.status === "active")
         .map((t) => ({ id: t.id, slug: t.slug, name: t.name, clientId: t.clientId, access: actor.operator ? "admin" : accessBy.get(t.id) }))
@@ -288,11 +293,64 @@ export function createApp(d: Deps) {
     if (user.strongAuth && !actor.strongAuth) fail(403, "strong_auth_required", "Sign in with your passkey to add another one.");
     const { credential } = await body(c, z.object({ credential: z.record(z.string(), z.unknown()) }));
     await d.directory.finishPasskey(d.auth?.accessToken(c) ?? "local", credential);
-    const next: User = { ...user, strongAuth: true, version: user.version + 1, updatedAt: now(), updatedBy: user.id };
+    const next: User = { ...user, strongAuth: true, passkey: true, version: user.version + 1, updatedAt: now(), updatedBy: user.id };
     await repo.saveUser(next, user.version);
     // Tell the person by email, so a passkey they didn't add doesn't go unnoticed
     const mail = passkeyEmail({ url: `${cfg.publicUrl}/1NEON/me` });
     await d.mailer.send(user.email, mail.subject, mail.text, mail.html).catch(() => undefined);
+    return c.json({ ok: true });
+  });
+
+  // Authenticator app: start setup with a fresh secret and its QR code. Replacing one needs a confirmed session
+  app.post("/me/totp/start", async (c) => {
+    const { user, actor } = who(c);
+    if (user.strongAuth && !actor.strongAuth) fail(403, "strong_auth_required", "Confirm it's you first, then add an authenticator app.");
+    const existing = await repo.getTotp(user.id);
+    const t = await newTotp(user.email);
+    await repo.saveTotp(user.id, { secret: t.secret, confirmed: false, lastCounter: -1, fails: 0, version: (existing?.version ?? 0) + 1 }, existing ? { version: existing.version } : { create: true });
+    return c.json({ qr: t.qr, uri: t.uri, secret: t.secret });
+  });
+
+  // Finish setup with the first code the app shows; this session counts as confirmed from then on
+  app.post("/me/totp/confirm", async (c) => {
+    const { user, jti } = who(c);
+    const { code } = await body(c, z.object({ code: z.string().min(6).max(12) }));
+    const t = await repo.getTotp(user.id);
+    if (!t || t.confirmed) fail(409, "no_setup", "Start authenticator setup again.");
+    const step = checkTotp(t.secret, code);
+    if (step === undefined) fail(400, "wrong_code", "That code didn't match. Check the time on your phone and try the newest code.");
+    await repo.saveTotp(user.id, { ...t, confirmed: true, lastCounter: step, fails: 0, version: t.version + 1 }, { version: t.version });
+    if (!user.strongAuth) await repo.saveUser({ ...user, strongAuth: true, version: user.version + 1, updatedAt: now(), updatedBy: user.id }, user.version);
+    if (jti) await repo.saveSession(jti, user.id, true);
+    const mail = passkeyEmail({ url: `${cfg.publicUrl}/1NEON/me`, what: "An authenticator app" });
+    await d.mailer.send(user.email, mail.subject, mail.text, mail.html).catch(() => undefined);
+    return c.json({ ok: true });
+  });
+
+  // Confirm it's you with an authenticator code: this session can then use admin actions.
+  // Five wrong codes lock it for 15 minutes, and a code can't be used twice
+  app.post("/me/confirm", async (c) => {
+    const { user, jti } = who(c);
+    const { code } = await body(c, z.object({ code: z.string().min(6).max(12) }));
+    const t = await repo.getTotp(user.id);
+    if (!t?.confirmed) fail(409, "no_totp", "Set up an authenticator app on your profile first.");
+    if (t.lockedUntil && Date.parse(t.lockedUntil) > Date.now()) fail(429, "locked", "Too many wrong codes. Try again in 15 minutes.");
+    const step = checkTotp(t.secret, code);
+    if (step === undefined || step <= t.lastCounter) {
+      const fails = t.fails + 1;
+      await repo.saveTotp(user.id, { ...t, fails: fails >= 5 ? 0 : fails, lockedUntil: fails >= 5 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : t.lockedUntil, version: t.version + 1 }, { version: t.version });
+      fail(400, "wrong_code", step === undefined ? "That code didn't match. Try the newest one." : "That code was already used. Wait for the next one.");
+    }
+    await repo.saveTotp(user.id, { ...t, lastCounter: step, fails: 0, lockedUntil: undefined, version: t.version + 1 }, { version: t.version });
+    if (jti) await repo.saveSession(jti, user.id, true);
+    return c.json({ ok: true });
+  });
+
+  // Remove the authenticator app; needs a confirmed session
+  app.delete("/me/totp", async (c) => {
+    const { user, actor } = who(c);
+    if (!actor.strongAuth) fail(403, "strong_auth_required", "Confirm it's you first.");
+    await repo.deleteTotp(user.id);
     return c.json({ ok: true });
   });
 

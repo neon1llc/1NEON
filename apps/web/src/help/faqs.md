@@ -60,8 +60,11 @@ Viewers read and comment. Editors also add and change work. Admins also invite p
 ### How do I invite someone?
 Admins go to **People** and choose **Invite people**. The person gets an email with a link.
 
-### Why does it ask for a passkey?
-Inviting people and changing settings need a passkey sign-in, so a stolen email account isn't enough to make changes. Add one on your profile, then sign in with it.
+### Why does it ask me to confirm it's me?
+Inviting people and changing settings need a second check, so a stolen email account isn't enough to make changes. Add a passkey or an authenticator app on your profile, then confirm with it when asked.
+
+### Can I use an authenticator app?
+Yes. On your profile, choose **Set up** next to Authenticator app, scan the code with Google Authenticator, Microsoft Authenticator, 1Password, Authy, or similar, and type the 6-digit code it shows.
 
 ### What's a passkey?
 A sign-in that uses your face, fingerprint, or device PIN instead of a code. It's faster and can't be phished.

@@ -368,3 +368,35 @@ describe("write guards", () => {
     expect(r.status).not.toBe(500);
   });
 });
+
+
+// Authenticator app: setup with a QR code, the first code finishes it, then codes confirm it's you
+describe("authenticator app", () => {
+  const dana = "dana@acmedental.example";
+  // The code an app would show now for a base32 secret
+  const codeFor = async (secret: string, at = Date.now()) => {
+    const { TOTP, Secret } = await import("otpauth");
+    return new TOTP({ secret: Secret.fromBase32(secret), digits: 6, period: 30 }).generate({ timestamp: at });
+  };
+
+  it("sets up with the first code, then confirms once per code", async () => {
+    const start = await call(dana, "POST", "/me/totp/start", {});
+    expect(start.json.qr).toMatch(/^data:image\/svg\+xml/);
+    expect((await call(dana, "POST", "/me/totp/confirm", { code: "000000" })).json.error).toBe("wrong_code");
+    expect((await call(dana, "POST", "/me/totp/confirm", { code: await codeFor(start.json.secret) })).status).toBe(200);
+    const me = await call(dana, "GET", "/me");
+    expect(me.json.factors.totp).toBe(true);
+    expect(JSON.stringify(me.json)).not.toContain(start.json.secret);
+    // A fresh code from the next time step confirms; the same code twice doesn't
+    const next = await codeFor(start.json.secret, Date.now() + 30_000);
+    expect((await call(dana, "POST", "/me/confirm", { code: next })).status).toBe(200);
+    expect((await call(dana, "POST", "/me/confirm", { code: next })).json.error).toBe("wrong_code");
+  });
+
+  it("locks after five wrong codes", async () => {
+    const start = await call(dana, "POST", "/me/totp/start", {});
+    await call(dana, "POST", "/me/totp/confirm", { code: await codeFor(start.json.secret) });
+    for (let i = 0; i < 5; i++) await call(dana, "POST", "/me/confirm", { code: "000000" });
+    expect((await call(dana, "POST", "/me/confirm", { code: await codeFor(start.json.secret, Date.now() + 30_000) })).json.error).toBe("locked");
+  });
+});

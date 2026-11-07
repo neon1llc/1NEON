@@ -107,14 +107,14 @@ export const GUIDES: Record<PageKey, Guide> = {
   settings: {
     title: "Settings",
     purpose: "How this organization works: the stages on the board.",
-    howto: ["Rename a stage or say when it's done.", "Hide stages you don't use.", "Saving needs a passkey sign-in."],
+    howto: ["Rename a stage or say when it's done.", "Hide stages you don't use.", "Saving asks you to confirm it's you."],
     tour: [{ at: "stages", title: "Stages", text: "Each row is a column on the board, in order." }],
   },
   me: {
     title: "Your profile",
     purpose: "Your name, look, passkey, and the tutorial.",
-    howto: ["Add a passkey to sign in with your face or fingerprint.", "Replay the tutorial whenever you like."],
-    tour: [{ at: "passkey", title: "Passkey", text: "Faster, safer sign-in. Admins need one to manage people and settings." }],
+    howto: ["Add a passkey or an authenticator app, so you can confirm it's you for admin actions.", "Replay the tutorial whenever you like."],
+    tour: [{ at: "passkey", title: "Sign-in security", text: "Add a passkey or an authenticator app. Admins need one to manage people and settings." }],
   },
   all: {
     title: "All clients",
