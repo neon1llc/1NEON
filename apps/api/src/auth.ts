@@ -103,8 +103,10 @@ export class CognitoAuth {
     if (!refresh) return undefined;
     const tokens = await this.token({ grant_type: "refresh_token", refresh_token: refresh });
     if (!tokens?.access_token) return undefined;
+    // A token that fails verification reads as signed out, not as a server error
+    const p = await this.access.verify(tokens.access_token).catch(() => undefined);
+    if (!p) return undefined;
     setCookie(c, COOKIE.access, tokens.access_token, this.cookieOpts(15 * 60));
-    const p = await this.access.verify(tokens.access_token);
     return { sub: p.sub };
   }
 

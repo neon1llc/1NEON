@@ -35,7 +35,7 @@ export interface Mailer {
 /** File storage: short-lived links for the browser to upload and download directly, and the scan result */
 export interface Storage {
   // A link the browser PUTs the bytes to, with this content type
-  putUrl(key: string, contentType: string): Promise<string>;
+  putUrl(key: string, contentType: string, size: number): Promise<string>;
   // A download link that saves the file under its own name
   getUrl(key: string, name: string): Promise<string>;
   // The malware scan's verdict; nothing to read yet means it's still running
@@ -55,8 +55,9 @@ export class S3Storage implements Storage {
   private s3 = new S3Client({});
   constructor(private bucket: string) {}
 
-  async putUrl(key: string, contentType: string) {
-    return getSignedUrl(this.s3, new PutObjectCommand({ Bucket: this.bucket, Key: key, ContentType: contentType }), { expiresIn: LINK_SECONDS });
+  // The declared size is signed into the link, so S3 refuses a body of any other length
+  async putUrl(key: string, contentType: string, size: number) {
+    return getSignedUrl(this.s3, new PutObjectCommand({ Bucket: this.bucket, Key: key, ContentType: contentType, ContentLength: size }), { expiresIn: LINK_SECONDS, signableHeaders: new Set(["content-length", "content-type"]) });
   }
 
   // The bucket refuses this download until GuardDuty tags the object clean

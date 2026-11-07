@@ -1,6 +1,6 @@
 # Terms of use
 
-*Draft for neon1.tech/1NEON/terms. Effective date: [date of publication]. This draft is not legal advice; have it reviewed before publishing.*
+*Last updated November 7, 2026.*
 
 These terms cover your use of neon1.tech and the 1NEON client portal, which are run by NEON1 LLC ("neon1", "I", "me"). Paid work is governed by a separate agreement or signed proposal. If that agreement conflicts with these terms, the agreement wins.
 
@@ -24,7 +24,7 @@ I work to keep the portal available and secure, but it's provided "as is" and ma
 
 ## 4. Ending access
 
-Your organization can stop using 1NEON at any time and ask for an export of its data. I may suspend an account that breaks these terms or puts others at risk, and I'll tell you why unless the law or a security reason prevents it. Data is retained and deleted as described in the [privacy policy](/privacy).
+Your organization can stop using 1NEON at any time and ask for an export of its data. I may suspend an account that breaks these terms or puts others at risk, and I'll tell you why unless the law or a security reason prevents it. Data is retained and deleted as described in the [privacy policy](/1NEON/privacy).
 
 ## 5. Liability
 
@@ -41,4 +41,4 @@ New York law governs these terms, and disputes go to the state or federal courts
 
 ## Contact
 
-NEON1 LLC, New York, NY · [neon1llc@gmail.com] (to become hello@neon1.tech)
+NEON1 LLC, New York, NY · [neon1llc@gmail.com](mailto:neon1llc@gmail.com)

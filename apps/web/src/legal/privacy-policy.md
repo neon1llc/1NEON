@@ -1,18 +1,18 @@
 # Privacy policy
 
-*Draft for neon1.tech/1NEON/privacy. Effective date: [date of publication]. This draft is not legal advice; have it reviewed before publishing.*
+*Last updated November 7, 2026.*
 
 NEON1 LLC ("neon1", "I", "me") runs the website neon1.tech and the 1NEON client portal at neon1.tech/1NEON. This policy explains what information I collect, why, and what you can do about it.
 
 ## The short version
 
-- The website collects nothing about you: no analytics, no tracking, and no cookies.
+- The website has no analytics, ads, or trackers, and sets no cookies.
 - The 1NEON portal stores only what's needed to run your projects with me, and it uses only the cookies that keep you signed in.
 - I never sell or rent your information, and I never use it for advertising.
 
 ## What I collect
 
-**On the website.** Nothing, unless you contact me. If you email me or book a call through Calendly, I receive what you send, such as your name, email address, and message. Calendly handles bookings under its own privacy policy.
+**On the website.** No accounts, analytics, or tracking. Like any website, the servers that deliver it (Amazon CloudFront) handle your IP address and browser details to send you the pages, and AWS may keep them briefly for security and operations. Your browser saves the rain display settings you pick, on your device only. If you email me or book a call through Calendly, I receive what you send, such as your name, email address, and message. Calendly handles bookings under its own privacy policy.
 
 **In the 1NEON portal**, which is available only to people invited by me or by an administrator of their organization:
 
@@ -48,7 +48,7 @@ I disclose information only to these providers, when the law requires it, or to 
 Portal data is stored in the United States on AWS, encrypted in transit and at rest. Each organization's data is kept separate from every other organization's.
 
 - **Account and project data:** for as long as your organization uses 1NEON. After your organization's work with neon1 ends, I delete it within 90 days unless your organization asks me to keep it longer, or the law requires me to.
-- **Deleted items:** kept in a recoverable trash for 30 days, then removed. Backups roll off within 35 days after that.
+- **Deleted items:** projects you delete go to a trash for 30 days before they're removed. Deleted files are removed right away. Database backups roll off after 35 days, and earlier copies of deleted or replaced files after 90 days.
 - **Audit records:** kept for up to 3 years.
 
 ## Your choices and rights
@@ -63,7 +63,7 @@ Your organization's administrator controls who can access its workspace. If a re
 
 ## Cookies
 
-The website uses no cookies. The portal uses only strictly necessary cookies. See the [cookie notice](/1NEON/cookies).
+The website sets no cookies. The portal uses only strictly necessary cookies. See the [cookie and storage notice](/1NEON/cookies) for those cookies and what each site saves in your browser.
 
 ## Children
 
@@ -75,4 +75,4 @@ If I change this policy in a way that matters, I'll update the effective date an
 
 ## Contact
 
-NEON1 LLC, New York, NY · [neon1llc@gmail.com] (to become privacy@neon1.tech)
+NEON1 LLC, New York, NY · [neon1llc@gmail.com](mailto:neon1llc@gmail.com)

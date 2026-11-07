@@ -702,10 +702,11 @@ export function createApp(d: Deps) {
     return lists.flat().filter((x) => x.uploaded).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  /** The record named by :did, in the project given as ?p= (none for general files) */
+  /** The record named by :did, in the project given as ?p= (none for general files); a trashed project's files are gone too */
   async function doc(c: Context<Env>) {
-    const x = await repo.getDoc(c.get("tenant").id, c.req.query("p") || undefined, c.req.param("did")!);
-    if (!x) fail(404, "not_found", "That file no longer exists.");
+    const tid = c.get("tenant").id, pid = c.req.query("p") || undefined;
+    const [x, p] = await Promise.all([repo.getDoc(tid, pid, c.req.param("did")!), pid ? repo.getProject(tid, pid) : undefined]);
+    if (!x || (pid && (!p || p.deletedAt))) fail(404, "not_found", "That file no longer exists.");
     return x;
   }
 
@@ -730,7 +731,7 @@ export function createApp(d: Deps) {
     const x = DocumentRecord.parse({ ...input, tenantId: t.id, id: newId("d"), key: "", scan: "pending", uploaded: false, version: 1, createdAt: ts, updatedAt: ts, updatedBy: actorId(c) });
     x.key = docKey(x);
     await repo.saveDoc(x, { create: true });
-    return c.json({ doc: x, upload: await d.storage.putUrl(x.key, x.contentType) }, 201);
+    return c.json({ doc: x, upload: await d.storage.putUrl(x.key, x.contentType, x.size) }, 201);
   });
 
   // The browser finished sending the bytes: show the file, and check off the item it answers
