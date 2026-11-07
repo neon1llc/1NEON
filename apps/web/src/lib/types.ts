@@ -18,6 +18,8 @@ export interface OrgSummary {
 export interface Me {
   user: User;
   operator: boolean;
+  // This session signed in with a passkey, so admin actions are open
+  strongSession?: boolean;
   orgs: OrgSummary[];
 }
 

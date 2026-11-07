@@ -90,7 +90,7 @@ data "aws_iam_policy_document" "api" {
   }
   statement {
     sid       = "Docs"
-    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:GetObjectTagging"]
+    actions   = ["s3:GetObject", "s3:GetObjectAttributes", "s3:PutObject", "s3:DeleteObject", "s3:GetObjectTagging"]
     resources = ["${var.docs_bucket_arn}/t/*"]
   }
   statement {

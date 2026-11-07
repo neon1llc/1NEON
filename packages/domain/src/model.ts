@@ -196,6 +196,21 @@ export const KIND_LAYER: Record<ItemKind, Layer> = {
 };
 
 
+/** Statuses a person may set on each kind; "approved" comes only from the approve route */
+export const STATUSES: Partial<Record<ItemKind, readonly string[]>> = {
+  option: ["draft", "proposed", "declined"],
+  decision: [],
+};
+// Every other kind is a simple work item
+export const WORK_STATUSES = ["open", "doing", "blocked", "done"] as const;
+
+
+/** May a person set `status` on an item of `kind`? */
+export function settableStatus(kind: ItemKind, status: string) {
+  return (STATUSES[kind] ?? WORK_STATUSES).includes(status);
+}
+
+
 /** A 1 to 5 score used to compare options */
 export const Score = z.number().int().min(1).max(5);
 

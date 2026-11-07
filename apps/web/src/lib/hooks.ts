@@ -46,7 +46,7 @@ export function useRefresh(tid: string) {
 /** A sentence a person can act on, whatever went wrong */
 export function problem(e: unknown) {
   if (e instanceof HttpError) {
-    if (e.body.error === "strong_auth_required") return "This needs a second step at sign-in. Add an authenticator app or a passkey, then sign in again.";
+    if (e.body.error === "strong_auth_required") return "This needs a passkey sign-in. Add a passkey on your profile, then sign in with it.";
     return e.body.message;
   }
   return "Couldn't reach 1NEON. Check your connection and try again.";

@@ -9,6 +9,7 @@ import { applyTheme, useSession } from "../components/Shell.tsx";
 import { Avatar, useToast } from "../components/ui.tsx";
 import { api, devUser, isDev } from "../lib/api.ts";
 import { problem } from "../lib/hooks.ts";
+import { passkeyCreation } from "../lib/passkey.ts";
 
 
 // The signed-in person's own profile, outside any organization
@@ -32,6 +33,18 @@ export function MePage() {
     }
     setBusy(false);
   };
+  // Make a passkey on this device and register it with the account
+  const addPasskey = async () => {
+    try {
+      const { options } = await api<{ options: Parameters<typeof passkeyCreation>[0] }>("/me/passkey/start", { method: "POST", body: {} });
+      const credential = await passkeyCreation(options);
+      await api("/me/passkey/finish", { method: "POST", body: { credential } });
+      toast("Passkey added. Sign in with it next time to use admin actions.");
+      qc.invalidateQueries({ queryKey: ["me"] });
+    } catch (e) {
+      toast(e instanceof DOMException ? "The passkey wasn't made. Try again when you're ready." : problem(e));
+    }
+  };
   // Dev: forget the demo user. Production: the API revokes tokens and returns Cognito's logout URL
   const signOut = async () => {
     if (isDev) {
@@ -52,7 +65,7 @@ export function MePage() {
       <form className="form" onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <div><label htmlFor="nm">Name</label><input id="nm" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} maxLength={80} autoComplete="name" /></div>
         <div><label htmlFor="tt">Title</label><input id="tt" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} maxLength={80} autoComplete="organization-title" /></div>
-        <div><label htmlFor="ph">Mobile number (for sign-in codes by text)</label><input id="ph" type="tel" value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} maxLength={32} autoComplete="tel" /></div>
+        <div><label htmlFor="ph">Phone (only you see it)</label><input id="ph" type="tel" value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} maxLength={32} autoComplete="tel" /></div>
         {/* Theme previews immediately; Save keeps it with the account */}
         <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
           <legend style={{ marginBottom: 8 }}>Theme</legend>
@@ -78,9 +91,16 @@ export function MePage() {
           </div>
         </fieldset>
         {/* Strong sign-in status: admins need it for people and settings */}
-        <div className="card small" style={{ display: "grid", gap: 4 }}>
-          <b>Sign-in security</b>
-          <span className="muted">{me.user.strongAuth ? "You have an authenticator app or passkey. Admin actions are open to you." : "Add an authenticator app (such as Authy) or a passkey at your next sign-in. Admins need one to manage people and settings."}</span>
+        <div className="card small" style={{ display: "grid", gap: 8, justifyItems: "start" }}>
+          <b>Passkey</b>
+          <span className="muted">
+            {!me.user.strongAuth
+              ? "Add a passkey to sign in with your face, fingerprint, or device PIN. Admins need one to manage people and settings."
+              : me.strongSession
+                ? "You signed in with your passkey. Admin actions are open."
+                : "You have a passkey. Sign in with it to use admin actions."}
+          </span>
+          {(!me.user.strongAuth || me.strongSession) && <button className="btn btn-ghost" type="button" onClick={() => void addPasskey()}>{me.user.strongAuth ? "Add another passkey" : "Add a passkey"}</button>}
         </div>
         {/* Save, and sign out */}
         <div className="actions">

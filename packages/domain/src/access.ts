@@ -37,7 +37,7 @@ export interface Actor {
 
 
 /** A refusal carries its reason so the API can answer 403, 404, or "set up strong sign-in" */
-export type Decision = { ok: true } | { ok: false; reason: "not_member" | "forbidden" | "strong_auth_required" | "read_only_view" };
+export type Decision = { ok: true } | { ok: false; reason: "not_member" | "forbidden" | "strong_auth_required" | "read_only_view" | "not_decider" };
 
 
 /**
@@ -67,4 +67,19 @@ export function can(
   if (!LEVEL_ACTIONS[level].has(action)) return { ok: false, reason: "forbidden" };
   if (STRONG_AUTH.has(action) && !actor.strongAuth) return { ok: false, reason: "strong_auth_required" };
   return { ok: true };
+}
+
+
+/** Who may approve on one project: a named decision maker; with none named, an admin member of the client */
+export function canApprove(
+  actor: Actor,
+  access: AccessLevel | undefined,
+  people: readonly { userId: string; role: string }[],
+): Decision {
+  const base = can(actor, "approve", access);
+  if (!base.ok) return base;
+  const deciders = people.filter((p) => p.role === "decision_maker").map((p) => p.userId);
+  if (deciders.length) return deciders.includes(actor.userId) ? { ok: true } : { ok: false, reason: "not_decider" };
+  // No one named: the organization's own admins decide; neon1 proposes, so the operator role alone never approves
+  return access === "admin" && !actor.operator ? { ok: true } : { ok: false, reason: "not_decider" };
 }

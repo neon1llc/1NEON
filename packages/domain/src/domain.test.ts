@@ -3,7 +3,7 @@
 
 
 import { describe, expect, it } from "vitest";
-import { can, type Action } from "./access.ts";
+import { can, canApprove, type Action } from "./access.ts";
 import { initialRanks, rankBetween } from "./rank.ts";
 import { formatClientId, newId, slugify } from "./ids.ts";
 import { metricProgress, MetricFields, themeOf, User } from "./model.ts";
@@ -127,5 +127,24 @@ describe("layer names", () => {
   it("names the layers in order", () => {
     expect(Object.values(LAYER_NAMES)).toEqual(["Needs", "Execute", "Observe", "Normalize"]);
     expect(LAYER_NAMES.next).toBe("Normalize");
+  });
+});
+
+
+
+// Approval on one project: the named decision maker, else the client's own admins
+describe("canApprove", () => {
+  const person = (userId: string, operator = false) => ({ userId, operator, strongAuth: false });
+  const people = [{ userId: "u_raj", role: "decision_maker" }];
+
+  it("lets only a named decision maker approve", () => {
+    expect(canApprove(person("u_raj"), "viewer", people).ok).toBe(true);
+    expect(canApprove(person("u_dana"), "admin", people)).toEqual({ ok: false, reason: "not_decider" });
+  });
+
+  it("falls back to client admins, never the operator role alone", () => {
+    expect(canApprove(person("u_raj"), "admin", []).ok).toBe(true);
+    expect(canApprove(person("u_dana"), "editor", []).ok).toBe(false);
+    expect(canApprove(person("u_op", true), "admin", []).ok).toBe(false);
   });
 });

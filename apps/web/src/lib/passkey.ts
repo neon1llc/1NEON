@@ -45,3 +45,44 @@ export async function passkeyAssertion(options: RequestJSON): Promise<string> {
     },
   });
 }
+
+
+
+// The parts of Cognito's CredentialCreationOptions used here
+interface CreationJSON {
+  challenge: string;
+  rp: PublicKeyCredentialRpEntity;
+  user: { id: string; name: string; displayName: string };
+  pubKeyCredParams: PublicKeyCredentialParameters[];
+  timeout?: number;
+  excludeCredentials?: { id: string; type: "public-key"; transports?: AuthenticatorTransport[] }[];
+  authenticatorSelection?: AuthenticatorSelectionCriteria;
+  attestation?: AttestationConveyancePreference;
+}
+
+
+/** Asks the browser to make a passkey and returns the result in the JSON shape Cognito expects */
+export async function passkeyCreation(options: CreationJSON): Promise<Record<string, unknown>> {
+  const cred = (await navigator.credentials.create({
+    publicKey: {
+      ...options,
+      challenge: fromB64(options.challenge),
+      user: { ...options.user, id: fromB64(options.user.id) },
+      excludeCredentials: options.excludeCredentials?.map((c) => ({ ...c, id: fromB64(c.id) })),
+    },
+  })) as PublicKeyCredential | null;
+  if (!cred) throw new Error("No passkey was made.");
+  const r = cred.response as AuthenticatorAttestationResponse;
+  return {
+    id: cred.id,
+    rawId: toB64(cred.rawId),
+    type: cred.type,
+    authenticatorAttachment: cred.authenticatorAttachment ?? undefined,
+    clientExtensionResults: cred.getClientExtensionResults(),
+    response: {
+      clientDataJSON: toB64(r.clientDataJSON),
+      attestationObject: toB64(r.attestationObject),
+      transports: r.getTransports?.() ?? [],
+    },
+  };
+}

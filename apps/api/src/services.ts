@@ -8,9 +8,11 @@ import {
   CognitoIdentityProviderClient,
   GetUserCommand,
   ListWebAuthnCredentialsCommand,
+  StartWebAuthnRegistrationCommand,
+  CompleteWebAuthnRegistrationCommand,
   UsernameExistsException,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { DeleteObjectCommand, GetObjectCommand, GetObjectTaggingCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, GetObjectTaggingCommand, GetObjectAttributesCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { branded, esc, link, sentAt } from "./mail.ts";
@@ -22,6 +24,10 @@ export interface Directory {
   ensureUser(email: string): Promise<void>;
   /** Has the user set up a passkey or an authenticator app? */
   hasStrongAuth(accessToken: string): Promise<boolean>;
+  /** Begin adding a passkey: the browser's creation options */
+  startPasskey(accessToken: string): Promise<unknown>;
+  /** Finish adding a passkey with the browser's signed credential */
+  finishPasskey(accessToken: string, credential: unknown): Promise<void>;
 }
 
 
@@ -38,6 +44,8 @@ export interface Storage {
   putUrl(key: string, contentType: string, size: number): Promise<string>;
   // A download link that saves the file under its own name
   getUrl(key: string, name: string): Promise<string>;
+  // The stored size in bytes, or undefined when nothing is there yet
+  stat(key: string): Promise<number | undefined>;
   // The malware scan's verdict; nothing to read yet means it's still running
   scan(key: string): Promise<"pending" | "clean" | "infected">;
   // Remove the file
@@ -64,6 +72,15 @@ export class S3Storage implements Storage {
   async getUrl(key: string, name: string) {
     const disposition = `attachment; filename*=UTF-8''${encodeURIComponent(name)}`;
     return getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key, ResponseContentDisposition: disposition }), { expiresIn: LINK_SECONDS });
+  }
+
+  // GetObjectAttributes is its own permission, so it works before the scan tags the file clean
+  async stat(key: string) {
+    try {
+      return (await this.s3.send(new GetObjectAttributesCommand({ Bucket: this.bucket, Key: key, ObjectAttributes: ["ObjectSize"] }))).ObjectSize;
+    } catch {
+      return undefined;
+    }
   }
 
   async scan(key: string) {
@@ -123,6 +140,15 @@ export class CognitoDirectory implements Directory {
     const totp = (user.UserMFASettingList ?? []).includes("SOFTWARE_TOKEN_MFA");
     return totp || (keys?.Credentials?.length ?? 0) > 0;
   }
+
+  // Passkey registration runs on the person's own access token; no admin rights involved
+  async startPasskey(accessToken: string) {
+    return (await this.idp.send(new StartWebAuthnRegistrationCommand({ AccessToken: accessToken }))).CredentialCreationOptions;
+  }
+
+  async finishPasskey(accessToken: string, credential: unknown) {
+    await this.idp.send(new CompleteWebAuthnRegistrationCommand({ AccessToken: accessToken, Credential: credential as never }));
+  }
 }
 
 
@@ -155,6 +181,9 @@ export class MemoryStorage implements Storage {
   async getUrl(key: string) {
     return `/1NEON/api/dev-files/${encodeURIComponent(key)}`;
   }
+  async stat(key: string) {
+    return this.files.get(key)?.bytes.length;
+  }
   async scan(key: string) {
     return this.files.has(key) ? "clean" as const : "pending" as const;
   }
@@ -176,6 +205,11 @@ export class MemoryDirectory implements Directory {
   async hasStrongAuth() {
     return true;
   }
+  // Passkeys can't be made without a browser; local runs return fixed options and accept anything
+  async startPasskey() {
+    return { challenge: "bG9jYWw", rp: { id: "localhost", name: "1NEON" }, user: { id: "bG9jYWw", name: "local", displayName: "local" }, pubKeyCredParams: [{ type: "public-key", alg: -7 }] };
+  }
+  async finishPasskey() {}
 }
 
 
@@ -214,6 +248,31 @@ export function inviteEmail(opts: { orgName: string; inviter: string; url: strin
     body: `<p style="margin:0 0 12px">${esc(opts.inviter)} invited you to <b>${esc(opts.orgName)}</b> on ${link("1NEON", "https://neon1.tech/1NEON/")}.</p><p style="margin:0;color:#56665c">${esc(about)}</p>`,
     button: { label: `Join ${opts.orgName}`, url: opts.url },
     note: "You'll sign in with a code sent to this email. If you weren't expecting this, you can ignore it.",
+    at,
+  });
+  return { subject, text, html };
+}
+
+
+/** Notice that a passkey was added, with where to check */
+export function passkeyEmail(opts: { url: string; at?: Date }) {
+  const at = opts.at ?? new Date();
+  const subject = "A passkey was added to your 1NEON account";
+  const text = [
+    "A passkey was just added to your 1NEON account. You can now sign in with it and use admin actions.",
+    "",
+    `If this wasn't you, reply to this email right away. Your profile: ${opts.url}`,
+    "",
+    "neon1 · 1 is glad to be of service.",
+    sentAt(at),
+  ].join("\n");
+  const html = branded({
+    label: "a passkey was added",
+    preheader: "A passkey was just added to your account.",
+    heading: "A passkey was added",
+    body: `<p style="margin:0">A passkey was just added to your 1NEON account. You can now sign in with it and use admin actions.</p>`,
+    button: { label: "Open your profile", url: opts.url },
+    note: "If this wasn't you, reply to this email right away.",
     at,
   });
   return { subject, text, html };

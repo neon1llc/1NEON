@@ -271,3 +271,100 @@ describe("documents", () => {
     expect(r.status).toBe(400);
   });
 });
+
+
+// The decision flow: who approves, what can be approved, and statuses only the approve route grants
+describe("approvals", () => {
+  const raj = "raj@acmedental.example";
+  const dana = "dana@acmedental.example";
+
+  // FLOW-1 names Raj as its decision maker and has three proposed options
+  async function flow1() {
+    const p = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json.find((x: { key: string }) => x.key === "FLOW-1");
+    const full = await call(OP, "GET", `/t/${s.acme.id}/projects/${p.id}`);
+    const options = full.json.items.filter((i: { kind: string }) => i.kind === "option");
+    return { p, options, path: `/t/${s.acme.id}/projects/${p.id}` };
+  }
+
+  it("lets only the named decision maker approve", async () => {
+    const { options, path } = await flow1();
+    const o = options[0];
+    expect((await call(dana, "POST", `${path}/items/${o.id}/approve`, { version: o.version })).json.error).toBe("not_decider");
+    expect((await call(OP, "POST", `${path}/items/${o.id}/approve`, { version: o.version })).json.error).toBe("not_decider");
+    expect((await call(raj, "POST", `${path}/items/${o.id}/approve`, { version: o.version })).status).toBe(201);
+  });
+
+  it("approves a proposed option once, and never a draft", async () => {
+    const { options, path } = await flow1();
+    const o = options[0];
+    await call(raj, "POST", `${path}/items/${o.id}/approve`, { version: o.version });
+    expect((await call(raj, "POST", `${path}/items/${o.id}/approve`, { version: o.version + 1 })).json.error).toBe("not_proposed");
+    const draft = await call(OP, "POST", `${path}/items`, { kind: "option", title: "D. Something new" });
+    expect((await call(raj, "POST", `${path}/items/${draft.json.id}/approve`, { version: 1 })).json.error).toBe("not_proposed");
+  });
+
+  it("lets a client admin approve when nobody is named, but not neon1", async () => {
+    const p = (await call(OP, "POST", `/t/${s.acme.id}/projects`, { name: "No decider" })).json;
+    const path = `/t/${s.acme.id}/projects/${p.id}`;
+    const o = await call(OP, "POST", `${path}/items`, { kind: "option", title: "Only option", status: "proposed" });
+    expect((await call(OP, "POST", `${path}/items/${o.json.id}/approve`, { version: 1 })).json.error).toBe("not_decider");
+    expect((await call(dana, "POST", `${path}/items/${o.json.id}/approve`, { version: 1 })).json.error).toBe("not_decider");
+    expect((await call(raj, "POST", `${path}/items/${o.json.id}/approve`, { version: 1 })).status).toBe(201);
+  });
+
+  it("refuses statuses outside each kind's list, including a hand-set approval", async () => {
+    const { path } = await flow1();
+    const o = await call(OP, "POST", `${path}/items`, { kind: "option", title: "E" });
+    expect((await call(OP, "PATCH", `${path}/items/${o.json.id}`, { version: 1, status: "approved" })).json.error).toBe("invalid_status");
+    expect((await call(OP, "PATCH", `${path}/items/${o.json.id}`, { version: 1, status: "banana" })).json.error).toBe("invalid_status");
+    expect((await call(OP, "POST", `${path}/items`, { kind: "task", title: "t", status: "approved" })).json.error).toBe("invalid_status");
+    expect((await call(OP, "PATCH", `${path}/items/${o.json.id}`, { version: 1, status: "proposed" })).status).toBe(200);
+  });
+
+  it("keeps an approved option approved", async () => {
+    const { options, path } = await flow1();
+    const o = options[0];
+    const r = await call(raj, "POST", `${path}/items/${o.id}/approve`, { version: o.version });
+    const back = await call(OP, "PATCH", `${path}/items/${o.id}`, { version: r.json.option.version, status: "draft" });
+    expect(back.json.error).toBe("immutable");
+  });
+});
+
+
+// Writes that must name real members, finished uploads, and live projects
+describe("write guards", () => {
+  it("refuses assignees and project people outside the organization", async () => {
+    const p = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json[0];
+    const lee = (await call("lee@harborauto.example", "GET", "/me")).json.user.id;
+    expect((await call(OP, "POST", `/t/${s.acme.id}/projects/${p.id}/items`, { kind: "task", title: "x", assigneeId: lee })).json.error).toBe("not_member");
+    expect((await call(OP, "POST", `/t/${s.acme.id}/projects`, { name: "x", people: [{ userId: lee, role: "decision_maker" }] })).json.error).toBe("not_member");
+  });
+
+  it("won't mark an upload done before its bytes arrive", async () => {
+    const p = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json[0];
+    const start = await call(OP, "POST", `/t/${s.acme.id}/docs`, { name: "a.pdf", size: 4, layer: "needs", projectId: p.id });
+    expect((await call(OP, "POST", `/t/${s.acme.id}/docs/${start.json.doc.id}/done?p=${p.id}`)).json.error).toBe("not_uploaded");
+  });
+
+  it("freezes an archived project until it's unarchived", async () => {
+    const p = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json[0];
+    const path = `/t/${s.acme.id}/projects/${p.id}`;
+    const archived = await call(OP, "PATCH", path, { version: p.version, archived: true });
+    expect((await call(OP, "POST", `${path}/items`, { kind: "task", title: "late" })).json.error).toBe("archived");
+    expect((await call(OP, "PATCH", path, { version: archived.json.version, name: "renamed" })).json.error).toBe("archived");
+    expect((await call(OP, "PATCH", path, { version: archived.json.version, archived: false })).status).toBe(200);
+  });
+
+  it("needs a version to delete an item, and keeps phone numbers off the members list", async () => {
+    const p = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json[0];
+    const t = await call(OP, "POST", `/t/${s.acme.id}/projects/${p.id}/items`, { kind: "task", title: "x" });
+    expect((await call(OP, "DELETE", `/t/${s.acme.id}/projects/${p.id}/items/${t.json.id}`)).status).toBe(400);
+    const members = (await call(OP, "GET", `/t/${s.acme.id}/members`)).json;
+    expect(members.every((m: object) => !("phone" in m))).toBe(true);
+  });
+
+  it("answers a malformed sign-in step with 400, not 500", async () => {
+    const r = await app.request("/1NEON/api/auth/step", { method: "POST", headers: { "x-1neon": "1", "content-type": "application/json" }, body: "{}" });
+    expect(r.status).not.toBe(500);
+  });
+});

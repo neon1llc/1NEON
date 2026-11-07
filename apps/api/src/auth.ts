@@ -36,13 +36,23 @@ export interface Verified {
   email: string;
   emailVerified: boolean;
   accessToken: string;
+  // The token family this sign-in started; refreshes keep it
+  jti?: string;
+  // How this sign-in was proved; only a passkey counts as strong
+  method: Method;
 }
+
+
+// The ways a sign-in can finish
+export type Method = "passkey" | "code" | "totp" | "hosted";
 
 
 // A verified caller: the Cognito subject, plus the email when the ID token supplied it
 export interface Identity {
   sub: string;
   email?: string;
+  // origin_jti: ties the caller to the session record made at sign-in
+  jti?: string;
 }
 
 
@@ -93,7 +103,7 @@ export class CognitoAuth {
     if (token) {
       try {
         const p = await this.access.verify(token);
-        return { sub: p.sub };
+        return { sub: p.sub, jti: p.origin_jti as string | undefined };
       } catch {
         /* fall through to refresh */
       }
@@ -107,7 +117,12 @@ export class CognitoAuth {
     const p = await this.access.verify(tokens.access_token).catch(() => undefined);
     if (!p) return undefined;
     setCookie(c, COOKIE.access, tokens.access_token, this.cookieOpts(15 * 60));
-    return { sub: p.sub };
+    return { sub: p.sub, jti: p.origin_jti as string | undefined };
+  }
+
+  /** The caller's current access token, for Cognito calls made on their behalf (passkeys) */
+  accessToken(c: Context) {
+    return getCookie(c, COOKIE.access);
   }
 
   /** GET /auth/login: start Managed Login with PKCE; `hint` pre-fills the email, `provider` skips straight to it */
@@ -131,27 +146,28 @@ export class CognitoAuth {
   }
 
   /** GET /auth/callback: exchange the code, set cookies, return the verified identity */
-  async callback(c: Context): Promise<{ sub: string; email: string; emailVerified: boolean; accessToken: string } | undefined> {
+  async callback(c: Context): Promise<Verified | undefined> {
     const [state, verifier] = (getCookie(c, COOKIE.flow) ?? "").split(".");
     deleteCookie(c, COOKIE.flow, { path: "/1NEON/api", secure: true });
     // The state must match the cookie, which blocks forged callbacks
     const code = c.req.query("code");
     if (!code || !state || !verifier || c.req.query("state") !== state) return undefined;
     const tokens = await this.token({ grant_type: "authorization_code", code, code_verifier: verifier, redirect_uri: this.redirectUri });
-    return this.finish(c, tokens?.access_token, tokens?.id_token, tokens?.refresh_token);
+    return this.finish(c, "hosted", tokens?.access_token, tokens?.id_token, tokens?.refresh_token);
   }
 
   // Sets the session cookies from fresh tokens; the ID token carries the email the invite check needs
-  private async finish(c: Context, access?: string, idToken?: string, refresh?: string): Promise<Verified | undefined> {
+  private async finish(c: Context, method: Method, access?: string, idToken?: string, refresh?: string): Promise<Verified | undefined> {
     if (!access || !idToken) return undefined;
     const id = await this.idt.verify(idToken);
+    const at = await this.access.verify(access);
     // Remember me (the default) keeps the refresh token 30 days; without it both cookies end with the browser
     const forget = getCookie(c, COOKIE.remember) === "0";
     deleteCookie(c, COOKIE.remember, { path: "/1NEON/api", secure: true });
     const opts = (maxAge: number) => (forget ? { ...this.cookieOpts(maxAge), maxAge: undefined } : this.cookieOpts(maxAge));
     setCookie(c, COOKIE.access, access, opts(15 * 60));
     if (refresh) setCookie(c, COOKIE.refresh, refresh, opts(30 * 24 * 3600));
-    return { sub: id.sub, email: String(id.email ?? "").toLowerCase(), emailVerified: String(id.email_verified) === "true", accessToken: access };
+    return { sub: id.sub, email: String(id.email ?? "").toLowerCase(), emailVerified: String(id.email_verified) === "true", accessToken: access, jti: at.origin_jti as string | undefined, method };
   }
 
   // --- On-page sign-in: Cognito's session token waits in an HttpOnly cookie between steps ---
@@ -166,10 +182,10 @@ export class CognitoAuth {
   }
 
   // Turns Cognito's answer into the next step for the page, keeping its session for the step after
-  private async next(c: Context, email: string, r: { ChallengeName?: string; Session?: string; ChallengeParameters?: Record<string, string>; AvailableChallenges?: string[]; AuthenticationResult?: AuthenticationResultType }): Promise<{ next: SignInStep; verified?: Verified }> {
+  private async next(c: Context, email: string, method: Method, r: { ChallengeName?: string; Session?: string; ChallengeParameters?: Record<string, string>; AvailableChallenges?: string[]; AuthenticationResult?: AuthenticationResultType }): Promise<{ next: SignInStep; verified?: Verified }> {
     if (r.AuthenticationResult) {
       deleteCookie(c, COOKIE.step, { path: "/1NEON/api", secure: true });
-      const v = await this.finish(c, r.AuthenticationResult.AccessToken, r.AuthenticationResult.IdToken, r.AuthenticationResult.RefreshToken);
+      const v = await this.finish(c, method, r.AuthenticationResult.AccessToken, r.AuthenticationResult.IdToken, r.AuthenticationResult.RefreshToken);
       return v ? { next: { step: "done" }, verified: v } : { next: { step: "failed" } };
     }
     this.keep(c, email, r.Session);
@@ -197,7 +213,7 @@ export class CognitoAuth {
     // Held for the steps to come, like Cognito's own session
     setCookie(c, COOKIE.remember, remember ? "1" : "0", this.cookieOpts(300));
     const r = await this.idp.send(new InitiateAuthCommand({ ClientId: this.cfg.clientId, AuthFlow: "USER_AUTH", AuthParameters: { USERNAME: email } }));
-    return this.next(c, email, r);
+    return this.next(c, email, "code", r);
   }
 
   /** POST /auth/choose: pick a code by email or a passkey */
@@ -210,7 +226,7 @@ export class CognitoAuth {
       Session: h.session,
       ChallengeResponses: { USERNAME: h.email, ANSWER: method === "code" ? "EMAIL_OTP" : "WEB_AUTHN" },
     }));
-    return this.next(c, h.email, r);
+    return this.next(c, h.email, method === "passkey" ? "passkey" : "code", r);
   }
 
   /** POST /auth/answer: the emailed code, an authenticator code, or the passkey's signed response */
@@ -226,7 +242,7 @@ export class CognitoAuth {
         Session: h.session,
         ChallengeResponses: { USERNAME: h.email, [field]: value },
       }));
-      return this.next(c, h.email, r);
+      return this.next(c, h.email, kind, r);
     } catch (e) {
       // A wrong code keeps the step; anything else ends it
       const name = (e as { name?: string }).name;

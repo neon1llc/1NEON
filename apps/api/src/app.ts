@@ -20,7 +20,9 @@ import {
   UpdateMemberInput,
   UpdateProjectInput,
   can,
+  canApprove,
   formatClientId,
+  settableStatus,
   itemFields,
   newId,
   rankBetween,
@@ -40,7 +42,7 @@ import { z } from "zod";
 import { CognitoAuth, type Verified } from "./auth.ts";
 import type { Config } from "./config.ts";
 import type { Directory, Mailer, Storage } from "./services.ts";
-import { inviteEmail, MemoryStorage } from "./services.ts";
+import { inviteEmail, MemoryStorage, passkeyEmail } from "./services.ts";
 import { keys, Repo } from "./store/repo.ts";
 import { ConflictError } from "./store/types.ts";
 
@@ -94,6 +96,7 @@ const REASONS = {
   forbidden: [403, "forbidden", "Your access level doesn't allow that."],
   strong_auth_required: [403, "strong_auth_required", "Set up a passkey or an authenticator app first, then try again."],
   read_only_view: [403, "read_only", "All clients is read only. Open the organization to make changes."],
+  not_decider: [403, "not_decider", "Only this project's decision maker can approve. An admin can name one on the project."],
 } as const;
 
 
@@ -148,6 +151,8 @@ export function createApp(d: Deps) {
     if (!uid) return "not_invited";
     // Remember which Cognito identity (email code, passkey, or Google) maps to this person
     await repo.linkSubject(r.sub, uid);
+    // Admin actions trust this session only if it signed in with a passkey
+    if (r.jti) await repo.saveSession(r.jti, uid, r.method === "passkey");
     const user = await repo.getUser(uid);
     if (user) {
       // Refresh strong sign-in on every sign-in, so removing a passkey or authenticator takes effect
@@ -179,7 +184,7 @@ export function createApp(d: Deps) {
   ]);
   app.post("/auth/step", async (c) => {
     if (!d.auth) fail(404, "not_found", "Sign-in runs through the demo accounts locally.");
-    const b = SignInBody.parse(await c.req.json());
+    const b = await body(c, SignInBody);
     const r = b.op === "start" ? await d.auth.start(c, b.email, b.remember) : b.op === "choose" ? await d.auth.choose(c, b.method) : await d.auth.answer(c, b.kind, b.value);
     if (r.next.step !== "done") return c.json({ ...r.next, wrong: "wrong" in r ? r.wrong : undefined });
     const result = await admit("verified" in r ? r.verified : undefined);
@@ -197,26 +202,31 @@ export function createApp(d: Deps) {
   // --- Identity: every route below needs a signed-in, invited person ------
 
   app.use("*", async (c, next) => {
-    const user = await resolveUser(c);
-    if (!user) fail(401, "signed_out", "Please sign in.");
+    const found = await resolveUser(c);
+    if (!found) fail(401, "signed_out", "Please sign in.");
+    const { user, jti } = found;
     // The operator role comes from configuration, never from the database, so no data edit can grant it
     const operator = cfg.operatorEmails.includes(user.email);
-    c.set("who", { user, actor: { userId: user.id, operator, strongAuth: user.strongAuth || (cfg.devAuth && operator) } });
+    // Strong means this session signed in with a passkey; locally the seeded flag stands in
+    const strongAuth = cfg.devAuth ? user.strongAuth || operator : await repo.sessionStrong(jti, user.id);
+    c.set("who", { user, actor: { userId: user.id, operator, strongAuth } });
     await next();
   });
 
   /** Who is calling: the dev header locally, otherwise the Cognito cookie mapped to our user record */
-  async function resolveUser(c: Context): Promise<User | undefined> {
+  async function resolveUser(c: Context): Promise<{ user: User; jti?: string } | undefined> {
     if (cfg.devAuth) {
       const email = c.req.header("x-dev-user")?.toLowerCase();
       if (!email) return undefined;
       const uid = await repo.userIdForEmail(email);
-      return uid ? repo.getUser(uid) : undefined;
+      const user = uid ? await repo.getUser(uid) : undefined;
+      return user && { user };
     }
     const ident = d.auth ? await d.auth.identify(c) : undefined;
     if (!ident) return undefined;
     const uid = await repo.userIdForSubject(ident.sub);
-    return uid ? repo.getUser(uid) : undefined;
+    const user = uid ? await repo.getUser(uid) : undefined;
+    return user && { user, jti: ident.jti };
   }
 
   // The caller set by the identity middleware
@@ -245,6 +255,8 @@ export function createApp(d: Deps) {
     return c.json({
       user,
       operator: actor.operator,
+      // Whether this session signed in with a passkey, which admin actions need
+      strongSession: actor.strongAuth,
       orgs: tenants
         .filter((t) => t.status === "active")
         .map((t) => ({ id: t.id, slug: t.slug, name: t.name, clientId: t.clientId, access: actor.operator ? "admin" : accessBy.get(t.id) }))
@@ -260,6 +272,28 @@ export function createApp(d: Deps) {
     const next: User = { ...user, ...defined(patch), version: user.version + 1, updatedAt: now(), updatedBy: user.id };
     await repo.saveUser(next, version);
     return c.json(next);
+  });
+
+  // Add a passkey. The first can be added from any session; another needs a passkey session already,
+  // so someone who only got into the email can't plant their own
+  app.post("/me/passkey/start", async (c) => {
+    const { user, actor } = who(c);
+    if (user.strongAuth && !actor.strongAuth) fail(403, "strong_auth_required", "Sign in with your passkey to add another one.");
+    const token = d.auth?.accessToken(c) ?? "local";
+    return c.json({ options: await d.directory.startPasskey(token) });
+  });
+
+  app.post("/me/passkey/finish", async (c) => {
+    const { user, actor } = who(c);
+    if (user.strongAuth && !actor.strongAuth) fail(403, "strong_auth_required", "Sign in with your passkey to add another one.");
+    const { credential } = await body(c, z.object({ credential: z.record(z.string(), z.unknown()) }));
+    await d.directory.finishPasskey(d.auth?.accessToken(c) ?? "local", credential);
+    const next: User = { ...user, strongAuth: true, version: user.version + 1, updatedAt: now(), updatedBy: user.id };
+    await repo.saveUser(next, user.version);
+    // Tell the person by email, so a passkey they didn't add doesn't go unnoticed
+    const mail = passkeyEmail({ url: `${cfg.publicUrl}/1NEON/me` });
+    await d.mailer.send(user.email, mail.subject, mail.text, mail.html).catch(() => undefined);
+    return c.json({ ok: true });
   });
 
   // --- Operator: organizations and the All clients view --------------------
@@ -400,7 +434,8 @@ export function createApp(d: Deps) {
     need(c, "read");
     const members = await repo.listMembers(c.get("tenant").id);
     const users = await Promise.all(members.map((m) => repo.getUser(m.userId)));
-    return c.json(members.map((m, i) => ({ ...m, phone: users[i]?.phone ?? "", name: users[i]?.name || m.name, title: users[i]?.title || m.title })));
+    // Phone numbers stay on the person's own profile; organizations they share don't see them
+    return c.json(members.map((m, i) => ({ ...m, name: users[i]?.name || m.name, title: users[i]?.title || m.title })));
   });
 
   // Invite: create the person if new, add the membership, create the Cognito user, and email the link
@@ -477,6 +512,7 @@ export function createApp(d: Deps) {
     need(c, "write");
     const t = c.get("tenant");
     const input = await body(c, CreateProjectInput);
+    await activeMembers(t.id, input.people.map((p) => p.userId));
     const tpl = templateById(input.template);
     const n = await repo.nextProjectNumber(t.id, tpl.keyPrefix);
     const first = t.stages.find((s) => !s.hidden) ?? t.stages[0]!;
@@ -533,8 +569,10 @@ export function createApp(d: Deps) {
   // Edit project fields; `targetDate: null` clears the date
   app.patch("/t/:tid/projects/:pid", async (c) => {
     need(c, "write");
-    const p = await project(c);
+    const p = await project(c, { archived: true });
     const input = await body(c, UpdateProjectInput);
+    // An archived project takes only its unarchive
+    if (p.archived && input.archived !== false) fail(409, "archived", "This project is archived. Unarchive it to make changes.");
     const { version, targetDate, ...patch } = input;
     const next: Project = { ...p, ...defined(patch), version: p.version + 1, updatedAt: now(), updatedBy: actorId(c) };
     if (targetDate !== undefined) next.targetDate = targetDate ?? undefined;
@@ -568,7 +606,7 @@ export function createApp(d: Deps) {
   // Trash a project. Typing its key confirms; it's hidden but kept, and erased only on the client's request
   app.delete("/t/:tid/projects/:pid", async (c) => {
     need(c, "delete");
-    const p = await project(c);
+    const p = await project(c, { archived: true });
     const input = await body(c, z.object({ version: z.number().int(), confirm: z.string() }));
     if (input.confirm !== p.key) fail(400, "confirm", `Type ${p.key} to confirm.`);
     const ts = now();
@@ -585,6 +623,8 @@ export function createApp(d: Deps) {
     // Anyone who can read may submit a request (intake); everything else needs write
     need(c, input.kind === "request" ? "comment" : "write");
     if (input.kind === "decision") fail(400, "invalid", "Decisions are recorded by approving an option.");
+    if (input.status !== undefined && !settableStatus(input.kind, input.status)) fail(400, "invalid_status", `"${input.status}" isn't a status for this kind of item.`);
+    if (input.assigneeId) await activeMembers(p.tenantId, [input.assigneeId]);
     const fields = validateFields(input.kind, input.fields);
     const items = (await repo.listItems(p.tenantId, p.id)).filter((i) => i.kind === input.kind).sort(byRank);
     const ts = now();
@@ -613,6 +653,12 @@ export function createApp(d: Deps) {
     if (!item) fail(404, "not_found", "That item no longer exists.");
     if (item.kind === "decision") fail(400, "immutable", "Decisions can't be edited. Approve a new option to change the decision.");
     const input = await body(c, UpdateItemInput);
+    // Statuses follow each kind's list; an approval is final and only the approve route grants it
+    if (input.status !== undefined && input.status !== item.status) {
+      if (item.status === "approved") fail(400, "immutable", "This option is approved. Propose a new option to change course.");
+      if (!settableStatus(item.kind, input.status)) fail(400, "invalid_status", `"${input.status}" isn't a status for this kind of item.`);
+    }
+    if (input.assigneeId) await activeMembers(p.tenantId, [input.assigneeId]);
     const { version, assigneeId, dueDate, fields, ...patch } = input;
     const next: Item = { ...item, ...defined(patch), version: item.version + 1, updatedAt: now(), updatedBy: actorId(c) };
     if (assigneeId !== undefined) next.assigneeId = assigneeId ?? undefined;
@@ -631,6 +677,7 @@ export function createApp(d: Deps) {
     if (!item) fail(404, "not_found", "That item no longer exists.");
     if (item.kind === "decision") fail(400, "immutable", "Decisions are kept as a permanent record.");
     const version = Number(c.req.query("version"));
+    if (!Number.isInteger(version)) fail(400, "invalid", "Send the version you last saw.");
     await repo.table.write([
       { delete: keys.item(p.tenantId, p.id, item.id), guard: { version } },
       repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: `${item.kind}.deleted`, target: item.id, summary: `${p.key}: removed ${label(item.kind)} "${item.title}"` }),
@@ -640,10 +687,12 @@ export function createApp(d: Deps) {
 
   /** Approve an option: records an immutable decision tied to the exact option version */
   app.post("/t/:tid/projects/:pid/items/:iid/approve", async (c) => {
-    need(c, "approve");
     const p = await project(c);
+    // Only a named decision maker approves (or, with none named, the client's own admins)
+    check(canApprove(who(c).actor, c.get("access"), p.people));
     const option = await repo.getItem(p.tenantId, p.id, c.req.param("iid"));
     if (!option || option.kind !== "option") fail(404, "not_found", "That option no longer exists.");
+    if (option.status !== "proposed") fail(409, "not_proposed", option.status === "approved" ? "This option is already approved." : "Only an option shared for approval can be approved.");
     const input = await body(c, ApproveInput);
     if (input.version !== option.version) fail(409, "conflict", "The option changed since you read it. Review it again before approving.", option);
     const ts = now();
@@ -722,7 +771,11 @@ export function createApp(d: Deps) {
     need(c, "comment");
     const t = c.get("tenant");
     const input = await body(c, CreateDocInput);
-    if (input.projectId) await repo.getProject(t.id, input.projectId).then((p) => (!p || p.deletedAt) && fail(404, "not_found", "That project doesn't exist."));
+    if (input.projectId) {
+      const p = await repo.getProject(t.id, input.projectId);
+      if (!p || p.deletedAt) fail(404, "not_found", "That project doesn't exist.");
+      if (p.archived) fail(409, "archived", "This project is archived. Unarchive it to add files.");
+    }
     if (input.itemId) {
       const item = input.projectId ? await repo.getItem(t.id, input.projectId, input.itemId) : undefined;
       if (!item || item.kind !== "file_request") fail(400, "invalid", "Files can only answer a \"file needed\" item in the same project.");
@@ -739,6 +792,9 @@ export function createApp(d: Deps) {
     need(c, "comment");
     const x = await doc(c);
     if (x.uploaded) return c.json(x);
+    // The bytes must really be in storage, at the size the upload link was signed for
+    const size = await d.storage.stat(x.key);
+    if (size !== x.size) fail(409, "not_uploaded", "The file didn't finish uploading. Try again.");
     const ts = now();
     const next: DocumentRecord = { ...x, uploaded: true, version: x.version + 1, updatedAt: ts };
     const ops = [repo.docOp(next, { version: x.version }), repo.auditOp({ tenantId: x.tenantId, actorId: actorId(c), action: "doc.uploaded", target: x.id, summary: `Uploaded "${x.name}"` })];
@@ -772,10 +828,21 @@ export function createApp(d: Deps) {
   // --- helpers ---------------------------------------------------------------
 
   /** The project in :pid within this tenant; trashed projects are gone as far as routes are concerned */
-  async function project(c: Context<Env>) {
+  async function project(c: Context<Env>, allow: { archived?: boolean } = {}) {
     const p = await repo.getProject(c.get("tenant").id, c.req.param("pid")!);
     if (!p || p.deletedAt) fail(404, "not_found", "That project doesn't exist or was deleted.");
+    // Archived projects read as usual but refuse changes, except the routes that unarchive or trash them
+    const reading = c.req.method === "GET" || c.req.method === "HEAD";
+    if (p.archived && !reading && !allow.archived) fail(409, "archived", "This project is archived. Unarchive it to make changes.");
     return p;
+  }
+
+  /** Refuse anyone who isn't an active member of the organization (assignees, project people) */
+  async function activeMembers(tid: string, uids: string[]) {
+    for (const uid of new Set(uids)) {
+      const m = await repo.getMember(tid, uid);
+      if (!m || m.status === "deactivated") fail(400, "not_member", "Choose someone who is in this organization.");
+    }
   }
 
   /** Record an audit event on its own (most writes add theirs to the same transaction instead) */

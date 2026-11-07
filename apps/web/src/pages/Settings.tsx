@@ -84,7 +84,7 @@ export function Settings() {
         <div className="actions" style={{ marginTop: 14 }}>
           <button className="btn btn-primary" disabled={!dirty || busy} onClick={() => void save()}>{busy ? "Saving…" : "Save workflow"}</button>
           {dirty && <button className="btn btn-ghost" onClick={() => setStages(org.stages)}>Undo changes</button>}
-          <span className="muted small">Saving needs an authenticator app or passkey on your account.</span>
+          <span className="muted small">Saving needs a passkey sign-in. Add one on your profile.</span>
         </div>
       )}
       {error && <p className="notice" role="alert">{error}</p>}

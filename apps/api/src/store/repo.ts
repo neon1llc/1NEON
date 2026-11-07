@@ -18,6 +18,8 @@ export const keys = {
   user: (uid: string) => ({ PK: `USER#${uid}`, SK: "PROFILE" }),
   email: (email: string) => ({ PK: `EMAIL#${email.toLowerCase()}`, SK: "USER" }),
   subject: (sub: string) => ({ PK: `SUB#${sub}`, SK: "USER" }),
+  // One sign-in session, by the token family's origin_jti: how strongly it was signed in
+  session: (jti: string) => ({ PK: `SESSION#${jti}`, SK: "META" }),
   // Inside one tenant
   member: (tid: string, uid: string) => ({ PK: `T#${tid}`, SK: `MEMBER#${uid}` }),
   project: (tid: string, pid: string) => ({ PK: `T#${tid}`, SK: `PROJ#${pid}` }),
@@ -111,6 +113,19 @@ export class Repo {
   // Remember a subject after the first email match; relinking is harmless
   async linkSubject(sub: string, uid: string) {
     await this.table.write([{ put: { ...keys.subject(sub), userId: uid }, guard: { always: true } }]);
+  }
+
+  // A session's sign-in method; it lives as long as its refresh token (30 days)
+  async saveSession(jti: string, userId: string, strong: boolean) {
+    const ttl = Math.floor(Date.now() / 1000) + 30 * 24 * 3600;
+    await this.table.write([{ put: { ...keys.session(jti), userId, strong, ttl }, guard: { always: true } }]);
+  }
+
+  // Strong only when this very session signed in with a passkey, for this person
+  async sessionStrong(jti: string | undefined, userId: string) {
+    if (!jti) return false;
+    const row = await this.table.get(keys.session(jti).PK, "META");
+    return row?.userId === userId && row?.strong === true;
   }
 
   // User and email claim land together, so an email maps to exactly one person

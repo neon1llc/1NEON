@@ -7,6 +7,8 @@ import { build } from "esbuild";
 
 // One bundle per Lambda function; names match dist/ folders the deploy workflow zips
 const handlers = ["api", "auth-triggers"];
+// The commit being built, reported by /health so the live version is visible; "dev" locally
+const version = (process.env.GITHUB_SHA ?? "dev").slice(0, 7);
 
 
 // Node 22 ESM for arm64, minified, with linked source maps the deploy leaves out of the zip
@@ -22,6 +24,7 @@ await Promise.all(
       minify: true,
       sourcemap: "linked",
       legalComments: "none",
+      define: { "process.env.APP_VERSION": JSON.stringify(version) },
       // Bundle the AWS SDK too: the runtime's copy lags and lacks the presign helpers.
       // ESM bundles still meet CommonJS `require` inside some dependencies; give them one
       banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
