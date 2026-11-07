@@ -515,3 +515,9 @@ details.faq summary::after { content: "+"; font: 18px var(--mono); color: var(--
 details.faq[open] summary::after { content: "−"; }
 details.faq summary::-webkit-details-marker { display: none; }
 details.faq p { margin: 0 0 12px; }
+/* Item rows: quiet icon actions, and done items muted rather than struck out */
+.icon-act { display: inline-grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: var(--r-sm); background: none; color: var(--muted); cursor: pointer; }
+.icon-act:hover, .icon-act:focus-visible { color: var(--accent); background: var(--accent-soft); }
+.item .title.is-done { color: var(--muted); }
+.pcard .move select { max-width: 120px; }
+@media (max-width: 640px) { .steps { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; } .steps::-webkit-scrollbar { display: none; } .steps span { flex: none; } }

@@ -13,7 +13,7 @@ import type { MemberRow } from "../lib/types.ts";
 
 // Plain descriptions of each access level, used in the invite form and the legend
 const ACCESS: Record<AccessLevel, string> = {
-  viewer: "Viewer: reads, comments, approves",
+  viewer: "Viewer: reads and comments, and approves when named decision maker",
   editor: "Editor: also adds and changes work",
   admin: "Admin: also manages people and settings",
 };
@@ -44,7 +44,7 @@ export function People() {
   return (
     <>
       <h1 className="page-title">People</h1>
-      <p className="lead">Everyone in {org.name} sees the same projects. Access decides what they can change.</p>
+      <p className="lead">Everyone here sees the same projects. Access sets what they can change.</p>
       {canAdmin && <Invite />}
       <div style={{ overflowX: "auto" }}>
         {/* One row per member: who, email, access, and status with its action */}

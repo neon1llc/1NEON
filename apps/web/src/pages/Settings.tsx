@@ -54,7 +54,8 @@ export function Settings() {
         <div><span className="muted small">Address</span> <span className="mono">neon1.tech/1NEON/o/{org.slug}</span></div>
         <div><span className="muted small">Your access</span> <span className="tag">{access}</span></div>
       </div>
-      <h2 className="section-h">Workflow stages <small>the columns on the board</small></h2>
+      <h2 className="section-h">Board stages</h2>
+      <p className="muted small">Each row is a column on the board, in order: its name, its layer, when it's done, and an optional limit on how many projects it holds.</p>
       {!canAdmin && <p className="muted small">Only admins can change stages.</p>}
       {/* One row per stage: name, layer, exit rule, limit, and order controls; phones stack each stage as a card */}
       <div className="stages" data-tour="stages">

@@ -3,7 +3,7 @@
 
 
 import { canApprove, KIND_LAYER, metricProgress, MetricFields, OptionFields, ProjectRole, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
 import { Link, NavLink, useLocation, useParams } from "react-router";
@@ -507,7 +507,7 @@ function ItemRow({ item, path, marker, onToggle, extra }: { item: Item; path: st
         </form>
       ) : (
         <div>
-          <div className="title" style={item.status === "done" ? { textDecoration: "line-through", color: "var(--muted)" } : undefined}>{item.title}</div>
+          <div className={`title${item.status === "done" ? " is-done" : ""}`}>{item.title}</div>
           {item.body && <div className="body">{item.body}</div>}
           {otherEditing && <div className="small" style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}><Avatar id={otherEditing.userId} name={otherEditing.name} editing size={18} /> {otherEditing.name} is editing</div>}
           {extra}
@@ -516,8 +516,8 @@ function ItemRow({ item, path, marker, onToggle, extra }: { item: Item; path: st
       {/* Edit and Remove for editors */}
       {!editing && canWrite ? (
         <span style={{ display: "flex", gap: 6 }}>
-          <button className="linkish small" onClick={() => { setDraft({ title: item.title, body: item.body }); setEditing(true); }}>Edit</button>
-          <button className="linkish small" onClick={() => void remove()} aria-label={`Remove ${item.title}`}>Remove</button>
+          <button className="icon-act" onClick={() => { setDraft({ title: item.title, body: item.body }); setEditing(true); }} aria-label={`Edit ${item.title}`} title="Edit"><Pencil size={15} aria-hidden="true" /></button>
+          <button className="icon-act" onClick={() => void remove()} aria-label={`Remove ${item.title}`} title="Remove"><Trash2 size={15} aria-hidden="true" /></button>
         </span>
       ) : <span />}
       <ConflictDialog

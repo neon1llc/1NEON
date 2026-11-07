@@ -21,7 +21,7 @@ interface DocsResponse {
 /** Upload with a project and layer chosen up front; browse by layer below */
 export function Documents() {
   const { org } = useOrg();
-  useTopBar(<span>{org.name} · Documents</span>, [org.name]);
+  useTopBar(<span>{org.name} · Files</span>, [org.name]);
   const q = useQuery({ queryKey: ["project", org.id, "docs"], queryFn: () => api<DocsResponse>(`/t/${org.id}/docs`) });
   // Where the next upload is filed, and which layer the list shows
   const [projectId, setProjectId] = useState("");
@@ -31,8 +31,8 @@ export function Documents() {
   const projectName = (id?: string) => (id ? q.data?.projects.find((p) => p.id === id)?.key : "General");
   return (
     <>
-      <h1 className="page-title">Documents</h1>
-      <p className="lead">Files for {org.name}, kept in its own private folder and filed by layer: Needs, Execute, Observe, or Normalize. Every upload is scanned for malware before anyone can download it.</p>
+      <h1 className="page-title">Files</h1>
+      <p className="lead">Private to {org.name}. Every file is checked for viruses before anyone can download it.</p>
       {/* Where uploads go, then the drop area */}
       <div className="file-target">
         <label>Project

@@ -19,7 +19,7 @@ export function Workflow() {
   // A move waiting on a reason, and the reason being typed
   const [pending, setPending] = useState<{ move: MoveRequest; message: string }>();
   const [reason, setReason] = useState("");
-  useTopBar(<span>{org.name} · Workflow</span>, [org.name]);
+  useTopBar(<span>{org.name} · Board</span>, [org.name]);
 
   // Ask the API to move; it may need a reason (428) or report that someone moved the card first (409)
   const move = async (m: MoveRequest, why?: string) => {
@@ -47,7 +47,7 @@ export function Workflow() {
   const live = (projects.data ?? []).filter((p) => !p.archived);
   return (
     <>
-      <h1 className="page-title">Workflow</h1>
+      <h1 className="page-title">Board</h1>
       <p className="lead">
         {canWrite ? "Drag a card, or use its Move menu, to change a project's stage." : "Every project and where it stands."}
       </p>
