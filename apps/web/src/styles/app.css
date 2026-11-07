@@ -251,10 +251,10 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
 /* The panel is glass like the site's hero: the shared lens shows the rain through it, lightly
    tinted so the form stays readable */
 .signin .panel { position: relative; z-index: 2; width: min(420px, calc(100% - 32px)); text-align: center; padding: 36px 28px; background: rgba(13, 2, 8, .6); border: 1px solid rgba(0, 255, 65, .16); }
-/* Wordmark: 1NEON folds out to 1portalNeedsExecutionObservationNormalize. The box keeps the short
+/* Wordmark: 1NEON folds out to 1portalNeedsExecuteObserveNormalize. The box keeps the short
    form's height so nothing below moves, and reaches 12px into the panel's padding on each side.
-   Open, the type shrinks until all 41 mono characters (.62em each with the spacing) fit on one line */
-.signin .word { --big: clamp(40px, 8vw, 60px); --fit: min(var(--big), calc((min(420px, 100vw - 32px) - 32px) / 26));
+   Open, the type shrinks until all 35 mono characters (.62em each with the spacing) fit on one line */
+.signin .word { --big: clamp(40px, 8vw, 60px); --fit: min(var(--big), calc((min(420px, 100vw - 32px) - 32px) / 22));
   height: calc(var(--big) * 1.3); margin: 0 -12px 26px; display: flex; align-items: center; justify-content: center;
   font: 600 var(--big) var(--mono); white-space: nowrap; cursor: default; border-radius: 6px; }
 .signin .word .wm { display: inline-flex; align-items: flex-start; line-height: 1.2; font-size: var(--big); letter-spacing: .02em; transition: font-size .6s ease; }

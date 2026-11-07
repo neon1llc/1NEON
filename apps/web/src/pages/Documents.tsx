@@ -32,7 +32,7 @@ export function Documents() {
   return (
     <>
       <h1 className="page-title">Documents</h1>
-      <p className="lead">Files for {org.name}, kept in its own private folder and filed by layer: Needs, Execution, Observation, or Normalize. Every upload is scanned for malware before anyone can download it.</p>
+      <p className="lead">Files for {org.name}, kept in its own private folder and filed by layer: Needs, Execute, Observe, or Normalize. Every upload is scanned for malware before anyone can download it.</p>
       {/* Where uploads go, then the drop area */}
       <div className="file-target">
         <label>Project

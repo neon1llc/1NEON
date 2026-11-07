@@ -125,7 +125,7 @@ describe("themes", () => {
 // The fourth layer is shown as Normalize but keeps its stored key
 describe("layer names", () => {
   it("names the layers in order", () => {
-    expect(Object.values(LAYER_NAMES)).toEqual(["Needs", "Execution", "Observation", "Normalize"]);
+    expect(Object.values(LAYER_NAMES)).toEqual(["Needs", "Execute", "Observe", "Normalize"]);
     expect(LAYER_NAMES.next).toBe("Normalize");
   });
 });

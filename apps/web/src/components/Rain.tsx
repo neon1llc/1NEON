@@ -24,7 +24,7 @@ const SHARED = "/shared/rain.js";
 
 // 1NEON's stages and verbs in gold, neon1's own names in its green
 const WORDS: WordGroup[] = [
-  { weight: 3, color: "#ffd77a", alpha: 0.95, words: ["needs", "execution", "observation", "normalize", "listen", "propose", "decide", "build", "hand over"] },
+  { weight: 3, color: "#ffd77a", alpha: 0.95, words: ["needs", "execute", "observe", "normalize", "listen", "propose", "decide", "build", "hand over"] },
   { weight: 2, color: "#6CFFA8", alpha: 1, glow: 6, words: ["1NEON", "neon1", "onion"] },
 ];
 

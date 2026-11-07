@@ -1,5 +1,5 @@
 // apps/web/src/pages/Project.tsx - One project: an overview, then a tab per layer (Needs,
-// Execution, Observation, Normalize).
+// Execute, Observe, Normalize).
 
 
 import { KIND_LAYER, metricProgress, MetricFields, OptionFields, type DocumentRecord, type Item, type ItemKind, type Layer, type Project } from "@1neon/domain";
@@ -171,7 +171,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
           </>
         )}
         <h2 className="section-h">Measures <small>baseline → target</small></h2>
-        {metrics.length === 0 ? <Empty text="No measures yet. Add them under Observation." /> : <div className="scores">{metrics.map((m) => <MetricCard key={m.id} item={m} />)}</div>}
+        {metrics.length === 0 ? <Empty text="No measures yet. Add them under Observe." /> : <div className="scores">{metrics.map((m) => <MetricCard key={m.id} item={m} />)}</div>}
       </section>
       {/* Side column: health, dates, latest update, flags, people, and archiving */}
       <aside>

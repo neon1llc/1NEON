@@ -90,7 +90,7 @@ type Step = { step: "email" | "choose" | "code" | "totp" | "passkey" | "done" | 
 
 
 // The wordmark's letters, each with the rest of the word it stands for
-const SPELLED = [["1", "portal"], ["N", "eeds"], ["E", "xecution"], ["O", "bservation"], ["N", "ormalize"]] as const;
+const SPELLED = [["1", "portal"], ["N", "eeds"], ["E", "xecute"], ["O", "bserve"], ["N", "ormalize"]] as const;
 
 
 /** 1NEON that spells itself out on one line and folds back: once after load, then on hover, focus,
@@ -128,7 +128,7 @@ function Wordmark() {
           ))}
         </span>
       </h1>
-      <p id="word-meaning" className="sr">1 portal: Needs, Execution, Observation, Normalize</p>
+      <p id="word-meaning" className="sr">1 portal: Needs, Execute, Observe, Normalize</p>
     </>
   );
 }

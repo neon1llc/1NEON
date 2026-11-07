@@ -17,8 +17,8 @@ export const AccessLevel = z.enum(["viewer", "editor", "admin"]);
 export type AccessLevel = z.infer<typeof AccessLevel>;
 
 
-/** The four layers of every project: Needs, Execution, Observation, Normalize. Normalize is stored
- * as "next", its earlier name */
+/** The four layers of every project: Needs, Execute, Observe, Normalize. Normalize is stored
+ * as "next", its earlier name; Execute and Observe keep the keys "execution" and "observation" */
 export const Layer = z.enum(["needs", "execution", "observation", "next"]);
 export type Layer = z.infer<typeof Layer>;
 
@@ -156,13 +156,13 @@ export const ItemKind = z.enum([
   "option", // Needs: a proposal option scored on cost, quality, effort
   "decision", // Needs: immutable record of the approved option
   "file_request", // Needs: "please upload X"
-  "task", // Execution
-  "milestone", // Execution
-  "change", // Execution: change request against the decision
-  "update", // Execution: health update
-  "metric", // Observation
-  "check", // Observation
-  "incident", // Observation
+  "task", // Execute
+  "milestone", // Execute
+  "change", // Execute: change request against the decision
+  "update", // Execute: health update
+  "metric", // Observe
+  "check", // Observe
+  "incident", // Observe
   "handoff", // Normalize: checklist item
   "runbook", // Normalize
   "training", // Normalize

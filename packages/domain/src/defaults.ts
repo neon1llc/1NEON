@@ -23,8 +23,8 @@ export const DEFAULT_STAGES: Stage[] = [
 // key "next" from when the layer had that name, so stored records need no migration
 export const LAYER_NAMES = {
   needs: "Needs",
-  execution: "Execution",
-  observation: "Observation",
+  execution: "Execute",
+  observation: "Observe",
   next: "Normalize",
 } as const;
 
