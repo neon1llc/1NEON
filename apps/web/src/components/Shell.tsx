@@ -215,7 +215,7 @@ function SignIn() {
         {(at.step === "email" || at.step === "failed" || at.step === "not_invited") && (
           <form className="stack" onSubmit={(e) => { e.preventDefault(); void send({ op: "start", email: email.trim(), remember }); }}>
             <label className="sr" htmlFor="email">Your email</label>
-            {/* Remember me fades in beside the email once it looks like a real address */}
+            {/* Remember me opens under the email once it looks like a real address */}
             <div className={`email-row${emailOk ? " ok" : ""}`}>
               <input id="email" type="email" required autoComplete="email webauthn" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
               <label className="remember" aria-hidden={!emailOk}>

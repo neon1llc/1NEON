@@ -271,13 +271,18 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
 /* Each sign-in step's lines sit at one even gap */
 .signin form.stack { display: grid; gap: 12px; }
 .signin form.stack > * { margin: 0; }
-/* The email, with remember me sliding in to its right once the address looks real */
-.signin .email-row { display: flex; align-items: center; gap: 0; }
-.signin .email-row input[type="email"] { flex: 1; min-width: 0; }
-.signin .remember { display: inline-flex; align-items: center; gap: 6px; max-width: 0; overflow: hidden; opacity: 0; white-space: nowrap;
-  font: 12px var(--mono); color: #84A98C; cursor: pointer; transition: max-width .35s ease, opacity .35s ease, margin .35s ease; }
-.signin .email-row.ok .remember { max-width: 130px; opacity: 1; margin-left: 10px; }
-.signin .remember input { width: 16px; height: 16px; min-height: 0; margin: 0; padding: 0; accent-color: var(--neon); }
+/* The email, with remember me opening under it, at its right edge, once the address looks real */
+.signin .email-row { display: grid; justify-items: end; }
+.signin .email-row input[type="email"] { width: 100%; }
+.signin .remember { display: inline-flex; align-items: center; gap: 8px; max-height: 0; overflow: hidden; opacity: 0; margin-top: 0; padding-right: 2px;
+  font: 12px/1 var(--mono); color: #84A98C; cursor: pointer; transition: max-height .35s ease, opacity .35s ease, margin-top .35s ease; }
+.signin .email-row.ok .remember { max-height: 28px; opacity: 1; margin-top: 10px; }
+/* A square neon checkbox, drawn the same in every browser */
+.signin .remember input { appearance: none; -webkit-appearance: none; width: 15px; height: 15px; min-height: 0; margin: 0; padding: 0; flex: none;
+  border: 1px solid rgba(108, 255, 168, .55); border-radius: 3px; background: transparent; display: grid; place-items: center; cursor: pointer; }
+.signin .remember input:checked { background: var(--neon); border-color: var(--neon); }
+.signin .remember input:checked::after { content: ""; width: 4px; height: 8px; border: solid var(--void); border-width: 0 2px 2px 0; transform: translateY(-1px) rotate(45deg); }
+.signin .remember input:focus-visible { outline: 2px solid var(--neon); outline-offset: 2px; }
 .signin .fine a { color: #84A98C; }
 .signin .legal-links { margin-top: 8px; white-space: nowrap; }
 /* Sign-in steps: stacked buttons, and a wide, spaced-out code field */
