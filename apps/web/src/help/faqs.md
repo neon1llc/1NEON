@@ -90,4 +90,4 @@ Open your profile from the menu. You can change your name, title, and theme ther
 Open your profile and choose **Sign out**.
 
 ### Who can I contact?
-Email neon1llc@gmail.com.
+Email hello@neon1.tech.

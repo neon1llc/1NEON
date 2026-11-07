@@ -51,7 +51,7 @@ export function Faqs() {
       <h1 className="page-title">FAQs</h1>
       <Markdown source={FAQ.intro} />
       <input type="search" aria-label="Search the FAQs" placeholder="Search the FAQs" value={q} onChange={(e) => setQ(e.target.value)} className="faq-search" />
-      {topics.length === 0 && <p className="muted">No answers match. Email neon1llc@gmail.com and I'll help.</p>}
+      {topics.length === 0 && <p className="muted">No answers match. Email hello@neon1.tech and I'll help.</p>}
       {topics.map((t) => (
         <section key={t.name}>
           <h2 className="section-h">{t.name}</h2>
