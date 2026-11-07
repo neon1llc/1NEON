@@ -27,11 +27,9 @@ const MeCtx = createContext<Me | null>(null);
 export const useSession = () => useContext(MeCtx)!;
 
 
-/** Apply the saved theme; "system" defers to the device setting */
-function applyTheme(theme: string) {
-  const root = document.documentElement;
-  if (theme === "system") root.removeAttribute("data-theme");
-  else root.setAttribute("data-theme", theme);
+/** Apply a theme to the page; with no attribute the styles show awake */
+export function applyTheme(theme: string) {
+  document.documentElement.setAttribute("data-theme", theme);
 }
 
 

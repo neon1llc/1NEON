@@ -15,7 +15,7 @@ export async function seed(repo: Repo, operatorEmail = "pradeep@neon1.tech") {
   const t0 = day(-30);
   // A demo person; `strong` stands in for a passkey or authenticator app
   const user = (email: string, name: string, title: string, strong = false): User => ({
-    id: newId("u"), email, name, title, phone: "", operator: false, strongAuth: strong, theme: "system", menu: "rail", version: 1, createdAt: t0, updatedAt: t0, updatedBy: "seed",
+    id: newId("u"), email, name, title, phone: "", operator: false, strongAuth: strong, theme: "awake", menu: "rail", version: 1, createdAt: t0, updatedAt: t0, updatedBy: "seed",
   });
   // People: the operator, an Acme admin and editor, and a Harbor contact who hasn't joined yet
   const pradeep = user(operatorEmail, "Pradeep", "Lead engineer", true);

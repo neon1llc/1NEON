@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { can, type Action } from "./access.ts";
 import { initialRanks, rankBetween } from "./rank.ts";
 import { formatClientId, newId, slugify } from "./ids.ts";
-import { metricProgress, MetricFields } from "./model.ts";
+import { metricProgress, MetricFields, themeOf, User } from "./model.ts";
 
 
 // Actors: a plain member, the same member with strong sign-in, and the operator
@@ -100,5 +100,22 @@ describe("metricProgress()", () => {
   });
   it("is undefined without data", () => {
     expect(metricProgress(MetricFields.parse({}))).toBeUndefined();
+  });
+});
+
+
+// Awake is the default, and the old "system" value no longer means device matching
+describe("themes", () => {
+  it("reads stored values, with anything else as awake", () => {
+    expect(themeOf("device")).toBe("device");
+    expect(themeOf("matrix")).toBe("matrix");
+    expect(themeOf("system")).toBe("awake");
+    expect(themeOf(undefined)).toBe("awake");
+  });
+
+  it("gives a new person awake", () => {
+    const t = "2026-11-06T00:00:00.000Z";
+    const u = User.parse({ id: "u1", email: "a@b.co", version: 1, createdAt: t, updatedAt: t, updatedBy: "u1" });
+    expect(u.theme).toBe("awake");
   });
 });

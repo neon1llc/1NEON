@@ -13,13 +13,14 @@ import { Repo } from "./store/repo.ts";
 // Each test gets a fresh in-memory store with the demo data, and calls the app as a given person
 const OP = "pradeep@neon1.tech";
 let app: ReturnType<typeof createApp>;
+let repo: Repo;
 let mailer: MemoryMailer;
 let s: Awaited<ReturnType<typeof seed>>;
 
 
 // Fresh store, seed, and app for every test; dev auth stands in for Cognito
 beforeEach(async () => {
-  const repo = new Repo(new MemoryTable());
+  repo = new Repo(new MemoryTable());
   mailer = new MemoryMailer();
   s = await seed(repo, OP);
   app = createApp({
@@ -65,6 +66,27 @@ describe("identity", () => {
     await call("lee@harborauto.example", "GET", "/me");
     const members = await call(OP, "GET", `/t/${s.harbor.id}/members`);
     expect(members.json.find((m: { email: string }) => m.email === "lee@harborauto.example").status).toBe("joined");
+  });
+});
+
+
+// Awake is everyone's theme until they choose otherwise
+describe("theme", () => {
+  it("reads a stored legacy \"system\" theme as awake", async () => {
+    const uid = (await repo.userIdForEmail("dana@acmedental.example"))!;
+    const stored = (await repo.getUser(uid))!;
+    await repo.saveUser({ ...stored, theme: "system" as never, version: stored.version + 1 }, stored.version);
+    expect((await call("dana@acmedental.example", "GET", "/me")).json.user.theme).toBe("awake");
+  });
+
+  it("keeps device matching once chosen, and refuses the old value", async () => {
+    const me = await call("dana@acmedental.example", "GET", "/me");
+    expect(me.json.user.theme).toBe("awake");
+    const saved = await call("dana@acmedental.example", "PATCH", "/me", { version: me.json.user.version, theme: "device" });
+    expect(saved.json.theme).toBe("device");
+    expect((await call("dana@acmedental.example", "GET", "/me")).json.user.theme).toBe("device");
+    const old = await call("dana@acmedental.example", "PATCH", "/me", { version: saved.json.version, theme: "system" });
+    expect(old.status).toBe(400);
   });
 });
 

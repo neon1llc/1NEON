@@ -4,7 +4,7 @@
 
 
 import type { AuditEvent, DocumentRecord, Item, Member, Project, Tenant, User } from "@1neon/domain";
-import { newId } from "@1neon/domain";
+import { newId, themeOf } from "@1neon/domain";
 import { ConflictError, type Guard, type Row, type TableStore, type WriteOp } from "./types.ts";
 
 
@@ -92,9 +92,10 @@ export class Repo {
 
   // --- People --------------------------------------------------------------
 
-  // One person's profile
+  // One person's profile, with a legacy stored theme read as today's value
   async getUser(uid: string) {
-    return entity<User>(await this.table.get(keys.user(uid).PK, "PROFILE"));
+    const user = entity<User>(await this.table.get(keys.user(uid).PK, "PROFILE"));
+    return user && { ...user, theme: themeOf(user.theme) };
   }
 
   // Email and subject lookups resolve sign-in to our user record

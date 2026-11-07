@@ -61,6 +61,18 @@ export const Tenant = z.object({
 export type Tenant = z.infer<typeof Tenant>;
 
 
+/** Display theme. Awake (light) is the default; "device" follows the device's light or dark setting */
+export const Theme = z.enum(["awake", "device", "matrix"]);
+export type Theme = z.infer<typeof Theme>;
+
+
+/** A stored theme as it reads today. Records from before "device" existed said "system", which now
+ * reads as awake, so people land on the default until they choose device matching again */
+export function themeOf(stored: unknown): Theme {
+  return stored === "device" || stored === "matrix" ? stored : "awake";
+}
+
+
 /** A person, across organizations. Operator and strong sign-in come from sign-in, never from a form */
 export const User = z.object({
   id: id,
@@ -70,7 +82,7 @@ export const User = z.object({
   phone: z.string().trim().max(32).default(""),
   operator: z.boolean().default(false),
   strongAuth: z.boolean().default(false),
-  theme: z.enum(["system", "awake", "matrix"]).default("system"),
+  theme: Theme.default("awake"),
   // "rail" keeps a slim icon menu on screen; "hidden" gives pages the full width behind a menu button
   menu: z.enum(["rail", "hidden"]).default("rail"),
   ...versioned,

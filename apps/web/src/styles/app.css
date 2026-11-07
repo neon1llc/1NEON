@@ -16,10 +16,10 @@
   color-scheme: light;
 }
 
-/* Matrix (dark) follows the device unless the person chose Awake; data-theme="matrix" forces it */
+/* Matrix (dark) only by choice: data-theme="device" follows a dark device setting, data-theme="matrix"
+   always applies, and no choice at all stays awake */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="awake"]) { color-scheme: dark; }
-  :root:not([data-theme="awake"]) { --bg: #0F0A0D; --frame: var(--void); --panel: #15100F; --text: #D6F5DC; --muted: #84A98C;
+  :root[data-theme="device"] { color-scheme: dark; --bg: #0F0A0D; --frame: var(--void); --panel: #15100F; --text: #D6F5DC; --muted: #84A98C;
     --line: rgba(0, 255, 65, .14); --line-strong: rgba(0, 255, 65, .3); --accent: var(--neon); --accent-ink: var(--void);
     --accent-soft: rgba(0, 230, 118, .08); --focus: var(--glow); --shadow: none; --amber: #FFB547; --red: #FF8A80; --ok: #6CFFA8;
     --l1: #008F11; --l2: #00B84F; --l3: #00E676; --l4: #6CFFA8; --badge-ink: var(--void); }

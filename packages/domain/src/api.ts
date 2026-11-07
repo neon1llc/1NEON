@@ -2,7 +2,7 @@
 
 
 import { z } from "zod";
-import { AccessLevel, Health, ItemKind, Layer, ProjectRole, email, id } from "./model.ts";
+import { AccessLevel, Health, ItemKind, Layer, ProjectRole, Theme, email, id } from "./model.ts";
 
 
 // Organizations (operator only)
@@ -120,7 +120,7 @@ export const UpdateMeInput = z.object({
   name: z.string().trim().max(80).optional(),
   title: z.string().trim().max(80).optional(),
   phone: z.string().trim().max(32).optional(),
-  theme: z.enum(["system", "awake", "matrix"]).optional(),
+  theme: Theme.optional(),
   menu: z.enum(["rail", "hidden"]).optional(),
 });
 

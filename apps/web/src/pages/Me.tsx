@@ -5,7 +5,7 @@ import type { User } from "@1neon/domain";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router";
-import { useSession } from "../components/Shell.tsx";
+import { applyTheme, useSession } from "../components/Shell.tsx";
 import { Avatar, useToast } from "../components/ui.tsx";
 import { api, devUser, isDev } from "../lib/api.ts";
 import { problem } from "../lib/hooks.ts";
@@ -57,10 +57,10 @@ export function MePage() {
         <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
           <legend style={{ marginBottom: 8 }}>Theme</legend>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {(["system", "awake", "matrix"] as const).map((t) => (
+            {(["awake", "matrix", "device"] as const).map((t) => (
               <label key={t} className={`chip${draft.theme === t ? " on" : ""}`} style={{ cursor: "pointer" }}>
-                <input type="radio" name="theme" className="sr" checked={draft.theme === t} onChange={() => { setDraft({ ...draft, theme: t }); if (t === "system") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", t); }} />
-                {t === "system" ? "Match my device" : t === "awake" ? "Awake (light)" : "Matrix (dark)"}
+                <input type="radio" name="theme" className="sr" checked={draft.theme === t} onChange={() => { setDraft({ ...draft, theme: t }); applyTheme(t); }} />
+                {t === "device" ? "Match my device" : t === "awake" ? "Awake (light)" : "Matrix (dark)"}
               </label>
             ))}
           </div>
