@@ -1,12 +1,13 @@
-// apps/api/src/mail.ts - neon1-branded email: the neon1 mark over a dark Matrix header and the
-// site's light working surface, with inline styles only, since mail clients strip style sheets.
+// apps/api/src/mail.ts - neon1-branded email: the neon1 mark and a brand-green label over one
+// rounded white card on the site's light surface, with inline styles only, since mail clients
+// strip style sheets.
 
 
 // HTML-escape values placed into an email
 export const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 // Brand colors and type, as on neon1.tech
-const VOID = "#0D0208", NEON = "#6CFFA8", BRAND = "#035704", PAPER = "#F2F4F2", INK = "#12241A", MUTED = "#56665c";
+const BRAND = "#035704", PAPER = "#F2F4F2", INK = "#12241A", MUTED = "#56665c";
 const MONO = "'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace";
 const SANS = "Inter,-apple-system,'Segoe UI',Roboto,sans-serif";
 
@@ -33,7 +34,7 @@ export function sentAt(at: Date) {
 export interface MailParts {
   label: string; // lowercase, after "neon1 ·" at the top, such as "your sign-in code"
   preheader: string;
-  heading: string;
+  heading: string; // for the plain-text sense of the message; the card itself opens with the body
   body: string; // trusted HTML, with any user values already escaped
   code?: string; // shown large in mono; may be Cognito's {####} placeholder
   button?: { label: string; url: string };
@@ -56,24 +57,23 @@ export function branded(p: MailParts) {
   // The sign-off sits inside the card and ends with the send time. Gmail collapses trailing content
   // that repeats earlier messages in a thread, and sign-in codes thread under one subject, so a
   // detail unique to each message keeps the sign-off on screen
-  const signoff = `<p style="margin:26px 0 0;padding-top:16px;border-top:1px solid rgba(18,36,26,.1);font:12px/1.6 ${MONO};color:${MUTED}">${link("neon1", "https://neon1.tech/")} · 1 is glad to be of service.<br>${sentAt(p.at ?? new Date())}</p>`;
-  return `<!doctype html><html><head><meta name="color-scheme" content="light only"><meta name="viewport" content="width=device-width"></head>
+  // Each sign-off line stays on one line, small enough to fit a phone's mail view
+  const line = `white-space:nowrap;font:11px/1.7 ${MONO};color:${MUTED}`;
+  const signoff = `<div style="margin:26px 0 0;padding-top:14px;border-top:1px solid rgba(18,36,26,.1)"><div style="${line}">${link("neon1", "https://neon1.tech/")} · 1 is glad to be of service.</div><div style="${line}">${sentAt(p.at ?? new Date())}</div></div>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light only"><meta name="viewport" content="width=device-width"></head>
 <body style="margin:0;background:${PAPER};font:16px/1.6 ${SANS};color:${INK}">
 <span style="display:none;max-height:0;overflow:hidden">${esc(p.preheader)}</span>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAPER}"><tr><td align="center" style="padding:24px 16px 28px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAPER}"><tr><td align="center" style="padding:20px 10px 24px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px">
 <tr><td style="padding:0 4px 14px">
 <table role="presentation" cellpadding="0" cellspacing="0"><tr>
 <td style="vertical-align:middle;padding-right:10px"><img src="${MARK}" width="32" height="32" alt="neon1" style="display:block;width:32px;height:32px;border:0"></td>
-<td style="vertical-align:middle;font:600 14px ${MONO};letter-spacing:.04em;color:${INK}">neon1 <span style="color:${BRAND}">·</span> ${esc(p.label)}</td>
+<td style="vertical-align:middle;white-space:nowrap;font:600 14px ${MONO};letter-spacing:.04em;color:${BRAND}">neon1 · ${esc(p.label)}</td>
 </tr></table>
 </td></tr>
 <tr><td>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-radius:12px;overflow:hidden;border:1px solid rgba(18,36,26,.1)">
-<tr><td style="background:${VOID};padding:22px 28px">
-<h1 style="margin:0;font:600 22px/1.3 ${MONO};letter-spacing:.01em;color:${NEON}">${esc(p.heading)}</h1>
-</td></tr>
-<tr><td style="background:#fff;padding:28px 28px 24px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;border:1px solid rgba(18,36,26,.1)">
+<tr><td style="background:#fff;border-radius:12px;padding:26px 22px 22px">
 ${p.body}${code}${button}${note}${signoff}
 </td></tr>
 </table>

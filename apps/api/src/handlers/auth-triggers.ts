@@ -43,7 +43,12 @@ export function message(event: CustomMessageTriggerEvent, at = new Date()) {
     heading: kind.heading,
     body: `<p style="margin:0">${kind.lead}</p>`,
     code: event.request.codeParameter,
-    note: "It works for a few minutes. If you didn't ask for it, you can ignore this email.",
+    // Sign-in codes also come as a link that finishes sign-in; the code rides in the fragment,
+    // which browsers never send to a server, and only works where sign-in started
+    button: event.triggerSource === "CustomMessage_Authentication" ? { label: "Sign in with this code", url: `${PORTAL}#code=${event.request.codeParameter}` } : undefined,
+    note: event.triggerSource === "CustomMessage_Authentication"
+      ? "The link works in the browser where you asked for the code. Either way, the code works for a few minutes. If you didn't ask for it, you can ignore this email."
+      : "It works for a few minutes. If you didn't ask for it, you can ignore this email.",
     at,
   });
   return event;

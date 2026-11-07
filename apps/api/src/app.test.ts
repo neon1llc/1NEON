@@ -103,7 +103,7 @@ describe("email", () => {
     expect(mail.html).toContain("your invitation");
     expect(mail.html).toContain('href="https://neon1.tech/1NEON/"');
     expect(mail.html).toContain('href="https://neon1.tech/"');
-    expect(mail.html).toMatch(/1 is glad to be of service\.<br>Sent .+ UTC<\/p>/);
+    expect(mail.html).toMatch(/1 is glad to be of service\.<\/div><div style="white-space:nowrap[^"]*">Sent .+ UTC<\/div>/);
     expect(mail.text).toContain("how it becomes the normal way you work");
   });
 
@@ -114,7 +114,10 @@ describe("email", () => {
     expect(out.response.emailMessage).toMatch(/user-select:all">\{####\}<\/span>/);
     expect(out.response.emailMessage).toContain('the <a href="https://neon1.tech/1NEON/"');
     expect(out.response.emailMessage).toContain("Sent Nov 6, 2026, 8:22 PM UTC");
-    expect(out.response.emailMessage).toContain("neon1 <span");
+    expect(out.response.emailMessage).toContain("neon1 · your sign-in code");
+    // The link finishes sign-in with the code in the fragment, never in a server-visible query
+    expect(out.response.emailMessage).toContain('href="https://neon1.tech/1NEON/#code={####}"');
+    expect(out.response.emailMessage).not.toContain("<h1");
   });
 
   it("leaves messages it doesn't brand to Cognito", () => {

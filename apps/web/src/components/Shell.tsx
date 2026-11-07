@@ -169,6 +169,17 @@ function SignIn() {
     }
     setBusy(false);
   };
+  // A code link from the email: take the code from the fragment, clear it from the address, and
+  // answer at once. The link only works in the browser holding the sign-in that sent the code
+  const [fromLink, setFromLink] = useState(false);
+  useEffect(() => {
+    const m = /^#code=(\d{6,8})$/.exec(location.hash);
+    if (!m) return;
+    history.replaceState(null, "", location.pathname + location.search);
+    setFromLink(true);
+    void send({ op: "answer", kind: "code", value: m[1] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Start over with another email, forgetting the saved step
   const restart = () => { clearStep(session()); setAt({ step: "email" }); setCode(""); };
   // Fade in only on the first sign-in screen after arriving from the site, not on a later return to it
@@ -193,7 +204,7 @@ function SignIn() {
       <div className="panel glass">
         <Wordmark />
         {problem === "not_invited" && <p className="notice" role="alert">That email hasn't been invited yet. Ask your organization's admin, or neon1.</p>}
-        {problem === "failed" && <p className="notice" role="alert">Sign-in didn't finish. Please try again.</p>}
+        {problem === "failed" && <p className="notice" role="alert">{fromLink ? "That link only works in the browser where you asked for the code. Type the code there instead, or start again here." : "Sign-in didn't finish. Please try again."}</p>}
         {/* Step 1: the email */}
         {(at.step === "email" || at.step === "failed" || at.step === "not_invited") && (
           <form onSubmit={(e) => { e.preventDefault(); void send({ op: "start", email: email.trim() }); }}>
