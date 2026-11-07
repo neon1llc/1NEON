@@ -123,7 +123,7 @@ function SignIn() {
       </a>
       <div className="panel glass">
         <h1 className="word">1NEON</h1>
-        <span className="tag">1 portal. Needs. Execution. Observation. Next.</span>
+        <span className="tag">1 portal. Needs. Execution. Observation. Normalize.</span>
         {problem === "not_invited" && <p className="notice" role="alert">That email hasn't been invited yet. Ask your organization's admin, or neon1.</p>}
         {problem === "failed" && <p className="notice" role="alert">Sign-in didn't finish. Please try again.</p>}
         {/* Step 1: the email */}

@@ -2,7 +2,7 @@
   "name": "1neon",
   "private": true,
   "version": "0.1.0",
-  "description": "1 portal. Needs. Execution. Observation. Next.",
+  "description": "1 portal. Needs. Execution. Observation. Normalize.",
   "license": "UNLICENSED",
   "type": "module",
   "engines": { "node": ">=22" },

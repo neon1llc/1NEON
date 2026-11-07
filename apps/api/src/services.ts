@@ -195,7 +195,7 @@ export function inviteEmail(opts: { orgName: string; inviter: string; url: strin
   const text = [
     `${opts.inviter} invited you to ${opts.orgName} on 1NEON, the neon1 project portal.`,
     "",
-    "1NEON keeps your projects with neon1 in one place: what you need, the work, how it's measured, and what comes next.",
+    "1NEON keeps your projects with neon1 in one place: what you need, the work, how it's measured, and how it becomes the normal way you work.",
     "",
     `Join here (sign in with a code sent to this email): ${opts.url}`,
     "",
@@ -206,7 +206,7 @@ export function inviteEmail(opts: { orgName: string; inviter: string; url: strin
   const html = branded({
     preheader: `${opts.inviter} invited you to ${opts.orgName}.`,
     heading: `You're invited to ${opts.orgName}`,
-    body: `<p style="margin:0 0 12px">${esc(opts.inviter)} invited you to <b>${esc(opts.orgName)}</b> on 1NEON.</p><p style="margin:0;color:#56665c">1NEON keeps your projects with neon1 in one place: what you need, the work, how it's measured, and what comes next.</p>`,
+    body: `<p style="margin:0 0 12px">${esc(opts.inviter)} invited you to <b>${esc(opts.orgName)}</b> on 1NEON.</p><p style="margin:0;color:#56665c">1NEON keeps your projects with neon1 in one place: what you need, the work, how it's measured, and how it becomes the normal way you work.</p>`,
     button: { label: `Join ${opts.orgName}`, url: opts.url },
     note: "You'll sign in with a code sent to this email. If you weren't expecting this, you can ignore it.",
   });

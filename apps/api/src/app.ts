@@ -577,7 +577,7 @@ export function createApp(d: Deps) {
     return c.json({ ok: true });
   });
 
-  // Layer items (Needs, Execution, Observation, Next)
+  // Layer items (Needs, Execution, Observation, Normalize)
 
   app.post("/t/:tid/projects/:pid/items", async (c) => {
     const p = await project(c);

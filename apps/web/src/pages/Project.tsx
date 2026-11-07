@@ -1,5 +1,5 @@
 // apps/web/src/pages/Project.tsx - One project: an overview, then a tab per layer (Needs,
-// Execution, Observation, Next).
+// Execution, Observation, Normalize).
 
 
 import { KIND_LAYER, metricProgress, MetricFields, OptionFields, type DocumentRecord, type Item, type ItemKind, type Layer, type Project } from "@1neon/domain";

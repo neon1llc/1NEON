@@ -7,6 +7,7 @@ import { can, type Action } from "./access.ts";
 import { initialRanks, rankBetween } from "./rank.ts";
 import { formatClientId, newId, slugify } from "./ids.ts";
 import { metricProgress, MetricFields, themeOf, User } from "./model.ts";
+import { LAYER_NAMES } from "./defaults.ts";
 
 
 // Actors: a plain member, the same member with strong sign-in, and the operator
@@ -117,5 +118,14 @@ describe("themes", () => {
     const t = "2026-11-06T00:00:00.000Z";
     const u = User.parse({ id: "u1", email: "a@b.co", version: 1, createdAt: t, updatedAt: t, updatedBy: "u1" });
     expect(u.theme).toBe("awake");
+  });
+});
+
+
+// The fourth layer is shown as Normalize but keeps its stored key
+describe("layer names", () => {
+  it("names the layers in order", () => {
+    expect(Object.values(LAYER_NAMES)).toEqual(["Needs", "Execution", "Observation", "Normalize"]);
+    expect(LAYER_NAMES.next).toBe("Normalize");
   });
 });

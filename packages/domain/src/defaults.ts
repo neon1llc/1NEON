@@ -19,12 +19,13 @@ export const DEFAULT_STAGES: Stage[] = [
 ];
 
 
-// Display names. The two N layers share a letter, so badges also use color
+// Display names. The two N layers share a letter, so badges also use color. Normalize keeps the
+// key "next" from when the layer had that name, so stored records need no migration
 export const LAYER_NAMES = {
   needs: "Needs",
   execution: "Execution",
   observation: "Observation",
-  next: "Next",
+  next: "Normalize",
 } as const;
 
 
@@ -70,6 +71,8 @@ const common: TemplateItem[] = [
   { kind: "handoff", title: "Accounts are in the client's name" },
   { kind: "handoff", title: "Admin access transferred to the client" },
   { kind: "handoff", title: "Docs delivered and walked through" },
+  { kind: "handoff", title: "The people who use it are trained on it" },
+  { kind: "handoff", title: "Older tools it replaces retired or merged, and leftovers cleaned up" },
   { kind: "handoff", title: "neon1 access reduced or removed" },
 ];
 

@@ -14,7 +14,7 @@ const ABOUT: Record<Layer, string> = {
   needs: "What you need: requests, discovery, systems and accounts, requirements, options, and decisions.",
   execution: "The work itself: tasks, milestones, changes, and status updates.",
   observation: "Whether it worked: measures against the baseline, checks, and incidents.",
-  next: "What happens after: handoff, runbooks, training, care, and the retrospective.",
+  next: "Making it the normal way of working: handoff, training, runbooks and docs, retiring or merging older tools, cleanup, ongoing care, and the retrospective.",
 };
 
 
