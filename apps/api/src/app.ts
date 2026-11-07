@@ -565,7 +565,7 @@ export function createApp(d: Deps) {
     return c.json(next);
   });
 
-  // Trash a project. Typing its key confirms; nothing is erased here
+  // Trash a project. Typing its key confirms; it's hidden but kept, and erased only on the client's request
   app.delete("/t/:tid/projects/:pid", async (c) => {
     need(c, "delete");
     const p = await project(c);
@@ -573,7 +573,7 @@ export function createApp(d: Deps) {
     if (input.confirm !== p.key) fail(400, "confirm", `Type ${p.key} to confirm.`);
     const ts = now();
     const next: Project = { ...p, deletedAt: ts, archived: true, version: p.version + 1, updatedAt: ts, updatedBy: actorId(c) };
-    await repo.table.write([repo.projectOp(next, { version: input.version }), repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: "project.trashed", target: p.id, summary: `Moved ${p.key} to Trash (30 days)` })]);
+    await repo.table.write([repo.projectOp(next, { version: input.version }), repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: "project.trashed", target: p.id, summary: `Moved ${p.key} to Trash` })]);
     return c.json({ ok: true });
   });
 

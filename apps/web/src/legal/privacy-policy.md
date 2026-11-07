@@ -47,8 +47,8 @@ I disclose information only to these providers, when the law requires it, or to 
 
 Portal data is stored in the United States on AWS, encrypted in transit and at rest. Each organization's data is kept separate from every other organization's.
 
-- **Account and project data:** for as long as your organization uses 1NEON. After your organization's work with neon1 ends, I delete it within 90 days unless your organization asks me to keep it longer, or the law requires me to.
-- **Deleted items:** projects you delete go to a trash for 30 days before they're removed. Deleted files are removed right away. Database backups roll off after 35 days, and earlier copies of deleted or replaced files after 90 days.
+- **Account and project data:** kept as the record of our work together, including after an engagement ends, so either of us can refer back to it. Your organization can ask me to delete it at any time, and I will, unless the law requires me to keep something.
+- **Deleted items:** projects moved to the trash are hidden from everyone but kept, and erased if your organization asks. Deleted files are removed right away. Database backups roll off after 35 days, and earlier copies of deleted or replaced files after 90 days.
 - **Audit records:** kept for up to 3 years.
 
 ## Your choices and rights
