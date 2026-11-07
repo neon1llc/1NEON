@@ -9,6 +9,7 @@ import { api, devUser, HttpError, isDev } from "../lib/api.ts";
 import { passkeyAssertion } from "../lib/passkey.ts";
 import { cleanCode, clearStep, loadStep, saveStep, session } from "../lib/signin.ts";
 import type { Me, OrgResponse, OrgSummary } from "../lib/types.ts";
+import { Offline } from "./Glitch.tsx";
 import { Rain } from "./Rain.tsx";
 import { Avatar, Icon, initials, LayerBadge, LAYERS, layerName } from "./ui.tsx";
 
@@ -54,7 +55,8 @@ export function Root() {
   if (me.isPending) return arriving ? <div className="signin" aria-busy="true" /> : <div className="content muted" aria-busy="true">Loading…</div>;
   if (me.error) {
     if (me.error instanceof HttpError && me.error.status === 401) return <SignIn />;
-    return <div className="content">Couldn't reach 1NEON. Check your connection, then <button className="linkish" onClick={() => me.refetch()}>try again</button>.</div>;
+    // Anything else: the lost-signal screen, worded for a server error when the API answered at all
+    return <Offline onRetry={me.refetch} server={me.error instanceof HttpError} />;
   }
   const data = me.data!;
   // Landing on /1NEON/: the operator starts at All clients, everyone else in their first client organization
