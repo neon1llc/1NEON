@@ -41,6 +41,13 @@ let arriving = document.documentElement.classList.contains("from-site");
 
 
 /** Top-level gate: sign-in, error, first-visit redirect, then the app */
+// Whether this browser was last signed in or out, for the background shown while the session loads
+const LAST_KEY = "1neon.last";
+const lastSeen = () => {
+  try { return localStorage.getItem(LAST_KEY); } catch { return null; }
+};
+
+
 export function Root() {
   const me = useMe();
   const loc = useLocation();
@@ -51,8 +58,19 @@ export function Root() {
   useEffect(() => {
     if (!me.isPending) document.documentElement.classList.remove("from-site");
   }, [me.isPending]);
-  // Arriving from the site, the wait stays black like the site's fade; otherwise a quiet loading line
-  if (me.isPending) return arriving ? <div className="signin" aria-busy="true" /> : <div className="content muted" aria-busy="true">Loading…</div>;
+  // Remember whether this browser was last signed in, so a reload starts on the right background
+  useEffect(() => {
+    const state = me.data ? "in" : me.error instanceof HttpError && me.error.status === 401 ? "out" : undefined;
+    if (state) try { localStorage.setItem(LAST_KEY, state); } catch { /* storage blocked: the light loading line shows */ }
+  }, [me.data, me.error]);
+  if (me.isPending) {
+    // Mid sign-in (iOS often reloads the tab after a trip to the mail app): go straight back to the
+    // code step while the session check runs; it hands over if the person turns out signed in
+    if (loadStep(session())) return <SignIn />;
+    // Arriving from the site, or last seen signed out: wait on the dark sign-in background, not a white page
+    if (arriving || lastSeen() === "out") return <div className="signin" aria-busy="true" />;
+    return <div className="content muted" aria-busy="true">Loading…</div>;
+  }
   if (me.error) {
     if (me.error instanceof HttpError && me.error.status === 401) return <SignIn />;
     // Anything else: the lost-signal screen, worded for a server error when the API answered at all
