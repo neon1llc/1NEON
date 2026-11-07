@@ -65,13 +65,13 @@ export function LayerBadge({ layer }: { layer: Layer }) {
 }
 
 
-/** The 1NEON mark: four rings, an onion from above; the current layer is lit */
+/** The 1NEON mark: four rings, an onion from above, Needs at the core and each layer one ring out; the current layer is lit */
 export function Rings({ active, title }: { active?: Layer; title?: string }) {
-  const r = [28, 20, 12, 4];
+  const r = [4, 12, 20, 28];
   return (
     <svg className="rings" viewBox="0 0 64 64" fill="none" role={title ? "img" : undefined} aria-label={title} aria-hidden={title ? undefined : true}>
       {LAYERS.map((l, i) => (
-        <circle key={l} cx="32" cy="32" r={r[i]} stroke={active === l ? "var(--accent)" : "currentColor"} strokeOpacity={active && active !== l ? 0.3 : 1} strokeWidth={active === l ? 6 : 4} />
+        <circle key={l} cx="32" cy="32" r={r[i]} stroke={active === l ? "var(--accent)" : `var(--l${i + 1})`} strokeOpacity={active && active !== l ? 0.3 : 1} strokeWidth={active === l ? 6 : 4} />
       ))}
     </svg>
   );

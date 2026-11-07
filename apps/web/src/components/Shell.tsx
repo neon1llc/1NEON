@@ -15,7 +15,7 @@ import { FileText as FileIcon, Folder as FolderIcon, Home as HomeIcon, Kanban as
 import { ConfirmDialog } from "./Confirm.tsx";
 import { HelpProvider, useHelp } from "./Help.tsx";
 import { Palette } from "./Palette.tsx";
-import { Avatar, Icon, initials, LayerBadge, LAYERS, layerName } from "./ui.tsx";
+import { Avatar, Icon, initials, LayerBadge, LAYERS, layerName, Rings } from "./ui.tsx";
 
 
 // --- Session -----------------------------------------------------------------
@@ -422,7 +422,7 @@ function FrameBody({ org, all, children }: { org?: OrgSummary; all?: boolean; ch
       <aside className={`side${open ? " open" : ""}`} aria-label="Menu">
         <button className="brand" type="button" onClick={() => setOpen(!open)} aria-expanded={open} title={open ? "Close the menu" : "Open the menu"}>
           <span className="ico mark" aria-hidden="true">
-            <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="5"><circle cx="32" cy="32" r="28" /><circle cx="32" cy="32" r="19" /><circle cx="32" cy="32" r="10" /><circle cx="32" cy="32" r="2" /></svg>
+            <Rings />
           </span>
           <span className="lbl">1NEON</span>
         </button>
