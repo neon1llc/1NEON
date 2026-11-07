@@ -7,6 +7,7 @@ import { createContext, useContext, useEffect, useRef, useState, type CSSPropert
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { api, devUser, HttpError, isDev } from "../lib/api.ts";
 import { passkeyAssertion } from "../lib/passkey.ts";
+import { cleanCode, clearStep, loadStep, saveStep, session } from "../lib/signin.ts";
 import type { Me, OrgResponse, OrgSummary } from "../lib/types.ts";
 import { Rain } from "./Rain.tsx";
 import { Avatar, Icon, initials, LayerBadge, LAYERS, layerName } from "./ui.tsx";
@@ -135,10 +136,12 @@ function Wordmark() {
 
 /** Sign-in on this page: email, then a code by email or a passkey, through the API */
 function SignIn() {
+  // A step saved before a reload comes back if it's still answerable
+  const [saved] = useState(() => loadStep(session()));
   // Invite links carry the email, so it's filled in already
-  const [email, setEmail] = useState(() => new URLSearchParams(location.search).get("email") ?? "");
+  const [email, setEmail] = useState(() => saved?.email ?? new URLSearchParams(location.search).get("email") ?? "");
   const [code, setCode] = useState("");
-  const [at, setAt] = useState<Step>({ step: "email" });
+  const [at, setAt] = useState<Step>(() => (saved ? { step: saved.step, methods: saved.methods } : { step: "email" }));
   const [busy, setBusy] = useState(false);
   const qc = useQueryClient();
   // The Managed Login callback sends people back here with a reason when sign-in can't finish
@@ -155,14 +158,19 @@ function SignIn() {
       let r = await api<Step>("/auth/step", { method: "POST", body });
       if (r.step === "passkey") r = await api<Step>("/auth/step", { method: "POST", body: { op: "answer", kind: "passkey", value: await passkeyAssertion(r.options as never) } });
       setCode("");
+      // Keep a step that waits on the person; finishing or failing forgets it
+      if (r.step === "choose" || r.step === "code" || r.step === "totp") saveStep(session(), { email: email.trim(), step: r.step, methods: r.methods });
+      else clearStep(session());
       if (r.step === "done") await qc.invalidateQueries();
       else setAt(r);
     } catch {
+      clearStep(session());
       setAt({ step: "failed" });
     }
     setBusy(false);
   };
-  const restart = () => { setAt({ step: "email" }); setCode(""); };
+  // Start over with another email, forgetting the saved step
+  const restart = () => { clearStep(session()); setAt({ step: "email" }); setCode(""); };
   // Fade in only on the first sign-in screen after arriving from the site, not on a later return to it
   const [arrive] = useState(() => arriving);
   useEffect(() => { arriving = false; }, []);
@@ -208,7 +216,7 @@ function SignIn() {
             <p className="fine">{at.step === "code" ? <>We sent a code to <b>{email}</b>.</> : "Enter the code from your authenticator app."}</p>
             {at.wrong && <p className="notice" role="alert">That code didn't match. Check it and try again.</p>}
             <label className="sr" htmlFor="code">Code</label>
-            <input id="code" className="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" maxLength={8} required autoFocus placeholder="code" value={code} onChange={(e) => setCode(e.target.value)} />
+            <input id="code" className="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" required autoFocus placeholder="code" value={code} onChange={(e) => setCode(cleanCode(e.target.value))} />
             <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? "Checking…" : "Sign in"}</button>
           </form>
         )}
