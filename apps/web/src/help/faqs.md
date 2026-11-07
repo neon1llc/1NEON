@@ -36,6 +36,12 @@ Every project as a card, in the stage it's in. Columns run left to right from th
 ### How do I start a project?
 Choose **New project**, answer a few short questions, and the project starts with a checklist that fits. You can change everything later.
 
+### What is Coming up on Home?
+The next three weeks as a strip of days. Each mark is something dated: a task's due date, a milestone, or a project's target. Below it the same things are listed by Overdue, This week, Next week, and Later.
+
+### What is Insights?
+Charts made from your organization's own data: open and overdue work, how often things finish on time, days to a decision, work finished per week, activity by day, and where projects sit across the four layers.
+
 ## Decisions and approvals
 
 ### How do I approve an option?

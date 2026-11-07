@@ -9,6 +9,7 @@ import { ToastProvider } from "./components/ui.tsx";
 import { AllLayout, OrgLayout, PlainLayout, Root } from "./components/Shell.tsx";
 import { AllWorkflow } from "./pages/AllWorkflow.tsx";
 import { Documents } from "./pages/Documents.tsx";
+import { Insights } from "./pages/Insights.tsx";
 import { Faqs } from "./pages/Faqs.tsx";
 import { LayerPage } from "./pages/LayerPage.tsx";
 import { Legal } from "./pages/Legal.tsx";
@@ -58,6 +59,7 @@ const router = createBrowserRouter(
             { path: "layer/:layer", element: <LayerPage /> },
             { path: "people", element: <People /> },
             { path: "documents", element: <Documents /> },
+            { path: "insights", element: <Insights /> },
             { path: "settings", element: <Settings /> },
           ],
         },

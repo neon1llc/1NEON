@@ -429,3 +429,23 @@ describe("project updates", () => {
     expect(ws.json.updates[0].title).toBe("Vendor slipped a week");
   });
 });
+
+
+// Coming up and Insights: dated work in order, and charts from the organization's own data
+describe("upcoming and insights", () => {
+  it("lists overdue and upcoming work, and summarizes the organization", async () => {
+    const p = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json.find((x: { key: string }) => x.key === "FLOW-1");
+    const day = (n: number) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+    await call(OP, "POST", `/t/${s.acme.id}/projects/${p.id}/items`, { kind: "task", title: "Late one", dueDate: day(-40) });
+    await call(OP, "POST", `/t/${s.acme.id}/projects/${p.id}/items`, { kind: "milestone", title: "Go live", dueDate: day(10) });
+    const up = await call("raj@acmedental.example", "GET", `/t/${s.acme.id}/upcoming`);
+    const titles = up.json.events.map((e: { title: string }) => e.title);
+    expect(titles).toContain("Late one");
+    expect(titles).toContain("Go live");
+    expect(up.json.events.find((e: { title: string }) => e.title === "Late one").overdue).toBe(true);
+    const ins = await call("raj@acmedental.example", "GET", `/t/${s.acme.id}/insights`);
+    expect(ins.json.weeks).toHaveLength(8);
+    expect(ins.json.work.overdue).toBeGreaterThan(0);
+    expect(Object.values(ins.json.byLayer).reduce((a: number, b) => a + (b as number), 0)).toBe(ins.json.projects);
+  });
+});

@@ -75,13 +75,14 @@ export async function seed(repo: Repo, operatorEmail = "pradeep@neon1.tech") {
   await item(intake, "option", "C. Practice-management add-on", { status: "proposed", body: "Vendor module; less control, monthly per-seat fee.", fields: { cost: "$0 setup + $240/mo", costScore: 3, qualityScore: 3, effortScore: 4, timeline: "2 weeks", recommended: false } });
   await item(intake, "metric", "Intake turnaround", { fields: { category: "performance", unit: "hours", direction: "down", baseline: 62, baselineDate: day(-25).slice(0, 10), target: 4, readings: [] } });
   await item(intake, "metric", "Staff minutes per intake", { fields: { category: "performance", unit: "min", direction: "down", baseline: 24, baselineDate: day(-25).slice(0, 10), target: 8, readings: [] } });
-  await item(intake, "file_request", "Upload a blank copy of the current intake form", { assigneeId: dana.id });
-  await item(intake, "handoff", "Accounts are in the client's name");
+  await item(intake, "file_request", "Upload a blank copy of the current intake form", { assigneeId: dana.id, dueDate: day(-2).slice(0, 10) });
+  await item(intake, "handoff", "Accounts are in the client's name", { dueDate: day(20).slice(0, 10) });
 
   // Acme: work in progress, at risk
   const backup = await project(acme, "SEC-1", "Backups that restore", "build", "at_risk", "Nightly backups exist but have never been restored.", [{ userId: pradeep.id, role: "lead_engineer" }, { userId: dana.id, role: "tech_contact" }], 9);
   await item(backup, "task", "Inventory what's backed up today", { status: "done" });
-  await item(backup, "task", "Restore last night's backup to a test machine", { status: "doing", assigneeId: pradeep.id });
+  await item(backup, "task", "Restore last night's backup to a test machine", { status: "doing", assigneeId: pradeep.id, dueDate: day(3).slice(0, 10) });
+  await item(backup, "milestone", "Weekly restore test running on its own", { dueDate: day(12).slice(0, 10) });
   await item(backup, "update", "Restore test blocked on vendor login", { fields: { health: "at_risk" } });
   await item(backup, "metric", "Days since last successful restore test", { fields: { category: "reliability", unit: "days", direction: "down", baseline: 900, target: 30, readings: [{ at: day(-2).slice(0, 10), value: 900, note: "" }] } });
 

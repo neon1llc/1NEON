@@ -34,7 +34,7 @@ interface Guide {
 
 
 // The pages that have guidance; every signed-in route maps to one
-export type PageKey = "home" | "board" | "projects" | "project" | "newproject" | "layer" | "people" | "files" | "settings" | "me" | "all";
+export type PageKey = "home" | "board" | "projects" | "project" | "newproject" | "layer" | "people" | "files" | "insights" | "settings" | "me" | "all";
 
 
 // Plain words, one idea per line. The tours point at data-tour names that pages put on their elements
@@ -42,9 +42,10 @@ export const GUIDES: Record<PageKey, Guide> = {
   home: {
     title: "Home",
     purpose: "Your starting point: what needs you, and what changed lately.",
-    howto: ["Work through Needs you, top to bottom.", "Open a project to see all of its work.", "Tick off Get started until it disappears."],
+    howto: ["Work through Needs you, top to bottom.", "Coming up shows what's due in the next three weeks.", "Insights in the menu has charts of how work is going."],
     tour: [
       { at: "needs-you", title: "Needs you", text: "Things waiting on you: approvals, tasks, and files to send. Open one to act on it." },
+      { at: "coming-up", title: "Coming up", text: "The next three weeks at a glance: due dates, milestones, and targets. Overdue things are flagged." },
       { at: "get-started", title: "Get started", text: "A short setup checklist. It disappears once everything is done." },
       { at: "activity", title: "Recent activity", text: "What people did lately, newest first." },
     ],
@@ -104,6 +105,17 @@ export const GUIDES: Record<PageKey, Guide> = {
     howto: ["Upload a file and pick its project.", "Files are checked for viruses before anyone can download them."],
     tour: [{ at: "upload", title: "Upload", text: "Drop a file here, or choose one." }],
   },
+  insights: {
+    title: "Insights",
+    purpose: "How work is going, in charts made from your own data.",
+    howto: ["The numbers on top update as work gets done.", "Finished per week shows the pace; Activity shows busy days.", "Projects by layer shows where things sit across N E O N."],
+    tour: [
+      { at: "kpis", title: "At a glance", text: "Open work, on-time rate, days to a decision, and measures at target." },
+      { at: "weekly", title: "Pace", text: "Items finished each week for the last eight weeks." },
+      { at: "activity-map", title: "Activity", text: "One square a day. Darker means busier." },
+      { at: "by-layer", title: "Across the layers", text: "Where projects sit: Needs, Execute, Observe, or Normalize." },
+    ],
+  },
   settings: {
     title: "Settings",
     purpose: "How this organization works: the stages on the board.",
@@ -136,6 +148,7 @@ export function pageKey(path: string): PageKey {
   if (path.includes("/layer/")) return "layer";
   if (path.endsWith("/people")) return "people";
   if (path.endsWith("/documents")) return "files";
+  if (path.endsWith("/insights")) return "insights";
   if (path.endsWith("/settings")) return "settings";
   return "home";
 }

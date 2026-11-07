@@ -6,6 +6,7 @@ import { KIND_LAYER, type ItemKind } from "@1neon/domain";
 import { useQuery } from "@tanstack/react-query";
 import { Check, CircleCheck, FileUp, ListTodo } from "lucide-react";
 import { Link } from "react-router";
+import { ComingUp } from "../components/ComingUp.tsx";
 import { useHelp } from "../components/Help.tsx";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
 import { ago, Health } from "../components/ui.tsx";
@@ -52,6 +53,7 @@ export function WorkspacePage() {
       <p className="lead">{ws.data ? (n ? `${n} ${n === 1 ? "thing needs" : "things need"} you.` : "Nothing needs you right now.") : " "}</p>
 
       <div className="home">
+        <div className="home-main">
         {/* Needs you: the main event, each with the one action it asks for */}
         <section className="card needs" data-tour="needs-you" aria-busy={ws.isPending}>
           <h2 className="section-h">Needs you</h2>
@@ -71,6 +73,8 @@ export function WorkspacePage() {
           </ul>
         </section>
 
+        <ComingUp tid={org.id} base={base} />
+        </div>
         <div className="home-side">
           {/* Setup, until every step is done */}
           {setupLeft > 0 && (

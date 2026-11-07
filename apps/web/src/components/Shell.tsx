@@ -440,6 +440,7 @@ function FrameBody({ org, all, children }: { org?: OrgSummary; all?: boolean; ch
               <Item to={`${base}/workflow`} icon={<Icon name="workflow" />} label="Board" tour="nav-board" />
               <Item to={`${base}/projects`} icon={<Icon name="projects" />} label="Projects" end={false} tour="nav-projects" />
               <Item to={`${base}/documents`} icon={<Icon name="documents" />} label="Files" tour="nav-files" />
+              <Item to={`${base}/insights`} icon={<Icon name="insights" />} label="Insights" tour="nav-insights" />
               <li className="sep" data-tour="nav-layers"><span className="lbl">Layers</span>
                 <ul className="nav">
                   {LAYERS.map((l) => (
