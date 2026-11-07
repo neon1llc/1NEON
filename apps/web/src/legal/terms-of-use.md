@@ -41,4 +41,4 @@ New York law governs these terms, and disputes go to the state or federal courts
 
 ## Contact
 
-NEON1 LLC, New York, NY · [neon1llc@gmail.com](mailto:neon1llc@gmail.com)
+NEON1 LLC, New York, NY · [hello@neon1.tech](mailto:hello@neon1.tech)

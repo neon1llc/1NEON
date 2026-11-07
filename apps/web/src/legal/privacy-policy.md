@@ -75,4 +75,4 @@ If I change this policy in a way that matters, I'll update the effective date an
 
 ## Contact
 
-NEON1 LLC, New York, NY · [neon1llc@gmail.com](mailto:neon1llc@gmail.com)
+NEON1 LLC, New York, NY · [privacy@neon1.tech](mailto:privacy@neon1.tech)
