@@ -14,14 +14,13 @@ modules/
 envs/prod/        state at s3://neon1-tfstate/1neon/prod/terraform.tfstate
 ```
 
-## First-time setup (once, in this order)
+## First-time setup
 
-1. **GitHub roles.** Apply `neon1-aws-infrastructure/github` by hand. It adds `github-1neon-terraform` and `github-1neon-deploy`. Set their ARNs as repository variables `AWS_TERRAFORM_ROLE_ARN` and `AWS_DEPLOY_ROLE_ARN` here. Until then the terraform and deploy workflows skip themselves.
-2. **This stack.** `terraform -chdir=infra/envs/prod init && terraform -chdir=infra/envs/prod apply`. Functions start with placeholders: the API answers 503 and the trigger admits only invites.
-3. **Edge.** Merge the `/1NEON` change in `neon1-aws-infrastructure` so its pipeline applies `site`. It reads `/1neon/prod/app_bucket_domain` and `/1neon/prod/api_domain`.
-4. **Code.** Run the deploy workflow (or push to main). It ships both functions and the web app, then checks `https://neon1.tech/1NEON/api/health`.
-5. **Email.** Ask AWS to move SES out of the sandbox (Account dashboard → Request production access); until then mail reaches verified addresses only. Confirm the alarm subscription email.
-6. **Billing.** Activate the `Project` cost allocation tag so the budget counts 1NEON's spend.
+1. Apply `neon1-aws-infrastructure/github` by hand for the `github-1neon-terraform` and `github-1neon-deploy` roles, and set their ARNs here as the repository variables `AWS_TERRAFORM_ROLE_ARN` and `AWS_DEPLOY_ROLE_ARN`.
+2. Apply this stack: `terraform -chdir=infra/envs/prod init && terraform -chdir=infra/envs/prod apply`.
+3. Apply `neon1-aws-infrastructure/site`, which reads this stack's SSM parameters for the `/1NEON` behaviors.
+4. Push to `main` to ship the functions and the app.
+5. Confirm the alarm subscription email, and activate the `Project` cost allocation tag for the budget.
 
 ## Optional switches
 
