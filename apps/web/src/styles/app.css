@@ -279,6 +279,13 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
 .signin .dev { margin-top: 18px; display: grid; gap: 6px; }
 .signin .dev button { background: rgba(255, 255, 255, .03); border: 1px solid rgba(0, 255, 65, .18); color: #D6F5DC; border-radius: 8px; padding: 8px; cursor: pointer; font: 13px var(--sans); }
 .signin .dev button:hover { border-color: var(--neon); }
+/* Arrival from neon1.tech: the page stays black until the sign-in shows, then the rain is already
+   falling while the logo and panel ease in. Reduced motion turns the animation off below */
+html.from-site, html.from-site body { background: var(--void); }
+.signin.arrive .panel { animation: arrive .6s ease-out .05s backwards; }
+.signin.arrive .n1-bar { animation: arrive-fade .6s ease-out backwards; }
+@keyframes arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes arrive-fade { from { opacity: 0; } to { opacity: 1; } }
 /* Page entrance: a short fade from blur, off for reduced motion. No fill afterwards: a leftover
    filter would pin the fixed menu to the page instead of the screen */
 .wake { animation: wake .9s ease-out backwards; }

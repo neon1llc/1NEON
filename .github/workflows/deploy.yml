@@ -68,14 +68,16 @@ jobs:
             echo "shipped $name"
           done
 
-      # Hashed assets cache for a year; the shell (index.html) is always revalidated
+      # Hashed assets cache for a year; the shell (index.html) and the unhashed arrive.js are always revalidated
       - name: Upload the web app
         working-directory: apps/web/dist
         run: |
-          aws s3 sync 1NEON "s3://$APP_BUCKET/1NEON" --delete --exclude '*.map' --exclude index.html \
+          aws s3 sync 1NEON "s3://$APP_BUCKET/1NEON" --delete --exclude '*.map' --exclude index.html --exclude arrive.js \
             --cache-control 'public, max-age=31536000, immutable'
           aws s3 cp 1NEON/index.html "s3://$APP_BUCKET/1NEON/index.html" \
             --cache-control 'no-cache' --content-type 'text/html; charset=utf-8'
+          aws s3 cp 1NEON/arrive.js "s3://$APP_BUCKET/1NEON/arrive.js" \
+            --cache-control 'no-cache' --content-type 'text/javascript; charset=utf-8'
 
       # Drop cached app files so the new shell and assets show at once
       - name: Invalidate the CDN

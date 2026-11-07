@@ -33,6 +33,10 @@ export function applyTheme(theme: string) {
 }
 
 
+// Set by /arrive.js when someone came from neon1.tech's 1NEON link; the first sign-in screen uses it up
+let arriving = document.documentElement.classList.contains("from-site");
+
+
 /** Top-level gate: sign-in, error, first-visit redirect, then the app */
 export function Root() {
   const me = useMe();
@@ -40,7 +44,12 @@ export function Root() {
   useEffect(() => {
     if (me.data) applyTheme(me.data.user.theme);
   }, [me.data]);
-  if (me.isPending) return <div className="content muted" aria-busy="true">Loading…</div>;
+  // The black page from the site holds only until the first answer; the app then uses its own colors
+  useEffect(() => {
+    if (!me.isPending) document.documentElement.classList.remove("from-site");
+  }, [me.isPending]);
+  // Arriving from the site, the wait stays black like the site's fade; otherwise a quiet loading line
+  if (me.isPending) return arriving ? <div className="signin" aria-busy="true" /> : <div className="content muted" aria-busy="true">Loading…</div>;
   if (me.error) {
     if (me.error instanceof HttpError && me.error.status === 401) return <SignIn />;
     return <div className="content">Couldn't reach 1NEON. <button className="linkish" onClick={() => me.refetch()}>Try again</button></div>;
@@ -154,8 +163,11 @@ function SignIn() {
     setBusy(false);
   };
   const restart = () => { setAt({ step: "email" }); setCode(""); };
+  // Fade in only on the first sign-in screen after arriving from the site, not on a later return to it
+  const [arrive] = useState(() => arriving);
+  useEffect(() => { arriving = false; }, []);
   return (
-    <main className="signin">
+    <main className={`signin${arrive ? " arrive" : ""}`}>
       <Rain panes=".signin .panel, .signin .n1-logo, .rainctl button" />
       <div className="veil" />
       {/* Back to neon1.tech, in the site's own top bar so the logo sits exactly where the site's does */}
