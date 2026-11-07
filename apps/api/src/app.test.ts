@@ -405,7 +405,7 @@ describe("authenticator app", () => {
 // Comments on items: anyone who can comment adds them; only the author or an admin removes one
 describe("comments", () => {
   it("adds, lists with history, and guards removal", async () => {
-    const p = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json[0];
+    const p = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json.find((x: { key: string }) => x.key === "FLOW-1");
     const path = `/t/${s.acme.id}/projects/${p.id}`;
     const item = (await call(OP, "GET", path)).json.items[0];
     const added = await call("dana@acmedental.example", "POST", `${path}/items/${item.id}/comments`, { body: "Can we start Monday?" });
