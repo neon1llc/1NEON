@@ -326,6 +326,13 @@ export type AuditEvent = z.infer<typeof AuditEvent>;
 
 
 /** Metric progress: (latest - baseline) / (target - baseline), clamped to 0..1 */
+/** Which way is better: a target below the baseline always means lower is better, whatever was stored */
+export function betterWhen(m: z.infer<typeof MetricFields>): "up" | "down" {
+  if (m.baseline !== undefined && m.target !== undefined && m.target !== m.baseline) return m.target < m.baseline ? "down" : "up";
+  return m.direction;
+}
+
+
 export function metricProgress(m: z.infer<typeof MetricFields>): number | undefined {
   const latest = m.readings.at(-1)?.value;
   if (latest === undefined || m.baseline === undefined || m.target === undefined) return undefined;

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { can, canApprove, type Action } from "./access.ts";
 import { initialRanks, rankBetween } from "./rank.ts";
 import { formatClientId, newId, slugify } from "./ids.ts";
-import { metricProgress, MetricFields, themeOf, User } from "./model.ts";
+import { betterWhen, metricProgress, MetricFields, themeOf, User } from "./model.ts";
 import { LAYER_NAMES } from "./defaults.ts";
 
 
@@ -146,5 +146,16 @@ describe("canApprove", () => {
     expect(canApprove(person("u_raj"), "admin", []).ok).toBe(true);
     expect(canApprove(person("u_dana"), "editor", []).ok).toBe(false);
     expect(canApprove(person("u_op", true), "admin", []).ok).toBe(false);
+  });
+});
+
+
+
+// A measure whose target is below its baseline reads as "lower is better", even if stored as up
+describe("betterWhen", () => {
+  it("follows baseline and target over the stored direction", () => {
+    expect(betterWhen(MetricFields.parse({ baseline: 20, target: 2, readings: [] }))).toBe("down");
+    expect(betterWhen(MetricFields.parse({ baseline: 2, target: 20, direction: "down", readings: [] }))).toBe("up");
+    expect(betterWhen(MetricFields.parse({ direction: "down", readings: [] }))).toBe("down");
   });
 });

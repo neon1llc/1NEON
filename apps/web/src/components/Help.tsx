@@ -211,15 +211,18 @@ export function HelpProvider({ me, children }: { me: Me; children: ReactNode }) 
   const key = pageKey(loc.pathname);
 
   // The person's tour choice is kept with their account, so it follows them to every device
+  const [name, setName] = useState("");
   const saveTour = useCallback(async (tour: NonNullable<User["tour"]>) => {
     const cur = qc.getQueryData<Me>(["me"]) ?? me;
+    // A name typed in the welcome dialog is saved with the choice, so people show by name to others
+    const named = !cur.user.name && name.trim() ? { name: name.trim() } : {};
     try {
-      const user = await api<User>("/me", { method: "PATCH", body: { version: cur.user.version, tour } });
+      const user = await api<User>("/me", { method: "PATCH", body: { version: cur.user.version, tour, ...named } });
       qc.setQueryData(["me"], { ...cur, user });
     } catch {
       // Not saved: the offer simply comes back next time
     }
-  }, [me, qc]);
+  }, [me, qc, name]);
 
   // The whole tour; finishing or closing it counts as done, since ? brings it back
   const welcomeTour = useCallback(() => {
@@ -265,6 +268,12 @@ export function HelpProvider({ me, children }: { me: Me; children: ReactNode }) 
         <p className="eyebrow">Welcome to 1NEON</p>
         <h2>New here? Take the 1-minute tour.</h2>
         <p className="muted">It shows where things are and what to do first.</p>
+        {!me.user.name && (
+          <div style={{ margin: "12px 0" }}>
+            <label htmlFor="welcome-name">Your name, so others know who you are</label>
+            <input id="welcome-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} autoComplete="name" placeholder="First and last name" />
+          </div>
+        )}
         <div className="actions stack-sm">
           <button className="btn btn-primary" onClick={welcomeTour}>Start the tour</button>
           <button className="btn btn-ghost" onClick={() => { setWelcome(false); void saveTour("later"); }}>Remind me next time</button>

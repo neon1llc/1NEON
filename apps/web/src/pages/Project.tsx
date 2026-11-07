@@ -2,7 +2,7 @@
 // Execute, Observe, Normalize).
 
 
-import { canApprove, KIND_LAYER, metricProgress, MetricFields, OptionFields, ProjectRole, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
+import { betterWhen, canApprove, KIND_LAYER, metricProgress, MetricFields, OptionFields, ProjectRole, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
 import { ArrowRight, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
@@ -333,7 +333,7 @@ function MetricCard({ item, onReading }: { item: Item; onReading?: (value: numbe
       <div className="val">{latest ? `${latest.value}${m.unit ? ` ${m.unit}` : ""}` : m.baseline !== undefined ? `${m.baseline}${m.unit ? ` ${m.unit}` : ""}` : "–"}</div>
       <div className="range">{latest ? `latest, ${latest.at}` : "baseline, no readings yet"}</div>
       <div className="range">
-        {m.baseline ?? "?"} → {m.target ?? "?"} {m.unit} · {m.direction === "down" ? "lower is better" : "higher is better"}
+        {m.baseline ?? "?"} → {m.target ?? "?"} {m.unit} · {betterWhen(m) === "down" ? "lower is better" : "higher is better"}
       </div>
       {pct !== undefined && <div className="progress" role="img" aria-label={`${Math.round(pct * 100)} percent of the way`}><i style={{ width: `${pct * 100}%` }} /></div>}
       {/* Editors log a reading dated today */}

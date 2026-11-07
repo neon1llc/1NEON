@@ -556,7 +556,7 @@ export function createApp(d: Deps) {
     };
     if (input.example) push({ kind: "discovery", title: "One real example of how it works today", body: input.example, status: "done" });
     for (const ti of tpl.items) push({ kind: ti.kind, title: ti.title, body: ti.body ?? "", fields: ti.fields ?? {} });
-    for (const m of input.metrics) push({ kind: "metric", title: m.title, fields: { unit: m.unit, baseline: m.baseline, target: m.target, baselineDate: m.baseline !== undefined ? ts.slice(0, 10) : undefined, readings: [] } });
+    for (const m of input.metrics) push({ kind: "metric", title: m.title, fields: { unit: m.unit, baseline: m.baseline, target: m.target, direction: m.baseline !== undefined && m.target !== undefined && m.target < m.baseline ? "down" : "up", baselineDate: m.baseline !== undefined ? ts.slice(0, 10) : undefined, readings: [] } });
     // A project and its starter items land together, or not at all (in batches DynamoDB accepts)
     await repo.table.write([repo.projectOp(project, { create: true }), repo.auditOp({ tenantId: t.id, actorId: by, action: "project.created", target: project.id, summary: `Created ${project.key} ${project.name}` })]);
     for (let i = 0; i < items.length; i += 25) await repo.table.write(items.slice(i, i + 25).map((it) => repo.itemOp(it, { create: true })));
