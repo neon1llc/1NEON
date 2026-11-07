@@ -4,13 +4,15 @@
 
 
 import type { CustomMessageTriggerEvent, PreSignUpTriggerEvent } from "aws-lambda";
-import { branded } from "../mail.ts";
+import { branded, link } from "../mail.ts";
 import { DynamoTable } from "../store/dynamo.ts";
 import { Repo } from "../store/repo.ts";
 
 
 // TABLE_NAME is set by Terraform on the trigger function
 const repo = new Repo(new DynamoTable(process.env.TABLE_NAME!));
+// The sign-in page that codes are entered on
+const PORTAL = "https://neon1.tech/1NEON/";
 
 
 /** One function serves both triggers; Cognito names the trigger in triggerSource */
@@ -20,26 +22,29 @@ export async function handler(event: PreSignUpTriggerEvent | CustomMessageTrigge
 }
 
 
-// The wording for each kind of code Cognito sends; {####} is where Cognito puts the code
-const CODES: Record<string, { subject: string; heading: string; lead: string }> = {
-  CustomMessage_Authentication: { subject: "Your 1NEON sign-in code", heading: "Your sign-in code", lead: "Enter this code on the 1NEON sign-in page." },
-  CustomMessage_ForgotPassword: { subject: "Your 1NEON reset code", heading: "Your reset code", lead: "Enter this code to choose a new password." },
-  CustomMessage_UpdateUserAttribute: { subject: "Confirm your new email for 1NEON", heading: "Confirm your new email", lead: "Enter this code in 1NEON to confirm this address." },
-  CustomMessage_VerifyUserAttribute: { subject: "Confirm your email for 1NEON", heading: "Confirm your email", lead: "Enter this code in 1NEON to confirm this address." },
+// The wording for each kind of code Cognito sends; {####} is where Cognito puts the code. Subjects
+// carry no code: Cognito documents the placeholder for the message body only
+const CODES: Record<string, { subject: string; label: string; heading: string; lead: string }> = {
+  CustomMessage_Authentication: { subject: "Your portal sign-in code", label: "your sign-in code", heading: "Your sign-in code", lead: `Enter this code on the ${link("1NEON", PORTAL)} sign-in page.` },
+  CustomMessage_ForgotPassword: { subject: "Your 1NEON reset code", label: "your reset code", heading: "Your reset code", lead: "Enter this code to choose a new password." },
+  CustomMessage_UpdateUserAttribute: { subject: "Confirm your new email for 1NEON", label: "confirm your email", heading: "Confirm your new email", lead: `Enter this code in ${link("1NEON", PORTAL)} to confirm this address.` },
+  CustomMessage_VerifyUserAttribute: { subject: "Confirm your email for 1NEON", label: "confirm your email", heading: "Confirm your email", lead: `Enter this code in ${link("1NEON", PORTAL)} to confirm this address.` },
 };
 
 
 /** Custom message: put the code in the branded design; any other message keeps Cognito's default */
-function message(event: CustomMessageTriggerEvent) {
+export function message(event: CustomMessageTriggerEvent, at = new Date()) {
   const kind = CODES[event.triggerSource];
   if (!kind) return event;
   event.response.emailSubject = kind.subject;
   event.response.emailMessage = branded({
+    label: kind.label,
     preheader: `${kind.heading}: it works for a few minutes.`,
     heading: kind.heading,
     body: `<p style="margin:0">${kind.lead}</p>`,
     code: event.request.codeParameter,
     note: "It works for a few minutes. If you didn't ask for it, you can ignore this email.",
+    at,
   });
   return event;
 }

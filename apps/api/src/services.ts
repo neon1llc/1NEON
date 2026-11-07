@@ -13,7 +13,7 @@ import {
 import { DeleteObjectCommand, GetObjectCommand, GetObjectTaggingCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { branded, esc } from "./mail.ts";
+import { branded, esc, link, sentAt } from "./mail.ts";
 
 
 /** The identity directory: create sign-in accounts for invitees and check strong sign-in */
@@ -181,34 +181,39 @@ export class MemoryDirectory implements Directory {
 // Keeps sent mail in memory so tests can read invites
 export class MemoryMailer implements Mailer {
   // Every message sent, oldest first
-  readonly sent: { to: string; subject: string; text: string }[] = [];
+  readonly sent: { to: string; subject: string; text: string; html: string }[] = [];
   // Record the message instead of sending it
-  async send(to: string, subject: string, text: string) {
-    this.sent.push({ to, subject, text });
+  async send(to: string, subject: string, text: string, html: string) {
+    this.sent.push({ to, subject, text, html });
   }
 }
 
 
 /** The invite email: plain text plus the branded HTML version */
-export function inviteEmail(opts: { orgName: string; inviter: string; url: string }) {
+export function inviteEmail(opts: { orgName: string; inviter: string; url: string; at?: Date }) {
+  const at = opts.at ?? new Date();
   const subject = `You're invited to ${opts.orgName} on 1NEON`;
+  const about = "1NEON keeps your projects with neon1 in one place: what you need, the work, how it's measured, and how it becomes the normal way you work.";
   const text = [
     `${opts.inviter} invited you to ${opts.orgName} on 1NEON, the neon1 project portal.`,
     "",
-    "1NEON keeps your projects with neon1 in one place: what you need, the work, how it's measured, and how it becomes the normal way you work.",
+    about,
     "",
     `Join here (sign in with a code sent to this email): ${opts.url}`,
     "",
     "If you weren't expecting this, you can ignore it.",
     "",
     "neon1 · 1 is glad to be of service.",
+    sentAt(at),
   ].join("\n");
   const html = branded({
+    label: "your invitation",
     preheader: `${opts.inviter} invited you to ${opts.orgName}.`,
     heading: `You're invited to ${opts.orgName}`,
-    body: `<p style="margin:0 0 12px">${esc(opts.inviter)} invited you to <b>${esc(opts.orgName)}</b> on 1NEON.</p><p style="margin:0;color:#56665c">1NEON keeps your projects with neon1 in one place: what you need, the work, how it's measured, and how it becomes the normal way you work.</p>`,
+    body: `<p style="margin:0 0 12px">${esc(opts.inviter)} invited you to <b>${esc(opts.orgName)}</b> on ${link("1NEON", "https://neon1.tech/1NEON/")}.</p><p style="margin:0;color:#56665c">${esc(about)}</p>`,
     button: { label: `Join ${opts.orgName}`, url: opts.url },
     note: "You'll sign in with a code sent to this email. If you weren't expecting this, you can ignore it.",
+    at,
   });
   return { subject, text, html };
 }

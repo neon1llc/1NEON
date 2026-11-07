@@ -3,7 +3,9 @@
 
 
 import { beforeEach, describe, expect, it } from "vitest";
+import type { CustomMessageTriggerEvent } from "aws-lambda";
 import { createApp } from "./app.ts";
+import { message } from "./handlers/auth-triggers.ts";
 import { seed } from "./seed.ts";
 import { MemoryDirectory, MemoryMailer, MemoryStorage } from "./services.ts";
 import { MemoryTable } from "./store/memory.ts";
@@ -87,6 +89,37 @@ describe("theme", () => {
     expect((await call("dana@acmedental.example", "GET", "/me")).json.user.theme).toBe("device");
     const old = await call("dana@acmedental.example", "PATCH", "/me", { version: saved.json.version, theme: "system" });
     expect(old.status).toBe(400);
+  });
+});
+
+
+// Branded email: the mark once, subtle links, a copyable code, and a sign-off Gmail won't collapse
+describe("email", () => {
+  it("sends the invite with the mark, the portal link, and a timed sign-off", async () => {
+    await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/members/invite`, { people: [{ email: "x@y.example" }] });
+    const mail = mailer.sent.at(-1)!;
+    expect(mail.html.match(/neon1-mark\.png/g)).toHaveLength(1);
+    expect(mail.html).toContain('alt="neon1"');
+    expect(mail.html).toContain("your invitation");
+    expect(mail.html).toContain('href="https://neon1.tech/1NEON/"');
+    expect(mail.html).toContain('href="https://neon1.tech/"');
+    expect(mail.html).toMatch(/1 is glad to be of service\.<br>Sent .+ UTC<\/p>/);
+    expect(mail.text).toContain("how it becomes the normal way you work");
+  });
+
+  it("puts the sign-in code in one selectable piece under a plain subject", () => {
+    const event = { triggerSource: "CustomMessage_Authentication", request: { codeParameter: "{####}", userAttributes: {} }, response: {} } as unknown as CustomMessageTriggerEvent;
+    const out = message(event, new Date("2026-11-06T20:22:00Z"));
+    expect(out.response.emailSubject).toBe("Your portal sign-in code");
+    expect(out.response.emailMessage).toMatch(/user-select:all">\{####\}<\/span>/);
+    expect(out.response.emailMessage).toContain('the <a href="https://neon1.tech/1NEON/"');
+    expect(out.response.emailMessage).toContain("Sent Nov 6, 2026, 8:22 PM UTC");
+    expect(out.response.emailMessage).toContain("neon1 <span");
+  });
+
+  it("leaves messages it doesn't brand to Cognito", () => {
+    const event = { triggerSource: "CustomMessage_AdminCreateUser", request: { codeParameter: "{####}", userAttributes: {} }, response: {} } as unknown as CustomMessageTriggerEvent;
+    expect(message(event).response.emailMessage).toBeUndefined();
   });
 });
 
