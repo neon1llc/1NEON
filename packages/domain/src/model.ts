@@ -75,6 +75,10 @@ export function themeOf(stored: unknown): Theme {
 
 
 /** A person, across organizations. Operator and strong sign-in come from sign-in, never from a form */
+/** Where someone is with the welcome tour; missing means they haven't seen it */
+export const Tour = z.enum(["new", "later", "done"]);
+
+
 export const User = z.object({
   id: id,
   email: email,
@@ -86,6 +90,8 @@ export const User = z.object({
   theme: Theme.default("awake"),
   // "rail" keeps a slim icon menu on screen; "hidden" gives pages the full width behind a menu button
   menu: z.enum(["rail", "hidden"]).default("rail"),
+  // The welcome tour: not yet seen, asked to see it at the next sign-in, or finished or skipped
+  tour: Tour.optional(),
   ...versioned,
 });
 export type User = z.infer<typeof User>;

@@ -35,7 +35,7 @@ export function LayerPage() {
   return (
     <>
       <h1 className="page-title" style={{ display: "flex", gap: 12, alignItems: "center" }}><Rings active={l} title={layerName(l)} />{layerName(l)}</h1>
-      <p className="lead">{ABOUT[l]}</p>
+      <p className="lead" data-tour="layer-list">{ABOUT[l]}</p>
       {/* A section per stage in this layer, links opening each project on this layer's tab */}
       {stages.map((s) => {
         const list = here.filter((p) => p.stageId === s.id);

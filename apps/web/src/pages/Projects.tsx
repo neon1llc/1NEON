@@ -27,7 +27,7 @@ export function Projects() {
       {/* Title and the New project action for editors */}
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <h1 className="page-title" style={{ marginRight: "auto" }}>Projects</h1>
-        {canWrite && <Link className="btn btn-primary" to={`/o/${summary.slug}/projects/new`}>New project</Link>}
+        {canWrite && <Link className="btn btn-primary" data-tour="new-project" to={`/o/${summary.slug}/projects/new`}>New project</Link>}
       </div>
       {/* Search and the archived switch */}
       <div style={{ display: "flex", gap: 12, margin: "8px 0 16px", flexWrap: "wrap", alignItems: "center" }}>
@@ -41,7 +41,7 @@ export function Projects() {
         <Empty text={q ? "No project matches that search." : "No projects yet."} action={canWrite && !q && <Link className="btn btn-primary" to={`/o/${summary.slug}/projects/new`}>Start the first one</Link>} />
       )}
       {/* One row per project: key and name, stage with its days, and health */}
-      <div className="rows">
+      <div className="rows" data-tour="project-list">
         {list.map((p) => {
           const s = stage.get(p.stageId);
           return (

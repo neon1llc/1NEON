@@ -83,7 +83,7 @@ export function NewProject() {
     <>
       <h1 className="page-title">New project</h1>
       {/* Progress through the steps; the current one is marked for screen readers */}
-      <div className="steps" aria-label="Steps">
+      <div className="steps" aria-label="Steps" data-tour="wizard">
         {STEPS.map((s, i) => (
           <span key={s} className={i === step ? "on" : i < step ? "done" : ""} aria-current={i === step ? "step" : undefined}>{i + 1}. {s}</span>
         ))}

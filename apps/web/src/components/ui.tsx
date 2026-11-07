@@ -135,7 +135,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 
 /** A native modal dialog: focus trapping, Escape, and the backdrop come from the browser */
-export function Dialog({ open, onClose, children, label }: { open: boolean; onClose: () => void; children: ReactNode; label: string }) {
+export function Dialog({ open, onClose, children, label, className }: { open: boolean; onClose: () => void; children: ReactNode; label: string; className?: string }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
@@ -144,8 +144,9 @@ export function Dialog({ open, onClose, children, label }: { open: boolean; onCl
     if (!open && d.open) d.close();
   }, [open]);
   return (
-    <dialog ref={ref} aria-label={label} onClose={onClose} onCancel={onClose}>
-      {open && children}
+    // A tap on the backdrop (the dialog element itself, outside its content) closes it
+    <dialog ref={ref} aria-label={label} className={className} onClose={onClose} onCancel={onClose} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      {open && <div className="dlg">{children}</div>}
     </dialog>
   );
 }

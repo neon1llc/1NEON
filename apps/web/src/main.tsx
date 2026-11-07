@@ -6,9 +6,10 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
 import { ToastProvider } from "./components/ui.tsx";
-import { AllLayout, OrgLayout, Root } from "./components/Shell.tsx";
+import { AllLayout, OrgLayout, PlainLayout, Root } from "./components/Shell.tsx";
 import { AllWorkflow } from "./pages/AllWorkflow.tsx";
 import { Documents } from "./pages/Documents.tsx";
+import { Faqs } from "./pages/Faqs.tsx";
 import { LayerPage } from "./pages/LayerPage.tsx";
 import { Legal } from "./pages/Legal.tsx";
 import { MePage } from "./pages/Me.tsx";
@@ -36,6 +37,9 @@ const router = createBrowserRouter(
     { path: "privacy", element: <Legal doc="privacy" /> },
     { path: "terms", element: <Legal doc="terms" /> },
     { path: "cookies", element: <Legal doc="cookies" /> },
+    { path: "faqs", element: <Faqs /> },
+    { path: "faq", element: <Navigate to="/faqs" replace /> },
+    { path: "help", element: <Navigate to="/faqs" replace /> },
     {
       path: "/",
       element: <Root />,
@@ -58,7 +62,7 @@ const router = createBrowserRouter(
           ],
         },
         { path: "all", element: <AllLayout />, children: [{ index: true, element: <Navigate to="workflow" replace /> }, { path: "workflow", element: <AllWorkflow /> }] },
-        { path: "me", element: <MePage /> },
+        { element: <PlainLayout />, children: [{ path: "me", element: <MePage /> }] },
         { path: "*", element: <NotFound /> },
       ],
     },

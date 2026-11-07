@@ -2,10 +2,11 @@
 // Execute, Observe, Normalize).
 
 
-import { KIND_LAYER, metricProgress, MetricFields, OptionFields, type DocumentRecord, type Item, type ItemKind, type Layer, type Project } from "@1neon/domain";
+import { canApprove, KIND_LAYER, metricProgress, MetricFields, OptionFields, ProjectRole, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
+import { ArrowRight } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
-import { Link, NavLink, useParams } from "react-router";
+import { Link, NavLink, useLocation, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerName, ago, daysSince, useToast } from "../components/ui.tsx";
 import { api, HttpError } from "../lib/api.ts";
@@ -75,13 +76,15 @@ export function ProjectPage() {
         {p.archived && <span className="tag warn">archived</span>}
       </h1>
       {/* Visible stages, with the current one marked for screen readers */}
-      <div className="steps" aria-label="Stage">
+      <div className="steps" aria-label="Stage" data-tour="stage">
         {org.stages.filter((s) => !s.hidden).map((s, i) => (
           <span key={s.id} className={s.id === p.stageId ? "on" : i < stageAt ? "done" : ""} aria-current={s.id === p.stageId ? "step" : undefined}>{s.name}</span>
         ))}
       </div>
+      {/* What to do now, worked out from the stage and the items */}
+      <NextStep project={p} items={items} stage={org.stages[stageAt]} base={base} />
       {/* Overview, then one tab per layer with its item count */}
-      <nav className="tabs" aria-label="Project sections">
+      <nav className="tabs" aria-label="Project sections" data-tour="layers">
         <NavLink to={base} end className={() => (tab === "overview" ? "active" : "")}>Overview</NavLink>
         {LAYERS.map((l) => (
           <NavLink key={l} to={`${base}/${l}`}><LayerBadge layer={l} />{layerName(l)} <span className="muted">{count(l)}</span></NavLink>
@@ -89,6 +92,47 @@ export function ProjectPage() {
       </nav>
       {tab === "overview" ? <Overview project={p} items={items} /> : LAYERS.includes(tab as Layer) ? <LayerTab layer={tab as Layer} project={p} items={items} docs={detail.data.docs} edits={detail.data.edits} /> : <Empty text="That section doesn't exist." />}
     </>
+  );
+}
+
+
+/** The one thing to do next on this project, and who it's waiting on */
+function NextStep({ project: p, items, stage, base }: { project: Project; items: Item[]; stage?: Stage; base: string }) {
+  const { org, access } = useOrg();
+  const me = useSession();
+  const members = useMembers(org.id);
+  const names = new Map(members.data?.map((m) => [m.userId, m.name || m.email]) ?? []);
+  const actor = { userId: me.user.id, operator: me.operator, strongAuth: false };
+  const proposed = items.filter((i) => i.kind === "option" && i.status === "proposed");
+  const files = items.filter((i) => i.kind === "file_request" && i.status !== "done");
+  const mine = items.filter((i) => i.assigneeId === me.user.id && i.status !== "done");
+  const deciders = p.people.filter((x) => x.role === "decision_maker").map((x) => names.get(x.userId) ?? "the decision maker");
+  // The most pressing step first: a decision, then files, then the caller's own work, then the stage's goal
+  let text: ReactNode;
+  let action: { to: string; label: string } | undefined;
+  if (proposed.length && canApprove(actor, access, p.people).ok) {
+    text = <>Choose an option: {proposed.length} {proposed.length === 1 ? "is" : "are"} ready for your approval.</>;
+    action = { to: `${base}/needs#options`, label: "Compare options" };
+  } else if (proposed.length) {
+    text = <>Waiting on {deciders.length ? deciders.join(" or ") : "an admin of the client"} to choose an option.</>;
+    action = { to: `${base}/needs#options`, label: "See options" };
+  } else if (files.length && !me.operator) {
+    text = <>Send {files.length} {files.length === 1 ? "file" : "files"} so the work can go on.</>;
+    action = { to: `${base}/needs#files`, label: "Upload" };
+  } else if (mine.length) {
+    text = <>You have {mine.length} open {mine.length === 1 ? "item" : "items"} here.</>;
+    action = { to: `${base}/${KIND_LAYER[mine[0]!.kind]}#item-${mine[0]!.id}`, label: "Open" };
+  } else if (stage?.exit) {
+    text = <>To finish <b>{stage.name}</b>: {stage.exit.charAt(0).toLowerCase() + stage.exit.slice(1)}.</>;
+  } else {
+    text = <>Nothing needs doing right now.</>;
+  }
+  return (
+    <div className="next-step" data-tour="next-step" role="status">
+      <span className="eyebrow">Next step</span>
+      <p>{text}</p>
+      {action && <Link className="btn btn-primary btn-sm" to={action.to}>{action.label} <ArrowRight size={14} aria-hidden="true" /></Link>}
+    </div>
   );
 }
 
@@ -120,6 +164,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ summary: p.summary, outcome: p.outcome });
   const [conflict, setConflict] = useState<Project>();
+  const [peopleOpen, setPeopleOpen] = useState(false);
   // The latest decision, measures, and status update feed the overview
   const decision = items.filter((i) => i.kind === "decision").at(-1);
   const metrics = items.filter((i) => i.kind === "metric");
@@ -190,8 +235,9 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
           {p.flags.length > 0 && <div className="small"><span className="tag warn">sensitive data: {p.flags.join(", ")}</span></div>}
         </div>
         {/* Project roles, with a fallback for people who left the organization */}
-        <h2 className="section-h">People</h2>
-        {p.people.length === 0 ? <p className="muted small">No roles assigned yet.</p> : (
+        <h2 className="section-h">People {canWrite && <button className="link small" onClick={() => setPeopleOpen(true)}>Edit</button>}</h2>
+        {!p.people.some((x) => x.role === "decision_maker") && <p className="notice small">No decision maker yet. {canWrite ? "Name one, so options can be approved." : "An admin of your organization can approve options."}</p>}
+        {p.people.length === 0 ? <p className="muted small">No one on this project yet.</p> : (
           <div className="rows">
             {p.people.map((x) => (
               <div className="row" key={x.userId} style={{ gridTemplateColumns: "auto 1fr auto" }}>
@@ -208,6 +254,8 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
           </p>
         )}
       </aside>
+      {/* Who's on the project and in what role; the decision maker approves options */}
+      <PeopleDialog open={peopleOpen} onClose={() => setPeopleOpen(false)} people={p.people} onSave={(people) => { setPeopleOpen(false); void save(p.version, { people }); }} />
       {/* Keep mine saves again over their version; Take theirs drops the draft */}
       <ConflictDialog
         open={Boolean(conflict)}
@@ -218,6 +266,55 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
         onClose={() => setConflict(undefined)}
       />
     </div>
+  );
+}
+
+
+// Project roles in plain words
+const ROLE_NAMES: Record<Project["people"][number]["role"], string> = {
+  decision_maker: "Decision maker (approves options)",
+  sponsor: "Sponsor",
+  lead_engineer: "Lead engineer",
+  tech_contact: "Tech contact",
+  stakeholder: "Stakeholder",
+  observer: "Observer",
+};
+
+
+/** Add, remove, and set roles for the people on a project */
+function PeopleDialog({ open, onClose, people, onSave }: { open: boolean; onClose: () => void; people: Project["people"]; onSave: (people: Project["people"]) => void }) {
+  const { org } = useOrg();
+  const members = useMembers(org.id);
+  const [draft, setDraft] = useState(people);
+  useEffect(() => { if (open) setDraft(people); }, [open, people]);
+  const active = members.data?.filter((m) => m.status !== "deactivated") ?? [];
+  const name = (uid: string) => active.find((m) => m.userId === uid)?.name || active.find((m) => m.userId === uid)?.email || "Former member";
+  const addable = active.filter((m) => !draft.some((d) => d.userId === m.userId));
+  return (
+    <Dialog open={open} onClose={onClose} label="People on this project">
+      <h2>People on this project</h2>
+      <div className="people-edit">
+        {draft.map((d, i) => (
+          <div key={d.userId} className="pe-row">
+            <span>{name(d.userId)}</span>
+            <select aria-label={`Role for ${name(d.userId)}`} value={d.role} onChange={(e) => setDraft(draft.map((x, j) => (j === i ? { ...x, role: e.target.value as typeof d.role } : x)))}>
+              {ProjectRole.options.map((r) => <option key={r} value={r}>{ROLE_NAMES[r]}</option>)}
+            </select>
+            <button className="btn btn-ghost btn-sm" onClick={() => setDraft(draft.filter((_, j) => j !== i))} aria-label={`Remove ${name(d.userId)}`}>Remove</button>
+          </div>
+        ))}
+        {addable.length > 0 && (
+          <select aria-label="Add a person" value="" onChange={(e) => e.target.value && setDraft([...draft, { userId: e.target.value, role: draft.some((x) => x.role === "decision_maker") ? "stakeholder" : "decision_maker" }])}>
+            <option value="">+ Add someone…</option>
+            {addable.map((m) => <option key={m.userId} value={m.userId}>{m.name || m.email}</option>)}
+          </select>
+        )}
+      </div>
+      <div className="actions">
+        <button className="btn btn-primary" onClick={() => onSave(draft)}>Save</button>
+        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+      </div>
+    </Dialog>
   );
 }
 
@@ -262,6 +359,17 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
   // Every item call goes through this project's API path
   const path = `/t/${org.id}/projects/${project.id}`;
   const decisions = items.filter((i) => i.kind === "decision");
+  // A link to one item (#item-…) or a group (#options) scrolls to it and flashes it once
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash) return;
+    const el = document.getElementById(hash.slice(1));
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("flash");
+    const t = setTimeout(() => el.classList.remove("flash"), 2200);
+    return () => clearTimeout(t);
+  }, [hash, items.length]);
 
   // Quick edits (done, readings): on a conflict, say so and show the latest instead of a dialog
   const patch = async (item: Item, body: Record<string, unknown>) => {
@@ -285,11 +393,11 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
         // Viewers see only groups with content, plus Requests, which they may add to
         if (!list.length && !canWrite && kind !== "request") return null;
         return (
-          <section className="kind-group" key={kind}>
+          <section className="kind-group" key={kind} id={kind === "option" ? "options" : kind === "file_request" ? "files" : undefined}>
             <h2 className="section-h">{KIND_LABEL[kind][1]} <small>{list.length}</small></h2>
             {/* Options compare side by side, measures show as cards, everything else as rows */}
             {kind === "option" ? (
-              <Options items={list} path={path} />
+              <Options items={list} path={path} project={project} />
             ) : kind === "metric" ? (
               list.length ? <div className="scores">{list.map((m) => (
                 <MetricCard key={m.id} item={m} onReading={canWrite ? (value) => {
@@ -383,7 +491,7 @@ function ItemRow({ item, path, marker, onToggle, extra }: { item: Item; path: st
   };
 
   return (
-    <div className="item">
+    <div className="item" id={`item-${item.id}`}>
       {/* A checkbox for checkable kinds, an empty cell otherwise */}
       {onToggle ? <input type="checkbox" checked={item.status === "done"} onChange={onToggle} aria-label={`Done: ${item.title}`} /> : <span style={{ width: 18 }} />}
       {/* Edit form with a warning when someone else is editing too; otherwise the item and who is on it */}
@@ -476,20 +584,36 @@ function AddItem({ kind, path }: { kind: ItemKind; path: string }) {
 
 
 /** A 1 to 5 bar; cost and effort are inverted so more bars always means better */
-function Meter({ label, value, invert }: { label: string; value: number; invert?: boolean }) {
-  const v = invert ? 6 - value : value;
+// Scores are 1 to 5 where 5 is always the better end; each shows as a plain word
+const SCORE_WORDS = {
+  Cost: ["Highest", "High", "Medium", "Low", "Lowest"],
+  Quality: ["Basic", "Fair", "Good", "Very good", "Best"],
+  Effort: ["Heaviest", "Heavy", "Medium", "Light", "Lightest"],
+} as const;
+
+
+/** One score as a word, with five dots where filled dots mean better */
+function Meter({ label, value }: { label: keyof typeof SCORE_WORDS; value: number }) {
+  const word = SCORE_WORDS[label][Math.min(5, Math.max(1, value)) - 1];
   return (
-    <div className="meter" role="img" aria-label={`${label}: ${value} of 5`}>
+    <div className="meter">
       <span>{label}</span>
-      <span className="bar">{[1, 2, 3, 4, 5].map((n) => <i key={n} className={n <= v ? "on" : ""} />)}</span>
+      <b className={value >= 4 ? "good" : value <= 2 ? "weak" : ""}>{word}</b>
+      <span className="bar" aria-hidden="true">{[1, 2, 3, 4, 5].map((n) => <i key={n} className={n <= value ? "on" : ""} />)}</span>
     </div>
   );
 }
 
 
 /** Options side by side: draft, shared for approval, approved; approving records a decision */
-function Options({ items, path }: { items: Item[]; path: string }) {
-  const { org, canWrite } = useOrg();
+function Options({ items, path, project }: { items: Item[]; path: string; project: Project }) {
+  const { org, access, canWrite } = useOrg();
+  const me = useSession();
+  const members = useMembers(org.id);
+  const names = new Map(members.data?.map((m) => [m.userId, m.name || m.email]) ?? []);
+  // Only the named decision maker (or, with none named, a client admin) sees Approve
+  const decider = canApprove({ userId: me.user.id, operator: me.operator, strongAuth: false }, access, project.people).ok;
+  const deciders = project.people.filter((x) => x.role === "decision_maker").map((x) => names.get(x.userId) ?? "the decision maker");
   const toast = useToast();
   const refresh = useRefresh(org.id);
   // The option waiting on approval, and the conditions being typed
@@ -535,12 +659,13 @@ function Options({ items, path }: { items: Item[]; path: string }) {
               {o.body && <p className="small muted" style={{ marginTop: 0, whiteSpace: "pre-wrap" }}>{o.body}</p>}
               {f.cost && <p className="mono small" style={{ margin: "0 0 8px" }}>{f.cost}{f.timeline ? ` · ${f.timeline}` : ""}</p>}
               {/* Cost, quality, and effort, scored so more bars is always better */}
-              <Meter label="Cost" value={f.costScore} invert />
+              <Meter label="Cost" value={f.costScore} />
               <Meter label="Quality" value={f.qualityScore} />
-              <Meter label="Effort" value={f.effortScore} invert />
-              {/* Anyone may approve a proposed option; editors move drafts along */}
+              <Meter label="Effort" value={f.effortScore} />
+              {/* The decision maker approves a proposed option; editors move drafts along */}
               <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-                {o.status === "proposed" && <button className="btn btn-primary" onClick={() => { setConditions(""); setApproving(o); }}>Approve</button>}
+                {o.status === "proposed" && decider && <button className="btn btn-primary" onClick={() => { setConditions(""); setApproving(o); }}>Approve this option</button>}
+                {o.status === "proposed" && !decider && <span className="small muted">Waiting on {deciders.length ? deciders.join(" or ") : "a client admin"}</span>}
                 {canWrite && o.status === "draft" && <button className="btn btn-ghost" onClick={() => void setStatus(o, "proposed")}>Share with client</button>}
                 {canWrite && o.status === "proposed" && <button className="btn btn-ghost" onClick={() => void setStatus(o, "draft")}>Back to draft</button>}
               </div>

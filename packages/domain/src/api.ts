@@ -2,7 +2,7 @@
 
 
 import { z } from "zod";
-import { AccessLevel, Health, ItemKind, Layer, ProjectRole, Theme, email, id } from "./model.ts";
+import { AccessLevel, Health, ItemKind, Layer, ProjectRole, Theme, Tour, email, id } from "./model.ts";
 
 
 // Organizations (operator only)
@@ -63,6 +63,7 @@ export const UpdateProjectInput = z.object({
   health: Health.optional(),
   targetDate: z.string().date().nullable().optional(),
   archived: z.boolean().optional(),
+  people: z.array(z.object({ userId: id, role: ProjectRole })).max(50).optional(),
 });
 
 
@@ -122,6 +123,7 @@ export const UpdateMeInput = z.object({
   phone: z.string().trim().max(32).optional(),
   theme: Theme.optional(),
   menu: z.enum(["rail", "hidden"]).optional(),
+  tour: Tour.optional(),
 });
 
 

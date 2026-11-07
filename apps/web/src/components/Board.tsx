@@ -63,6 +63,7 @@ export function Board({
           <section
             key={s.id}
             role="listitem"
+            data-tour="board-column"
             className={`col${over === s.id ? " drop" : ""}`}
             aria-label={`${s.name}, ${cards.length} projects`}
             // Columns accept drops; a card accepts a drop to insert before itself
@@ -89,6 +90,7 @@ export function Board({
             {cards.map((p) => (
               <article
                 key={p.id}
+                data-tour="board-card"
                 className={`pcard${dragging === p.id ? " dragging" : ""}`}
                 draggable={Boolean(onMove)}
                 aria-disabled={!onMove}
@@ -119,7 +121,7 @@ export function Board({
                 </div>
                 {/* Keyboard and screen-reader path: the same move as dragging, to the end of the chosen column */}
                 {onMove && (
-                  <label className="sr-focus small" style={{ display: "block", marginTop: 8 }}>
+                  <label className="move">
                     <span className="sr">Move {p.key} to</span>
                     <select
                       value=""
@@ -129,16 +131,15 @@ export function Board({
                         const list = byStage(to).filter((x) => x.id !== p.id);
                         onMove({ project: p, stageId: to, after: list.at(-1)?.rank });
                       }}
-                      style={{ minHeight: 30, padding: "2px 8px", fontSize: 12 }}
                     >
-                      <option value="">Move to…</option>
+                      <option value="">Move ▸</option>
                       {visible.filter((x) => x.id !== s.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                     </select>
                   </label>
                 )}
               </article>
             ))}
-            {cards.length === 0 && <p className="muted small" style={{ padding: "4px" }}>Nothing here.</p>}
+            {cards.length === 0 && <p className="muted small" style={{ padding: "4px" }}>No projects here.</p>}
           </section>
         );
       })}

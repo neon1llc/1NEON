@@ -48,7 +48,7 @@ export function People() {
       {canAdmin && <Invite />}
       <div style={{ overflowX: "auto" }}>
         {/* One row per member: who, email, access, and status with its action */}
-        <table className="people">
+        <table className="people" data-tour="people-list">
           <thead><tr><th>Name</th><th>Email</th><th>Access</th><th>Status</th></tr></thead>
           <tbody>
             {list.map((m) => (
@@ -96,7 +96,7 @@ function Invite() {
   const [access, setAccess] = useState<AccessLevel>("editor");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  if (!open) return <button className="btn btn-primary" style={{ marginBottom: 18 }} onClick={() => setOpen(true)}>Invite people</button>;
+  if (!open) return <button className="btn btn-primary" data-tour="invite" style={{ marginBottom: 18 }} onClick={() => setOpen(true)}>Invite people</button>;
   // Accept commas, semicolons, spaces, or new lines between addresses
   const list = emails.split(/[\s,;]+/).map((e) => e.trim()).filter(Boolean);
   // One request for every address; the API emails each person

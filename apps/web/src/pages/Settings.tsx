@@ -57,7 +57,7 @@ export function Settings() {
       <h2 className="section-h">Workflow stages <small>the columns on the board</small></h2>
       {!canAdmin && <p className="muted small">Only admins can change stages.</p>}
       {/* One row per stage: name, layer, exit rule, limit, and order controls; phones stack each stage as a card */}
-      <div className="stages">
+      <div className="stages" data-tour="stages">
         {stages.map((s, i) => (
           <div key={s.id} className={`stage${s.hidden ? " off" : ""}`}>
             <input aria-label={`Name of stage ${i + 1}`} value={s.name} disabled={!canAdmin} onChange={(e) => set(i, { name: e.target.value })} maxLength={40} />

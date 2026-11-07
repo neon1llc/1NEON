@@ -21,7 +21,7 @@ export function Legal({ doc }: { doc: keyof typeof DOCS }) {
       {/* Rendered from Markdown, then links to the other two documents */}
       <Markdown source={DOCS[doc]} />
       <p className="small muted" style={{ marginTop: 40 }}>
-        <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link> · <Link to="/cookies">Cookies</Link>
+        <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link> · <Link to="/cookies">Cookies</Link> · <Link to="/faqs">FAQs</Link>
       </p>
     </main>
   );

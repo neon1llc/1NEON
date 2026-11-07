@@ -76,6 +76,7 @@ export function DropZone({ target, children }: { target: FileTarget; children?: 
   const { busy, run } = useUpload(target);
   return (
     <div
+      data-tour="upload"
       className={`drop${over ? " over" : ""}`}
       role="button"
       tabIndex={0}

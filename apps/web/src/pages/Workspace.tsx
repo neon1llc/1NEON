@@ -1,77 +1,110 @@
-// apps/web/src/pages/Workspace.tsx - Workspace: the landing page inside an organization. Four hubs,
-// what's waiting, and recent activity.
+// apps/web/src/pages/Workspace.tsx - Home inside an organization: what needs you, a setup checklist
+// until it's done, the headline numbers, and recent activity.
 
 
+import { KIND_LAYER, type ItemKind } from "@1neon/domain";
 import { useQuery } from "@tanstack/react-query";
+import { Check, CircleCheck, FileUp, ListTodo } from "lucide-react";
 import { Link } from "react-router";
-import { useOrg, useTopBar } from "../components/Shell.tsx";
-import { ago, Empty, Rings } from "../components/ui.tsx";
+import { useHelp } from "../components/Help.tsx";
+import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
+import { ago } from "../components/ui.tsx";
 import { api } from "../lib/api.ts";
 import { qk } from "../lib/hooks.ts";
 import type { Workspace } from "../lib/types.ts";
 
 
-// The organization's home: hub counts, items waiting on the caller, and recent activity
+// The words and icon for each kind of thing waiting on someone
+const ACTION = {
+  approve: { label: "Review and approve", icon: CircleCheck },
+  upload: { label: "Upload file", icon: FileUp },
+  do: { label: "Open", icon: ListTodo },
+} as const;
+
+
+// The organization's home
 export function WorkspacePage() {
-  const { org, summary } = useOrg();
+  const { org, summary, canWrite, canAdmin } = useOrg();
+  const me = useSession();
+  const help = useHelp();
   const base = `/o/${summary.slug}`;
   // Counts, waiting items, and activity in one call, refreshed every 30 seconds
   const ws = useQuery({ queryKey: qk.workspace(org.id), queryFn: () => api<Workspace>(`/t/${org.id}/workspace`), refetchInterval: 30_000 });
-  useTopBar(<span>{org.name} · Workspace</span>, [org.name]);
+  useTopBar(<span>{org.name}</span>, [org.name]);
   const c = ws.data?.counts;
+  const first = (me.user.name || "").split(" ")[0];
+
+  // Setup steps, each ticked off by the real state; the card goes once all are done
+  const steps = [
+    { done: me.user.tour === "done", label: "Take the 1-minute tour", act: <button className="link" onClick={help.welcomeTour}>Start</button> },
+    ...(canWrite ? [{ done: (c?.projects ?? 0) > 0, label: "Start your first project", act: <Link to={`${base}/projects/new`}>Start</Link> }] : []),
+    ...(canAdmin ? [{ done: (c?.people ?? 0) > 1, label: "Invite your team", act: <Link to={`${base}/people`}>Invite</Link> }] : []),
+    ...(canAdmin ? [{ done: me.user.strongAuth, label: "Add a passkey for admin actions", act: <Link to="/me">Add</Link> }] : []),
+  ];
+  const setupLeft = steps.filter((s) => !s.done).length;
+  const n = ws.data?.waiting.length ?? 0;
+
   return (
     <>
-      <h1 className="page-title">Workspace</h1>
-      <p className="lead">{org.name} · {org.clientId}</p>
-      {/* The four hubs with their headline numbers */}
-      <div className="grid" aria-busy={ws.isPending}>
-        <Hub to={`${base}/projects`} title="Projects" big={c?.projects} text={c ? `${c.deciding} deciding, ${c.building} building` : "…"} />
-        <Hub to={`${base}/people`} title="People" big={c?.people} text={c ? (c.invited ? `${c.invited} invited, not joined yet` : "Everyone has joined") : "…"} />
-        <Hub to={`${base}/documents`} title="Documents" big={c?.documents} text="Files by layer, scanned on upload" />
-        <Hub to={`${base}/workflow`} title="Workflow" big={undefined} text="Every project on one board" icon />
-      </div>
-      <div className="two">
-        {/* Options to approve and tasks assigned to the caller, linked to the right tab */}
-        <section>
-          <h2 className="section-h">Waiting on you <small>{ws.data?.waiting.length ?? 0}</small></h2>
-          {ws.data && ws.data.waiting.length === 0 && <Empty text="Nothing is waiting on you." />}
-          <div className="rows">
-            {ws.data?.waiting.map((w) => (
-              <Link key={w.itemId} className="row" to={`${base}/projects/${w.projectKey}/${w.kind === "option" ? "needs" : "execution"}`}>
-                <span className="t">{w.title}</span>
-                <span className="s">{w.projectKey}</span>
-                <span className="tag">{w.kind === "option" ? "approve" : w.kind}</span>
-              </Link>
-            ))}
-          </div>
+      <h1 className="page-title">{first ? `Hi, ${first}` : "Home"}</h1>
+      <p className="lead">{ws.data ? (n ? `${n} ${n === 1 ? "thing needs" : "things need"} you.` : "Nothing needs you right now.") : " "}</p>
+
+      <div className="home">
+        {/* Needs you: the main event, each with the one action it asks for */}
+        <section className="card needs" data-tour="needs-you" aria-busy={ws.isPending}>
+          <h2 className="section-h">Needs you</h2>
+          {ws.data && n === 0 && <p className="empty-line"><Check size={18} aria-hidden="true" /> You're all caught up.</p>}
+          <ul className="todo">
+            {ws.data?.waiting.map((w) => {
+              const a = ACTION[w.action];
+              const layer = KIND_LAYER[w.kind as ItemKind] ?? "needs";
+              return (
+                <li key={w.itemId}>
+                  <a.icon size={18} aria-hidden="true" className="todo-ico" />
+                  <span className="todo-t">{w.title}<small>{w.projectKey}</small></span>
+                  <Link className="btn btn-ghost btn-sm" to={`${base}/projects/${w.projectKey}/${layer}#item-${w.itemId}`}>{a.label}</Link>
+                </li>
+              );
+            })}
+          </ul>
         </section>
-        <section>
-          <h2 className="section-h">Recent activity</h2>
-          {ws.data && ws.data.activity.length === 0 && <Empty text="No activity yet." />}
-          <div className="rows">
-            {ws.data?.activity.map((a) => (
-              <div key={a.id} className="row" style={{ gridTemplateColumns: "1fr auto" }}>
-                <span className="small">{a.summary}</span>
-                <span className="s">{ago(a.at)}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+
+        <div className="home-side">
+          {/* Setup, until every step is done */}
+          {setupLeft > 0 && (
+            <section className="card" data-tour="get-started">
+              <h2 className="section-h">Get started <small>{steps.length - setupLeft} of {steps.length}</small></h2>
+              <ul className="checklist">
+                {steps.map((s) => (
+                  <li key={s.label} className={s.done ? "done" : ""}>
+                    <span className="tick" aria-hidden="true">{s.done ? <Check size={14} /> : null}</span>
+                    <span>{s.label}</span>
+                    {!s.done && s.act}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {/* The headline numbers, each a way in */}
+          <nav className="stats" aria-label="At a glance">
+            <Link to={`${base}/projects`}><b>{c?.projects ?? "–"}</b> projects</Link>
+            <Link to={`${base}/workflow`}><b>{c?.deciding ?? "–"}</b> deciding</Link>
+            <Link to={`${base}/workflow`}><b>{c?.building ?? "–"}</b> building</Link>
+            <Link to={`${base}/people`}><b>{c?.people ?? "–"}</b> people{c?.invited ? ` (${c.invited} invited)` : ""}</Link>
+            <Link to={`${base}/documents`}><b>{c?.documents ?? "–"}</b> files</Link>
+          </nav>
+          {/* What happened lately */}
+          <section className="card" data-tour="activity">
+            <h2 className="section-h">Recent activity</h2>
+            {ws.data && ws.data.activity.length === 0 && <p className="muted small">No activity yet.</p>}
+            <ul className="feed">
+              {ws.data?.activity.slice(0, 8).map((a) => (
+                <li key={a.id}><span>{a.summary}</span><time dateTime={a.at}>{ago(a.at)}</time></li>
+              ))}
+            </ul>
+          </section>
+        </div>
       </div>
     </>
-  );
-}
-
-
-/** One hub card on the workspace */
-function Hub({ to, title, big, text, icon }: { to: string; title: string; big?: number; text: string; icon?: boolean }) {
-  return (
-    <Link to={to} className="card hub" style={{ textDecoration: "none", color: "inherit" }}>
-      <h3>
-        {title}
-        {icon ? <Rings /> : <span className="big">{big ?? "–"}</span>}
-      </h3>
-      <p>{text}</p>
-    </Link>
   );
 }

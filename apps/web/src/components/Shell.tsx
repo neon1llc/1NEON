@@ -11,6 +11,9 @@ import { cleanCode, clearStep, loadStep, saveStep, session } from "../lib/signin
 import type { Me, OrgResponse, OrgSummary } from "../lib/types.ts";
 import { Offline } from "./Glitch.tsx";
 import { Rain } from "./Rain.tsx";
+import { FileText as FileIcon, Folder as FolderIcon, Home as HomeIcon, Kanban as KanbanIcon, Menu as MenuIcon, Search as SearchIcon } from "lucide-react";
+import { HelpProvider, useHelp } from "./Help.tsx";
+import { Palette } from "./Palette.tsx";
 import { Avatar, Icon, initials, LayerBadge, LAYERS, layerName } from "./ui.tsx";
 
 
@@ -266,7 +269,7 @@ function SignIn() {
         <p className="fine">Sign in with a code sent to your email, or a passkey. 1NEON uses only the cookies it needs to keep you signed in.</p>
         {/* The three policies on one line of their own */}
         <p className="fine legal-links">
-          <Link to="/cookies">Cookies</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
+          <Link to="/faqs">FAQs</Link> · <Link to="/cookies">Cookies</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
         </p>
         {/* Demo accounts exist only in local builds */}
         {isDev && (
@@ -319,6 +322,16 @@ export function OrgLayout() {
 }
 
 
+/** Pages outside any organization (the profile) still get the frame, search, and help */
+export function PlainLayout() {
+  return (
+    <Frame>
+      <Outlet />
+    </Frame>
+  );
+}
+
+
 /** The All clients view, operator only */
 export function AllLayout() {
   const me = useSession();
@@ -360,10 +373,10 @@ export function useTopBar(node: ReactNode, deps: unknown[]) {
 
 
 /** One menu entry: its icon box and label line up with every other entry; picking it closes the full menu */
-function Item({ to, icon, label, end }: { to: string; icon: ReactNode; label: string; end?: boolean }) {
+function Item({ to, icon, label, end, tour }: { to: string; icon: ReactNode; label: string; end?: boolean; tour?: string }) {
   return (
     <li>
-      <NavLink to={to} end={end} title={label}>
+      <NavLink to={to} end={end} title={label} data-tour={tour}>
         {icon}
         <span className="lbl">{label}</span>
       </NavLink>
@@ -372,12 +385,25 @@ function Item({ to, icon, label, end }: { to: string; icon: ReactNode; label: st
 }
 
 
-/** Menu, top bar, and content area shared by every signed-in page */
+/** Menu, top bar, phone tab bar, and content area shared by every signed-in page */
 function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; children: ReactNode }) {
   const me = useSession();
-  // The person's choice: a slim icon rail always on screen, or no rail and a menu button
+  return (
+    <HelpProvider me={me}>
+      <FrameBody org={org} all={all}>{children}</FrameBody>
+    </HelpProvider>
+  );
+}
+
+
+// The frame itself, inside the help context so the ? button and search can use it
+function FrameBody({ org, all, children }: { org?: OrgSummary; all?: boolean; children: ReactNode }) {
+  const me = useSession();
+  const help = useHelp();
+  // The person's choice: the menu always on screen (labels on wide screens, icons on narrow), or behind a button
   const rail = (me.user.menu ?? "rail") === "rail";
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState(false);
   const [top, setTop] = useState<ReactNode>(null);
   const loc = useLocation();
   // The full menu closes after navigating, and on Escape
@@ -392,7 +418,6 @@ function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; childr
     <div className={`shell${rail ? " has-rail" : ""}`}>
       {/* Scrim behind the full menu; a tap outside closes it */}
       {open && <div className="scrim" onClick={() => setOpen(false)} aria-hidden="true" />}
-      {/* Menu: the onion opens and closes the full view; collapsed, only the icons show */}
       <aside className={`side${open ? " open" : ""}`} aria-label="Menu">
         <button className="brand" type="button" onClick={() => setOpen(!open)} aria-expanded={open} title={open ? "Close the menu" : "Open the menu"}>
           <span className="ico mark" aria-hidden="true">
@@ -400,33 +425,33 @@ function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; childr
           </span>
           <span className="lbl">1NEON</span>
         </button>
-        {/* Organization: the full chooser when open, its initials when collapsed */}
-        {open ? (
-          <OrgChooser current={org} all={all} />
-        ) : (
-          <button className="org-mini" type="button" onClick={() => setOpen(true)} title={all ? "All clients" : org?.name ?? "Choose an organization"}>
-            <span className="ico">{all ? "All" : org ? initials(org.name) : "?"}</span>
-            <span className="lbl">{all ? "All clients" : org?.name ?? "Choose"}</span>
-          </button>
-        )}
-        {/* Organization pages get the hubs and layers; All clients gets only its board */}
+        {/* Organization: the full chooser when there's room for labels, its initials otherwise */}
+        <div className="org-full"><OrgChooser current={org} all={all} /></div>
+        <button className="org-mini" type="button" onClick={() => setOpen(true)} title={all ? "All clients" : org?.name ?? "Choose an organization"}>
+          <span className="ico">{all ? "All" : org ? initials(org.name) : "?"}</span>
+          <span className="lbl">{all ? "All clients" : org?.name ?? "Choose"}</span>
+        </button>
+        {/* Organization pages get the main places and the four layers; All clients gets only its board */}
         <ul className="nav">
           {org ? (
             <>
-              <Item to={`${base}/workspace`} icon={<Icon name="workspace" />} label="Workspace" />
-              <Item to={`${base}/workflow`} icon={<Icon name="workflow" />} label="Workflow" />
-              <li className="sep"><span className="lbl">Layers</span></li>
-              {LAYERS.map((l) => (
-                <Item key={l} to={`${base}/layer/${l}`} icon={<LayerBadge layer={l} />} label={layerName(l)} />
-              ))}
-              <li className="sep"><span className="lbl">Hubs</span></li>
-              <Item to={`${base}/projects`} icon={<Icon name="projects" />} label="Projects" end={false} />
+              <Item to={`${base}/workspace`} icon={<Icon name="workspace" />} label="Home" tour="nav-home" />
+              <Item to={`${base}/workflow`} icon={<Icon name="workflow" />} label="Board" tour="nav-board" />
+              <Item to={`${base}/projects`} icon={<Icon name="projects" />} label="Projects" end={false} tour="nav-projects" />
+              <Item to={`${base}/documents`} icon={<Icon name="documents" />} label="Files" tour="nav-files" />
+              <li className="sep" data-tour="nav-layers"><span className="lbl">Layers</span>
+                <ul className="nav">
+                  {LAYERS.map((l) => (
+                    <Item key={l} to={`${base}/layer/${l}`} icon={<LayerBadge layer={l} />} label={layerName(l)} />
+                  ))}
+                </ul>
+              </li>
+              <li className="sep"><span className="lbl">Organization</span></li>
               <Item to={`${base}/people`} icon={<Icon name="people" />} label="People" />
-              <Item to={`${base}/documents`} icon={<Icon name="documents" />} label="Documents" />
               <Item to={`${base}/settings`} icon={<Icon name="settings" />} label="Settings" />
             </>
           ) : all ? (
-            <Item to="/all/workflow" icon={<Icon name="workflow" />} label="Workflow" />
+            <Item to="/all/workflow" icon={<Icon name="workflow" />} label="Board" />
           ) : null}
         </ul>
         {/* Back to the neon1.tech site, outside the app's routes, then the signed-in person */}
@@ -434,7 +459,7 @@ function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; childr
           <Icon name="site" />
           <span className="lbl">neon1.tech</span>
         </a>
-        <NavLink to="/me" className="who-link" title="Your profile">
+        <NavLink to="/me" className="who-link" title="Your profile" data-tour="nav-me">
           <span className="ico av-box"><Avatar id={me.user.id} name={me.user.name || me.user.email} size={24} /></span>
           <span className="lbl">{me.user.name || me.user.email}</span>
         </NavLink>
@@ -446,17 +471,37 @@ function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; childr
             <strong>All clients · read only.</strong> Open a client to make changes.
           </div>
         )}
-        {/* Top bar: the menu button when there's no rail, then whatever the page put in the crumb slot */}
+        {/* Top bar: menu button when there's no rail, the page's crumbs, then search and help */}
         <header className="top">
-          {!rail && <button className="chip" onClick={() => setOpen(!open)} aria-expanded={open}>menu</button>}
+          {!rail && <button className="icon-btn" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Menu"><MenuIcon size={18} /></button>}
           <div className="crumb">{top}</div>
           <span className="spacer" />
-          <span className="hide-sm muted small">Commands <span className="kbd">⌘K</span></span>
+          <button className="search-btn" onClick={() => setSearch(true)} data-tour="search" aria-label="Search">
+            <SearchIcon size={16} aria-hidden="true" />
+            <span className="hide-sm">Search</span>
+            <span className="kbd hide-sm">{/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl K"}</span>
+          </button>
+          <button className="icon-btn help-btn" onClick={help.open} data-tour="help" aria-label="Help for this page" title="Help for this page">?</button>
         </header>
         <Crumbs.Provider value={setTop}>
           <main className="content" id="main">{children}</main>
         </Crumbs.Provider>
       </div>
+      {/* Phones: the main places as a tab bar at the bottom, within thumb reach */}
+      <nav className="tabbar" aria-label="Main">
+        {org ? (
+          <>
+            <NavLink to={`${base}/workspace`} data-tour="nav-home"><HomeIcon size={20} aria-hidden="true" /><span>Home</span></NavLink>
+            <NavLink to={`${base}/workflow`} data-tour="nav-board"><KanbanIcon size={20} aria-hidden="true" /><span>Board</span></NavLink>
+            <NavLink to={`${base}/projects`} data-tour="nav-projects"><FolderIcon size={20} aria-hidden="true" /><span>Projects</span></NavLink>
+            <NavLink to={`${base}/documents`} data-tour="nav-files"><FileIcon size={20} aria-hidden="true" /><span>Files</span></NavLink>
+          </>
+        ) : (
+          <NavLink to="/"><HomeIcon size={20} aria-hidden="true" /><span>Home</span></NavLink>
+        )}
+        <button type="button" onClick={() => setOpen(true)} data-tour="nav-layers"><MenuIcon size={20} aria-hidden="true" /><span>More</span></button>
+      </nav>
+      <Palette me={me} org={org} open={search} setOpen={setSearch} onHelp={help.open} onTour={help.welcomeTour} />
     </div>
   );
 }

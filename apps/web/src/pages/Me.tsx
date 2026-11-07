@@ -5,11 +5,12 @@ import type { User } from "@1neon/domain";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router";
-import { applyTheme, useSession } from "../components/Shell.tsx";
+import { applyTheme, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, useToast } from "../components/ui.tsx";
 import { api, devUser, isDev } from "../lib/api.ts";
 import { problem } from "../lib/hooks.ts";
 import { passkeyCreation } from "../lib/passkey.ts";
+import { useHelp } from "../components/Help.tsx";
 
 
 // The signed-in person's own profile, outside any organization
@@ -17,6 +18,8 @@ export function MePage() {
   const me = useSession();
   const qc = useQueryClient();
   const toast = useToast();
+  const help = useHelp();
+  useTopBar(<span>Your profile</span>, []);
   // Edits stay local until Save
   const [draft, setDraft] = useState({ name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme, menu: me.user.menu ?? "rail" });
   const [busy, setBusy] = useState(false);
@@ -56,9 +59,8 @@ export function MePage() {
     location.href = r.redirect;
   };
   return (
-    <main className="content" style={{ maxWidth: 720, margin: "0 auto" }}>
-      {/* Back link, then who this is */}
-      <p><Link to="/" className="small">← Back to 1NEON</Link></p>
+    <div style={{ maxWidth: 720 }}>
+      {/* Who this is */}
       <h1 className="page-title" style={{ display: "flex", gap: 12, alignItems: "center" }}><Avatar id={me.user.id} name={me.user.name || me.user.email} size={40} />Your profile</h1>
       <p className="lead">{me.user.email}{me.operator ? " · neon1 operator" : ""}</p>
       {/* Name, title, and mobile number */}
@@ -85,13 +87,13 @@ export function MePage() {
             {(["rail", "hidden"] as const).map((m) => (
               <label key={m} className={`chip${draft.menu === m ? " on" : ""}`} style={{ cursor: "pointer" }}>
                 <input type="radio" name="menu" className="sr" checked={draft.menu === m} onChange={() => setDraft({ ...draft, menu: m })} />
-                {m === "rail" ? "Icons always showing" : "Hidden behind a menu button"}
+                {m === "rail" ? "Always showing" : "Behind a menu button"}
               </label>
             ))}
           </div>
         </fieldset>
         {/* Strong sign-in status: admins need it for people and settings */}
-        <div className="card small" style={{ display: "grid", gap: 8, justifyItems: "start" }}>
+        <div className="card small" data-tour="passkey" style={{ display: "grid", gap: 8, justifyItems: "start" }}>
           <b>Passkey</b>
           <span className="muted">
             {!me.user.strongAuth
@@ -102,12 +104,21 @@ export function MePage() {
           </span>
           {(!me.user.strongAuth || me.strongSession) && <button className="btn btn-ghost" type="button" onClick={() => void addPasskey()}>{me.user.strongAuth ? "Add another passkey" : "Add a passkey"}</button>}
         </div>
+        {/* The tutorial: replay the welcome tour, or read the FAQs */}
+        <div className="card small" style={{ display: "grid", gap: 8, justifyItems: "start" }}>
+          <b>Tutorial</b>
+          <span className="muted">A 1-minute tour of where things are. Each page also has its own guide under ?.</span>
+          <div className="actions">
+            <button className="btn btn-ghost" type="button" onClick={help.welcomeTour}>Replay the tour</button>
+            <Link className="btn btn-ghost" to="/faqs">FAQs</Link>
+          </div>
+        </div>
         {/* Save, and sign out */}
         <div className="actions">
           <button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
           <button className="btn btn-ghost" type="button" onClick={() => void signOut()}>Sign out</button>
         </div>
       </form>
-    </main>
+    </div>
   );
 }

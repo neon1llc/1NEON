@@ -61,7 +61,7 @@ export function Rain({ panes }: { panes: string }) {
         <div className="rainctl" role="group" aria-label="Rain controls">
           <button type="button" title="Rain motion: grid or free. Click to switch." onClick={() => api.toggleMode()}>{api.mode}</button>
           <button type="button" title="Rain characters. Click to cycle." onClick={() => api.nextCharset()}>{api.charset}</button>
-          <button type="button" aria-pressed={!api.running} onClick={() => api.setRunning(!api.running)}>{api.running ? "pause" : "play"}</button>
+          <button type="button" aria-label={api.running ? "Pause the rain" : "Play the rain"} aria-pressed={!api.running} onClick={() => api.setRunning(!api.running)}>{api.running ? "pause" : "play"}</button>
         </div>
       )}
     </>

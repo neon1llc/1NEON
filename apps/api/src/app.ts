@@ -396,16 +396,22 @@ export function createApp(d: Deps) {
     const [projects, members, activity] = await Promise.all([repo.listProjects(t.id), repo.listMembers(t.id), repo.listAudit(t.id, 12)]);
     const live = projects.filter((p) => !p.archived);
     const me = actorId(c);
-    // Waiting on you: open items assigned to the caller, and options shared for approval
-    const waiting: { projectId: string; projectKey: string; itemId: string; title: string; kind: string }[] = [];
+    const { actor } = who(c);
+    // Needs you: options you may approve, files the client is asked for, and your open work
+    const waiting: { projectId: string; projectKey: string; itemId: string; title: string; kind: string; action: "approve" | "upload" | "do" }[] = [];
     for (const p of live) {
       const items = await repo.listItems(t.id, p.id);
+      const decider = canApprove(actor, c.get("access"), p.people).ok;
       for (const i of items) {
-        const mine = i.assigneeId === me && i.status !== "done";
-        const approval = i.kind === "option" && i.status === "proposed";
-        if (mine || approval) waiting.push({ projectId: p.id, projectKey: p.key, itemId: i.id, title: i.title, kind: i.kind });
+        const action = i.kind === "option" && i.status === "proposed" && decider ? "approve"
+          : i.kind === "file_request" && i.status !== "done" && !actor.operator ? "upload"
+          : i.assigneeId === me && i.status !== "done" ? "do" : undefined;
+        if (action) waiting.push({ projectId: p.id, projectKey: p.key, itemId: i.id, title: i.title, kind: i.kind, action });
       }
     }
+    // Approvals first, then files to send, then work
+    const order = { approve: 0, upload: 1, do: 2 };
+    waiting.sort((a, b) => order[a.action] - order[b.action]);
     const stageName = new Map(t.stages.map((s) => [s.id, s]));
     return c.json({
       counts: {
@@ -573,6 +579,7 @@ export function createApp(d: Deps) {
     const input = await body(c, UpdateProjectInput);
     // An archived project takes only its unarchive
     if (p.archived && input.archived !== false) fail(409, "archived", "This project is archived. Unarchive it to make changes.");
+    if (input.people) await activeMembers(p.tenantId, input.people.map((x) => x.userId));
     const { version, targetDate, ...patch } = input;
     const next: Project = { ...p, ...defined(patch), version: p.version + 1, updatedAt: now(), updatedBy: actorId(c) };
     if (targetDate !== undefined) next.targetDate = targetDate ?? undefined;
