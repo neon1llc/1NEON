@@ -9,7 +9,7 @@ import { FileList, UploadButton } from "../components/Files.tsx";
 import { ItemPanel, STATUS_WORDS } from "../components/ItemPanel.tsx";
 import { Link, NavLink, useLocation, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
-import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerName, ago, daysSince, useToast } from "../components/ui.tsx";
+import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerName, layerProgress, OnionProgress, ago, daysSince, useToast } from "../components/ui.tsx";
 import { api, HttpError } from "../lib/api.ts";
 import { problem, useMembers, useProject, useProjects, useRefresh } from "../lib/hooks.ts";
 import type { EditMarker } from "../lib/types.ts";
@@ -67,13 +67,15 @@ export function ProjectPage() {
   // Stage progress: earlier stages are done, the current one is lit
   const stageAt = org.stages.findIndex((s) => s.id === p.stageId);
   // Item counts for each layer tab
-  const count = (l: Layer) => items.filter((i) => KIND_LAYER[i.kind] === l).length;
+  // A measure counts as done once its latest reading reaches the target
+  const prog = layerProgress(items.map((i) => (i.kind === "metric" && (metricProgress(MetricFields.parse(i.fields)) ?? 0) >= 1 ? { ...i, status: "done" } : i)), (k) => KIND_LAYER[k as ItemKind]);
   return (
     <>
       {/* Key, current stage with its age, then the name with health and archive state */}
       <p className="mono small muted" style={{ margin: 0 }}>{p.key} · {org.stages[stageAt]?.name} for {daysSince(p.stageEnteredAt)}d</p>
       <h1 className="page-title" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         {p.name} <Health value={p.health} />
+        <OnionProgress progress={prog} size={44} />
         {p.archived && <span className="tag warn">archived</span>}
       </h1>
       {/* Visible stages, with the current one marked for screen readers */}
@@ -88,7 +90,7 @@ export function ProjectPage() {
       <nav className="tabs" aria-label="Project sections" data-tour="layers">
         <NavLink to={base} end className={() => (tab === "overview" ? "active" : "")}>Overview</NavLink>
         {LAYERS.map((l) => (
-          <NavLink key={l} to={`${base}/${l}`}><LayerBadge layer={l} />{layerName(l)} <span className="muted">{count(l)}</span></NavLink>
+          <NavLink key={l} to={`${base}/${l}`}><LayerBadge layer={l} />{layerName(l)} <span className="muted" title="done of total">{prog[l][0]}/{prog[l][1]}</span></NavLink>
         ))}
       </nav>
       {tab === "overview" ? <Overview project={p} items={items} /> : LAYERS.includes(tab as Layer) ? <LayerTab layer={tab as Layer} project={p} items={items} docs={detail.data.docs} edits={detail.data.edits} /> : <Empty text="That section doesn't exist." />}

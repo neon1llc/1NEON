@@ -78,6 +78,42 @@ export function Rings({ active, title }: { active?: Layer; title?: string }) {
 }
 
 
+/** How far along each layer is: [done, total] per layer, from the items that can be finished */
+export function layerProgress(items: { kind: string; status: string }[], layerOf: (kind: string) => Layer | undefined): Record<Layer, [number, number]> {
+  const out = { needs: [0, 0], execution: [0, 0], observation: [0, 0], next: [0, 0] } as Record<Layer, [number, number]>;
+  for (const i of items) {
+    const l = layerOf(i.kind);
+    if (!l || i.kind === "decision" || i.kind === "update") continue;
+    out[l][1]++;
+    if (i.status === "done" || i.status === "approved") out[l][0]++;
+  }
+  return out;
+}
+
+
+/** The onion as a progress chart: each layer's ring fills clockwise as its items get done, Needs at the core */
+export function OnionProgress({ progress, size = 40 }: { progress: Record<Layer, [number, number]>; size?: number }) {
+  const r = [6, 13, 20, 27];
+  const label = LAYERS.map((l) => `${layerName(l)}: ${progress[l][0]} of ${progress[l][1]} done`).join(". ");
+  return (
+    <svg className="onion-progress" width={size} height={size} viewBox="0 0 64 64" role="img" aria-label={label}>
+      <title>{label}</title>
+      {LAYERS.map((l, i) => {
+        const [done, total] = progress[l];
+        const c = 2 * Math.PI * r[i]!;
+        const part = total ? done / total : 0;
+        return (
+          <g key={l}>
+            <circle cx="32" cy="32" r={r[i]} fill="none" stroke="var(--line)" strokeWidth="5" />
+            {part > 0 && <circle cx="32" cy="32" r={r[i]} fill="none" stroke={`var(--l${i + 1})`} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${c * part} ${c}`} transform="rotate(-90 32 32)" />}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+
 /** Display name for a layer */
 export function layerName(l: Layer) {
   return LAYER_NAMES[l];
