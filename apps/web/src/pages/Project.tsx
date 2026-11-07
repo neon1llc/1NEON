@@ -6,6 +6,7 @@ import { betterWhen, canApprove, KIND_LAYER, metricProgress, MetricFields, Optio
 import { ArrowRight, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
+import { ItemPanel, STATUS_WORDS } from "../components/ItemPanel.tsx";
 import { Link, NavLink, useLocation, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerName, ago, daysSince, useToast } from "../components/ui.tsx";
@@ -438,96 +439,33 @@ function FileAsk({ item, docs }: { item: Item; docs: DocumentRecord[] }) {
 }
 
 
-/** One item: view, edit with presence and conflict handling, check off, or remove */
+/** One item in a list: check it off, or tap it to open its panel with details and comments */
 function ItemRow({ item, path, marker, onToggle, extra }: { item: Item; path: string; marker?: EditMarker; onToggle?: () => void; extra?: ReactNode }) {
-  const { org, canWrite } = useOrg();
+  const { org } = useOrg();
   const me = useSession();
-  const toast = useToast();
-  const refresh = useRefresh(org.id);
-  // Inline edit state, and the newer version when a save conflicts
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState({ title: item.title, body: item.body });
-  const [conflict, setConflict] = useState<Item>();
   const members = useMembers(org.id);
-  // Names for the conflict dialog; anyone unknown is "Someone"
-  const nameOf = (uid?: string) => members.data?.find((m) => m.userId === uid)?.name || "Someone";
+  const [open, setOpen] = useState(false);
   // Someone else's live marker on this item, if any
   const otherEditing = marker && marker.userId !== me.user.id ? marker : undefined;
-
-  // While editing, hold an edit marker so others see it, renew it, and release it on close
-  useEffect(() => {
-    if (!editing) return;
-    // Advisory marker: others see who is editing; it expires on its own if this tab closes
-    void api<{ ok: boolean; holder?: EditMarker }>(`${path}/edits`, { method: "POST", body: { recordId: item.id } }).catch(() => undefined);
-    // Renew the marker every minute, well inside its two-minute expiry
-    const beat = window.setInterval(() => void api(`${path}/edits`, { method: "POST", body: { recordId: item.id } }).catch(() => undefined), 45_000);
-    return () => {
-      window.clearInterval(beat);
-      void api(`${path}/edits/${item.id}`, { method: "DELETE" }).catch(() => undefined);
-    };
-  }, [editing, item.id, path]);
-
-  // Save title and details against the version read; a 409 opens the conflict dialog
-  const save = async (version: number) => {
-    try {
-      await api(`${path}/items/${item.id}`, { method: "PATCH", body: { version, title: draft.title, body: draft.body } });
-      setEditing(false);
-      setConflict(undefined);
-    } catch (e) {
-      if (e instanceof HttpError && e.status === 409 && e.body.current) setConflict(e.body.current as Item);
-      else toast(problem(e));
-    }
-    refresh();
-  };
-  // Remove after confirming; the version guard stops removing an item someone just changed
-  const remove = async () => {
-    if (!confirm(`Remove "${item.title}"?`)) return;
-    try {
-      await api(`${path}/items/${item.id}?version=${item.version}`, { method: "DELETE" });
-    } catch (e) {
-      toast(problem(e));
-    }
-    refresh();
-  };
-
+  const owner = members.data?.find((m) => m.userId === item.assigneeId);
+  const label = KIND_LABEL[item.kind][0];
   return (
     <div className="item" id={`item-${item.id}`}>
       {/* A checkbox for checkable kinds, an empty cell otherwise */}
       {onToggle ? <input type="checkbox" checked={item.status === "done"} onChange={onToggle} aria-label={`Done: ${item.title}`} /> : <span style={{ width: 18 }} />}
-      {/* Edit form with a warning when someone else is editing too; otherwise the item and who is on it */}
-      {editing ? (
-        <form onSubmit={(e) => { e.preventDefault(); void save(item.version); }} style={{ display: "grid", gap: 8 }}>
-          {otherEditing && <p className="notice small" style={{ margin: 0 }}>{otherEditing.name} is editing this too. If you both save, you'll choose which to keep.</p>}
-          <input aria-label="Title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} maxLength={160} required autoFocus />
-          <textarea aria-label="Details" value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-primary" type="submit">Save</button>
-            <button className="btn btn-ghost" type="button" onClick={() => { setEditing(false); setDraft({ title: item.title, body: item.body }); }}>Cancel</button>
-          </div>
-        </form>
-      ) : (
-        <div>
-          <div className={`title${item.status === "done" ? " is-done" : ""}`}>{item.title}</div>
-          {item.body && <div className="body">{item.body}</div>}
-          {otherEditing && <div className="small" style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}><Avatar id={otherEditing.userId} name={otherEditing.name} editing size={18} /> {otherEditing.name} is editing</div>}
-          {extra}
-        </div>
-      )}
-      {/* Edit and Remove for editors */}
-      {!editing && canWrite ? (
-        <span style={{ display: "flex", gap: 6 }}>
-          <button className="icon-act" onClick={() => { setDraft({ title: item.title, body: item.body }); setEditing(true); }} aria-label={`Edit ${item.title}`} title="Edit"><Pencil size={15} aria-hidden="true" /></button>
-          <button className="icon-act" onClick={() => void remove()} aria-label={`Remove ${item.title}`} title="Remove"><Trash2 size={15} aria-hidden="true" /></button>
-        </span>
-      ) : <span />}
-      <ConflictDialog
-        open={Boolean(conflict)}
-        who={nameOf(conflict?.updatedBy)}
-        fields={conflict ? [{ label: "Title", mine: draft.title, theirs: conflict.title }, { label: "Details", mine: draft.body, theirs: conflict.body }] : []}
-        onKeepMine={() => conflict && void save(conflict.version)}
-        onTakeTheirs={() => { setConflict(undefined); setEditing(false); refresh(); }}
-        onClose={() => setConflict(undefined)}
-      />
+      <div>
+        <button type="button" className={`item-open title${item.status === "done" ? " is-done" : ""}`} onClick={() => setOpen(true)}>{item.title}</button>
+        {item.body && <div className="body clamp">{item.body}</div>}
+        {otherEditing && <div className="small" style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}><Avatar id={otherEditing.userId} name={otherEditing.name} editing size={18} /> {otherEditing.name} is editing</div>}
+        {extra}
+      </div>
+      {/* Owner, due date, and status at a glance */}
+      <span className="item-meta">
+        {item.dueDate && <span className="small muted">{item.dueDate.slice(5)}</span>}
+        {item.status !== "open" && item.status !== "done" && <span className="tag">{STATUS_WORDS[item.status] ?? item.status}</span>}
+        {owner && <Avatar id={owner.userId} name={owner.name || owner.email} size={22} />}
+      </span>
+      <ItemPanel item={item} label={label} path={path} open={open} onClose={() => setOpen(false)} />
     </div>
   );
 }

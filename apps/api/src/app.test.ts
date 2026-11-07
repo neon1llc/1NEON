@@ -400,3 +400,20 @@ describe("authenticator app", () => {
     expect((await call(dana, "POST", "/me/confirm", { code: await codeFor(start.json.secret, Date.now() + 30_000) })).json.error).toBe("locked");
   });
 });
+
+
+// Comments on items: anyone who can comment adds them; only the author or an admin removes one
+describe("comments", () => {
+  it("adds, lists with history, and guards removal", async () => {
+    const p = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json[0];
+    const path = `/t/${s.acme.id}/projects/${p.id}`;
+    const item = (await call(OP, "GET", path)).json.items[0];
+    const added = await call("dana@acmedental.example", "POST", `${path}/items/${item.id}/comments`, { body: "Can we start Monday?" });
+    expect(added.status).toBe(201);
+    const list = await call("raj@acmedental.example", "GET", `${path}/items/${item.id}/comments`);
+    expect(list.json.comments.map((x: { body: string }) => x.body)).toEqual(["Can we start Monday?"]);
+    expect(list.json.history.some((e: { action: string }) => e.action === "comment.created")).toBe(true);
+    expect((await call("lee@harborauto.example", "GET", `${path}/items/${item.id}/comments`)).status).toBe(404);
+    expect((await call("dana@acmedental.example", "DELETE", `${path}/items/${item.id}/comments/${added.json.id}`)).status).toBe(200);
+  });
+});

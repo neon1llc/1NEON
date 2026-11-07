@@ -31,6 +31,8 @@ export const keys = {
   // General files, with no project, share the "_" partition
   doc: (tid: string, pid: string | undefined, did: string) => ({ PK: `T#${tid}#P#${pid ?? "_"}`, SK: `DOC#${did}` }),
   edit: (tid: string, pid: string, recordId: string) => ({ PK: `T#${tid}#P#${pid}`, SK: `EDIT#${recordId}` }),
+  // Comments on one item, in time order
+  comment: (tid: string, pid: string, iid: string, at: string, cid: string) => ({ PK: `T#${tid}#P#${pid}`, SK: `COMMENT#${iid}#${at}#${cid}` }),
   audit: (tid: string) => `T#${tid}#AUDIT`,
 };
 
@@ -40,6 +42,19 @@ function entity<T>(row: Row | undefined): T | undefined {
   if (!row) return undefined;
   const { PK: _pk, SK: _sk, GSI1PK: _a, GSI1SK: _b, GSI2PK: _c, GSI2SK: _d, ttl: _t, type: _type, n: _n, ...rest } = row;
   return rest as T;
+}
+
+
+/** A comment on an item: who wrote it, when, and the text */
+export interface Comment {
+  tenantId: string;
+  projectId: string;
+  itemId: string;
+  id: string;
+  at: string;
+  authorId: string;
+  authorName: string;
+  body: string;
 }
 
 
@@ -283,6 +298,23 @@ export class Repo {
   // Document record write; the guard keeps scan results and renames from crossing
   async saveDoc(d: DocumentRecord, guard: Guard) {
     await this.table.write([this.docOp(d, guard)]);
+  }
+
+  // --- Comments -----------------------------------------------------------
+
+  // An item's comments, oldest first
+  async listComments(tid: string, pid: string, iid: string): Promise<Comment[]> {
+    return (await this.table.query(`T#${tid}#P#${pid}`, `COMMENT#${iid}#`)).map((r) => entity<Comment>(r)!);
+  }
+
+  // A new comment
+  commentOp(c: Comment): WriteOp {
+    return { put: { ...keys.comment(c.tenantId, c.projectId, c.itemId, c.at, c.id), type: "comment", ...c }, guard: { create: true } };
+  }
+
+  // Remove one comment
+  async deleteComment(c: Comment) {
+    await this.table.write([{ delete: keys.comment(c.tenantId, c.projectId, c.itemId, c.at, c.id) }]);
   }
 
   // --- Edit markers (advisory soft locks) ---------------------------------
