@@ -94,6 +94,7 @@ function Wordmark() {
     setOpen(true);
     if (hold) timer.current = window.setTimeout(() => setOpen(false), hold);
   };
+  // Fold back now
   const hide = () => {
     clearTimeout(timer.current);
     setOpen(false);
