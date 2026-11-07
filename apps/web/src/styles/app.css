@@ -251,8 +251,20 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
 /* The panel is glass like the site's hero: the shared lens shows the rain through it, lightly
    tinted so the form stays readable */
 .signin .panel { position: relative; z-index: 2; width: min(420px, calc(100% - 32px)); text-align: center; padding: 36px 28px; background: rgba(13, 2, 8, .6); border: 1px solid rgba(0, 255, 65, .16); }
-.signin .word { font: 600 clamp(40px, 8vw, 60px) var(--mono); color: #9AFF9A; text-shadow: 0 0 8px rgba(108, 255, 168, .55), 0 0 24px rgba(0, 230, 118, .35); margin: 0; letter-spacing: .02em; }
-.signin .tag { border: 0; font: 13px var(--mono); color: #84A98C; margin: 6px 0 26px; display: block; white-space: normal; }
+/* Wordmark: 1NEON folds out to 1portalNeedsExecutionObservationNormalize. The box keeps the short
+   form's height so nothing below moves, and reaches 12px into the panel's padding on each side.
+   Open, the type shrinks until all 41 mono characters (.62em each with the spacing) fit on one line */
+.signin .word { --big: clamp(40px, 8vw, 60px); --fit: min(var(--big), calc((min(420px, 100vw - 32px) - 32px) / 26));
+  height: calc(var(--big) * 1.3); margin: 0 -12px 26px; display: flex; align-items: center; justify-content: center;
+  font: 600 var(--big) var(--mono); white-space: nowrap; cursor: default; border-radius: 6px; }
+.signin .word .wm { display: inline-flex; align-items: flex-start; line-height: 1.2; font-size: var(--big); letter-spacing: .02em; transition: font-size .6s ease; }
+.signin .word.open .wm { font-size: var(--fit); }
+/* Initials keep the neon and its glow; the rest of each word is a quieter green that still reads */
+.signin .word .seg { display: inline-flex; align-items: flex-start; }
+.signin .word .init { color: #9AFF9A; text-shadow: 0 0 8px rgba(108, 255, 168, .55), 0 0 24px rgba(0, 230, 118, .35); }
+.signin .word .rest { display: inline-block; overflow: hidden; max-width: 0; opacity: 0; color: #A3C2AA; font-weight: 500;
+  transition: max-width .6s ease, opacity .45s ease; }
+.signin .word.open .rest { max-width: calc(var(--n) * (1ch + .02em) + 1px); opacity: 1; }
 .signin input { background: rgba(255, 255, 255, .04); color: #D6F5DC; border-color: rgba(0, 255, 65, .3); text-align: center; }
 .signin .btn-primary { background: var(--neon); border-color: var(--neon); color: var(--void); width: 100%; margin-top: 12px; box-shadow: 0 0 18px rgba(108, 255, 168, .3); }
 .signin .fine { font-size: 12px; color: #84A98C; margin: 18px 0 0; }

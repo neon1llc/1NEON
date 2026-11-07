@@ -3,7 +3,7 @@
 
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { api, devUser, HttpError, isDev } from "../lib/api.ts";
 import { passkeyAssertion } from "../lib/passkey.ts";
@@ -79,6 +79,50 @@ const DEMO = [
 type Step = { step: "email" | "choose" | "code" | "totp" | "passkey" | "done" | "failed" | "not_invited"; methods?: ("code" | "passkey")[]; options?: unknown; wrong?: boolean };
 
 
+// The wordmark's letters, each with the rest of the word it stands for
+const SPELLED = [["1", "portal"], ["N", "eeds"], ["E", "xecution"], ["O", "bservation"], ["N", "ormalize"]] as const;
+
+
+/** 1NEON that spells itself out on one line and folds back: once after load, then on hover, focus,
+ * or tap. Its accessible name stays "1NEON", described by the full meaning */
+function Wordmark() {
+  const [open, setOpen] = useState(false);
+  const timer = useRef<number | undefined>(undefined);
+  // Open now; with `hold`, fold back after that many milliseconds
+  const show = (hold?: number) => {
+    clearTimeout(timer.current);
+    setOpen(true);
+    if (hold) timer.current = window.setTimeout(() => setOpen(false), hold);
+  };
+  const hide = () => {
+    clearTimeout(timer.current);
+    setOpen(false);
+  };
+  // One unprompted spell-out shortly after load, skipped for reduced motion
+  useEffect(() => {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const start = window.setTimeout(() => show(2600), 900);
+    return () => { clearTimeout(start); clearTimeout(timer.current); };
+  }, []);
+  return (
+    <>
+      <h1 className={`word${open ? " open" : ""}`} tabIndex={0} aria-label="1NEON" aria-describedby="word-meaning"
+        onMouseEnter={() => show()} onMouseLeave={hide} onFocus={() => show()} onBlur={hide} onClick={() => show(2600)}>
+        <span className="wm" aria-hidden="true">
+          {SPELLED.map(([initial, rest], i) => (
+            <span key={i} className="seg">
+              <span className="init">{initial}</span>
+              <span className="rest" style={{ "--n": rest.length } as CSSProperties}>{rest}</span>
+            </span>
+          ))}
+        </span>
+      </h1>
+      <p id="word-meaning" className="sr">1 portal: Needs, Execution, Observation, Normalize</p>
+    </>
+  );
+}
+
+
 /** Sign-in on this page: email, then a code by email or a passkey, through the API */
 function SignIn() {
   // Invite links carry the email, so it's filled in already
@@ -126,8 +170,7 @@ function SignIn() {
         </div>
       </header>
       <div className="panel glass">
-        <h1 className="word">1NEON</h1>
-        <span className="tag">1 portal. Needs. Execution. Observation. Normalize.</span>
+        <Wordmark />
         {problem === "not_invited" && <p className="notice" role="alert">That email hasn't been invited yet. Ask your organization's admin, or neon1.</p>}
         {problem === "failed" && <p className="notice" role="alert">Sign-in didn't finish. Please try again.</p>}
         {/* Step 1: the email */}
