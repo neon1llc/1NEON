@@ -607,3 +607,11 @@ details.history summary { cursor: pointer; font: 12px var(--mono); color: var(--
 .tl-bar { position: absolute; top: 4px; height: 14px; border-radius: 99px; }
 .tl-bar.l-needs { background: var(--l1); } .tl-bar.l-execution { background: var(--l2); } .tl-bar.l-observation { background: var(--l3); } .tl-bar.l-next { background: var(--l4); }
 .tl-bar.open { opacity: .45; background-image: linear-gradient(90deg, transparent 70%, var(--panel)); }
+.updates { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.updates li { display: grid; gap: 4px; padding: 10px 0; border-top: 1px solid var(--line); }
+.updates li:first-child { border-top: 0; }
+.updates a { color: inherit; text-decoration: none; font-weight: 500; }
+.updates a:hover { color: var(--accent); }
+.updates .s { font: 12px var(--mono); color: var(--muted); }
+.updates .u-line { display: flex; gap: 10px; align-items: center; font: 12px var(--mono); color: var(--muted); }
+.updates p { margin: 0; font-size: 14px; }

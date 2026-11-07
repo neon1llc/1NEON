@@ -24,6 +24,12 @@ The four layers every project moves through, N E O N. **Needs** is what you want
 ### What should I do first on a project?
 Look at **Next step** at the top of the project. It says what has to happen now and who it's waiting on.
 
+### How do I comment or change an item?
+Tap the item. A panel opens with its status, owner, due date, and details, and a place to comment. Everyone in your organization sees the comments.
+
+### What does the onion next to a project mean?
+It shows progress. Needs is the center ring and Normalize is the outside one; each ring fills as that layer's work gets done.
+
 ### What does the board show?
 Every project as a card, in the stage it's in. Columns run left to right from the first call to care after handover. Drag a card to move it, or use its **Move** button on a phone.
 

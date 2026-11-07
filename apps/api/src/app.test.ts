@@ -417,3 +417,15 @@ describe("comments", () => {
     expect((await call("dana@acmedental.example", "DELETE", `${path}/items/${item.id}/comments/${added.json.id}`)).status).toBe(200);
   });
 });
+
+
+// A written status update sets the project's health and shows on Home
+describe("project updates", () => {
+  it("sets health and lists the latest update", async () => {
+    const p = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json.find((x: { key: string }) => x.key === "FLOW-1");
+    await call(OP, "POST", `/t/${s.acme.id}/projects/${p.id}/items`, { kind: "update", title: "Vendor slipped a week", fields: { health: "at_risk" } });
+    expect((await call(OP, "GET", `/t/${s.acme.id}/projects/${p.id}`)).json.project.health).toBe("at_risk");
+    const ws = await call(OP, "GET", `/t/${s.acme.id}/workspace`);
+    expect(ws.json.updates[0].title).toBe("Vendor slipped a week");
+  });
+});

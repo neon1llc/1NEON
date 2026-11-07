@@ -470,6 +470,13 @@ export function createApp(d: Deps) {
     // Approvals first, then files to send, then work
     const order = { approve: 0, upload: 1, do: 2 };
     waiting.sort((a, b) => order[a.action] - order[b.action]);
+    // The latest written update on each live project, newest first
+    const updates: { projectKey: string; projectName: string; title: string; body: string; health: string; at: string; by: string }[] = [];
+    for (const p of live) {
+      const u = (await repo.listItems(t.id, p.id)).filter((i) => i.kind === "update").sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+      if (u) updates.push({ projectKey: p.key, projectName: p.name, title: u.title, body: u.body, health: String(u.fields.health ?? p.health), at: u.createdAt, by: u.updatedBy });
+    }
+    updates.sort((a, b) => b.at.localeCompare(a.at));
     const stageName = new Map(t.stages.map((s) => [s.id, s]));
     return c.json({
       counts: {
@@ -481,6 +488,7 @@ export function createApp(d: Deps) {
         documents: (await allDocs(t.id, live.map((p) => p.id))).length,
       },
       waiting: waiting.slice(0, 10),
+      updates: updates.slice(0, 5),
       activity,
     });
   });
@@ -706,7 +714,10 @@ export function createApp(d: Deps) {
       updatedAt: ts,
       updatedBy: actorId(c),
     });
-    await repo.table.write([repo.itemOp(item, { create: true }), repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: `${item.kind}.created`, target: item.id, summary: `${p.key}: added ${label(item.kind)} "${item.title}"` })]);
+    // A status update also sets the project's health, in the same transaction
+    const health = item.kind === "update" ? (item.fields as { health?: Project["health"] }).health : undefined;
+    const healthOp = health && health !== p.health ? [repo.projectOp({ ...p, health, version: p.version + 1, updatedAt: ts, updatedBy: actorId(c) }, { version: p.version })] : [];
+    await repo.table.write([repo.itemOp(item, { create: true }), ...healthOp, repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: `${item.kind}.created`, target: item.id, summary: `${p.key}: added ${label(item.kind)} "${item.title}"` })]);
     return c.json(item, 201);
   });
 

@@ -8,7 +8,9 @@ import { Check, CircleCheck, FileUp, ListTodo } from "lucide-react";
 import { Link } from "react-router";
 import { useHelp } from "../components/Help.tsx";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
-import { ago } from "../components/ui.tsx";
+import { ago, Health } from "../components/ui.tsx";
+import type { Project } from "@1neon/domain";
+type HealthT = Project["health"];
 import { api } from "../lib/api.ts";
 import { qk } from "../lib/hooks.ts";
 import type { Workspace } from "../lib/types.ts";
@@ -93,6 +95,21 @@ export function WorkspacePage() {
             <Link to={`${base}/people`}><b>{c?.people ?? "–"}</b> people{c?.invited ? ` (${c.invited} invited)` : ""}</Link>
             <Link to={`${base}/documents`}><b>{c?.documents ?? "–"}</b> files</Link>
           </nav>
+          {/* Each project's latest written update, with its health */}
+          {(ws.data?.updates?.length ?? 0) > 0 && (
+            <section className="card">
+              <h2 className="section-h">Project updates</h2>
+              <ul className="updates">
+                {ws.data!.updates!.map((u) => (
+                  <li key={u.projectKey}>
+                    <Link to={`${base}/projects/${u.projectKey}`}><span className="s">{u.projectKey}</span> {u.projectName}</Link>
+                    <span className="u-line"><Health value={u.health as HealthT} /> <time>{ago(u.at)}</time></span>
+                    <p>{u.title}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {/* What happened lately */}
           <section className="card" data-tour="activity">
             <h2 className="section-h">Recent activity</h2>

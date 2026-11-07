@@ -38,6 +38,7 @@ export interface Workspace {
   counts: { projects: number; deciding: number; building: number; people: number; invited: number; documents: number };
   waiting: { projectId: string; projectKey: string; itemId: string; title: string; kind: string; action: "approve" | "upload" | "do" }[];
   activity: AuditEvent[];
+  updates?: { projectKey: string; projectName: string; title: string; body: string; health: string; at: string; by: string }[];
 }
 
 

@@ -61,7 +61,7 @@ export const GUIDES: Record<PageKey, Guide> = {
   projects: {
     title: "Projects",
     purpose: "All projects in one list.",
-    howto: ["Open a project to see its four layers.", "Start one with New project."],
+    howto: ["Switch between List and Timeline at the top.", "Filter by layer, or sort by stage, target date, or recent changes.", "Start one with New project."],
     tour: [
       { at: "new-project", title: "New project", text: "Answer a few questions and the project starts with the right checklist." },
       { at: "project-list", title: "Your projects", text: "Each row shows the stage, health, and target date." },
@@ -70,7 +70,7 @@ export const GUIDES: Record<PageKey, Guide> = {
   project: {
     title: "Project",
     purpose: "One project: what's next, and its work in four layers.",
-    howto: ["Start with Next step: it says what to do now.", "Needs, Execute, Observe, and Normalize are the four layers of the work.", "Approving an option records the decision."],
+    howto: ["Start with Next step: it says what to do now.", "Tap any item to open it: change its status, owner, or due date, and comment.", "The onion beside the name fills as each layer's work gets done.", "Post an update to say how it's going."],
     tour: [
       { at: "next-step", title: "Next step", text: "What has to happen now, and who it's waiting on." },
       { at: "stage", title: "Stage", text: "Where the project is. It moves on when this stage's work is done." },

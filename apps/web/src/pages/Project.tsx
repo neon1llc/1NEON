@@ -168,6 +168,20 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
   const [draft, setDraft] = useState({ summary: p.summary, outcome: p.outcome });
   const [conflict, setConflict] = useState<Project>();
   const [peopleOpen, setPeopleOpen] = useState(false);
+  // A written status update with its health, shown on Home
+  const [posting, setPosting] = useState(false);
+  const [post, setPost] = useState({ title: "", health: p.health as string });
+  const postUpdate = async () => {
+    try {
+      await api(`/t/${org.id}/projects/${p.id}/items`, { method: "POST", body: { kind: "update", title: post.title, fields: { health: post.health } } });
+      setPosting(false);
+      setPost({ title: "", health: post.health });
+      toast("Update posted");
+    } catch (e) {
+      toast(problem(e));
+    }
+    refresh();
+  };
   // The latest decision, measures, and status update feed the overview
   const decision = items.filter((i) => i.kind === "decision").at(-1);
   const metrics = items.filter((i) => i.kind === "metric");
@@ -235,6 +249,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
           </div>
           <div className="small"><span className="muted">Target date</span> {p.targetDate ?? "none set"}</div>
           {update && <div className="small"><span className="muted">Latest update ({ago(update.updatedAt)})</span><br />{update.title}</div>}
+          {canWrite && <button className="btn btn-ghost btn-sm" style={{ justifySelf: "start" }} onClick={() => setPosting(true)}>Post an update</button>}
           {p.flags.length > 0 && <div className="small"><span className="tag warn">sensitive data: {p.flags.join(", ")}</span></div>}
         </div>
         {/* Project roles, with a fallback for people who left the organization */}
@@ -257,6 +272,19 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
           </p>
         )}
       </aside>
+      {/* Post an update: one line on how it's going, and the health that goes with it */}
+      <Dialog open={posting} onClose={() => setPosting(false)} label="Post an update">
+        <h2>How is it going?</h2>
+        <form className="form" onSubmit={(e) => { e.preventDefault(); if (post.title.trim()) void postUpdate(); }}>
+          <div><label htmlFor="up-h">Health</label>
+            <select id="up-h" value={post.health} onChange={(e) => setPost({ ...post, health: e.target.value })}>
+              <option value="on_track">On track</option><option value="at_risk">At risk</option><option value="off_track">Off track</option><option value="not_started">Not started</option>
+            </select>
+          </div>
+          <div><label htmlFor="up-t">In a sentence</label><input id="up-t" value={post.title} onChange={(e) => setPost({ ...post, title: e.target.value })} maxLength={160} placeholder="Migration finished; testing starts Monday." /></div>
+          <div className="actions"><button className="btn btn-primary" disabled={!post.title.trim()}>Post</button><button type="button" className="btn btn-ghost" onClick={() => setPosting(false)}>Cancel</button></div>
+        </form>
+      </Dialog>
       {/* Who's on the project and in what role; the decision maker approves options */}
       <PeopleDialog open={peopleOpen} onClose={() => setPeopleOpen(false)} people={p.people} onSave={(people) => { setPeopleOpen(false); void save(p.version, { people }); }} />
       {/* Keep mine saves again over their version; Take theirs drops the draft */}
