@@ -9,7 +9,7 @@ import { FileList, UploadButton } from "../components/Files.tsx";
 import { ItemPanel, STATUS_WORDS } from "../components/ItemPanel.tsx";
 import { Link, NavLink, useLocation, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
-import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerName, layerProgress, OnionProgress, ago, daysSince, useToast } from "../components/ui.tsx";
+import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerName, layerProgress, OnionProgress, Trend, ago, daysSince, useToast } from "../components/ui.tsx";
 import { api, HttpError } from "../lib/api.ts";
 import { problem, useMembers, useProject, useProjects, useRefresh } from "../lib/hooks.ts";
 import type { EditMarker } from "../lib/types.ts";
@@ -338,6 +338,7 @@ function MetricCard({ item, onReading }: { item: Item; onReading?: (value: numbe
       <div className="range">
         {m.baseline ?? "?"} → {m.target ?? "?"} {m.unit} · {betterWhen(m) === "down" ? "lower is better" : "higher is better"}
       </div>
+      <Trend baseline={m.baseline} target={m.target} readings={m.readings} unit={m.unit} />
       {pct !== undefined && <div className="progress" role="img" aria-label={`${Math.round(pct * 100)} percent of the way`}><i style={{ width: `${pct * 100}%` }} /></div>}
       {/* Editors log a reading dated today */}
       {onReading && (

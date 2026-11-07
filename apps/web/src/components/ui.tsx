@@ -114,6 +114,30 @@ export function OnionProgress({ progress, size = 40 }: { progress: Record<Layer,
 }
 
 
+/** A measure over time: readings as a line from the baseline, with the target as a dashed line */
+export function Trend({ baseline, target, readings, unit }: { baseline?: number; target?: number; readings: { at: string; value: number }[]; unit?: string }) {
+  const values = [...(baseline !== undefined ? [baseline] : []), ...readings.map((r) => r.value)];
+  if (values.length < 2 && target === undefined) return null;
+  const all = [...values, ...(target !== undefined ? [target] : [])];
+  const lo = Math.min(...all), hi = Math.max(...all);
+  const span = hi - lo || 1;
+  const W = 200, H = 48, pad = 4;
+  const x = (i: number) => pad + (values.length > 1 ? (i / (values.length - 1)) * (W - pad * 2) : W / 2);
+  const y = (v: number) => H - pad - ((v - lo) / span) * (H - pad * 2);
+  const line = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const last = values.at(-1);
+  const label = `From ${values[0]} to ${last}${unit ? ` ${unit}` : ""}${target !== undefined ? `, target ${target}` : ""}`;
+  return (
+    <svg className="trend" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={label}>
+      {target !== undefined && <line x1={0} x2={W} y1={y(target)} y2={y(target)} stroke="var(--accent)" strokeDasharray="4 4" strokeWidth="1.5" opacity=".6" />}
+      {values.length > 1 && <path d={line} fill="none" stroke="var(--text)" strokeWidth="2" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
+      {/* The latest point: a zero-length round-capped stroke stays round when the chart stretches */}
+      {last !== undefined && <path d={`M${x(values.length - 1).toFixed(1)},${y(last).toFixed(1)} l0.01,0`} stroke="var(--accent)" strokeWidth="8" strokeLinecap="round" vectorEffect="non-scaling-stroke" />}
+    </svg>
+  );
+}
+
+
 /** Display name for a layer */
 export function layerName(l: Layer) {
   return LAYER_NAMES[l];
