@@ -115,13 +115,13 @@ function Wordmark() {
   // One unprompted spell-out shortly after load, skipped for reduced motion
   useEffect(() => {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const start = window.setTimeout(() => show(3600), 900);
+    const start = window.setTimeout(() => show(4600), 900);
     return () => { clearTimeout(start); clearTimeout(timer.current); };
   }, []);
   return (
     <>
       <h1 className={`word${open ? " open" : ""}`} tabIndex={0} aria-label="1NEON" aria-describedby="word-meaning"
-        onMouseEnter={() => show()} onMouseLeave={hide} onFocus={() => show()} onBlur={hide} onClick={() => show(3600)}>
+        onMouseEnter={() => show()} onMouseLeave={hide} onFocus={() => show()} onBlur={hide} onClick={() => show(4600)}>
         <span className="wm" aria-hidden="true">
           {SPELLED.map(([initial, rest], i) => (
             <span key={i} className="seg">
