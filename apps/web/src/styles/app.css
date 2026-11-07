@@ -251,10 +251,6 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
 /* The panel is glass like the site's hero: the shared lens shows the rain through it, lightly
    tinted so the form stays readable */
 .signin .panel { position: relative; z-index: 2; width: min(420px, calc(100% - 32px)); text-align: center; padding: 36px 28px; background: rgba(13, 2, 8, .6); border: 1px solid rgba(0, 255, 65, .16); }
-/* neon1 logo in the corner, as in the site's header, leading back to the site */
-.signin .home { position: fixed; top: max(14px, env(safe-area-inset-top)); left: max(16px, env(safe-area-inset-left)); z-index: 2; display: inline-flex; align-items: center; gap: 10px; padding: 7px 12px;
-  color: var(--neon); text-decoration: none; font: 700 13px var(--mono); letter-spacing: .06em; text-shadow: 0 0 8px rgba(108, 255, 168, .45); }
-.signin .home svg { width: 26px; height: 26px; }
 .signin .word { font: 600 clamp(40px, 8vw, 60px) var(--mono); color: #9AFF9A; text-shadow: 0 0 8px rgba(108, 255, 168, .55), 0 0 24px rgba(0, 230, 118, .35); margin: 0; letter-spacing: .02em; }
 .signin .tag { border: 0; font: 13px var(--mono); color: #84A98C; margin: 6px 0 26px; display: block; white-space: normal; }
 .signin input { background: rgba(255, 255, 255, .04); color: #D6F5DC; border-color: rgba(0, 255, 65, .3); text-align: center; }

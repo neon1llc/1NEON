@@ -111,16 +111,20 @@ function SignIn() {
   const restart = () => { setAt({ step: "email" }); setCode(""); };
   return (
     <main className="signin">
-      <Rain panes=".signin .panel, .signin .home, .rainctl button" />
+      <Rain panes=".signin .panel, .signin .n1-logo, .rainctl button" />
       <div className="veil" />
-      {/* Back to neon1.tech, where the site's own logo sits */}
-      <a className="home glass" href="/" aria-label="neon1.tech home">
-        <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-          <path d="M6 6a24 24 0 0 1 24 24v30M6 12a18 18 0 0 1 18 18v30M6 18a12 12 0 0 1 12 12v30M6 24a6 6 0 0 1 6 6v30" />
-          <path d="M34 6a24 24 0 0 1 24 24v30M34 12a18 18 0 0 1 18 18v30M34 18a12 12 0 0 1 12 12v30M34 24a6 6 0 0 1 6 6v30" />
-        </svg>
-        <span><span className="ne">neon</span><span className="one">1</span></span>
-      </a>
+      {/* Back to neon1.tech, in the site's own top bar so the logo sits exactly where the site's does */}
+      <header className="n1-bar">
+        <div className="n1-inner">
+          <a className="n1-logo glass" href="/" aria-label="neon1.tech home">
+            <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+              <path d="M6 6a24 24 0 0 1 24 24v30M6 12a18 18 0 0 1 18 18v30M6 18a12 12 0 0 1 12 12v30M6 24a6 6 0 0 1 6 6v30" />
+              <path d="M34 6a24 24 0 0 1 24 24v30M34 12a18 18 0 0 1 18 18v30M34 18a12 12 0 0 1 12 12v30M34 24a6 6 0 0 1 6 6v30" />
+            </svg>
+            <span><span className="ne">neon</span><span className="one">1</span></span>
+          </a>
+        </div>
+      </header>
       <div className="panel glass">
         <h1 className="word">1NEON</h1>
         <span className="tag">1 portal. Needs. Execution. Observation. Normalize.</span>
