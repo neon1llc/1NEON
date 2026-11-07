@@ -25,7 +25,7 @@ export async function handler(event: PreSignUpTriggerEvent | CustomMessageTrigge
 // The wording for each kind of code Cognito sends; {####} is where Cognito puts the code. Subjects
 // carry no code: Cognito documents the placeholder for the message body only
 const CODES: Record<string, { subject: string; label: string; heading: string; lead: string }> = {
-  CustomMessage_Authentication: { subject: "Your portal sign-in code", label: "your sign-in code", heading: "Your sign-in code", lead: `Enter this code on the ${link("1NEON", PORTAL)} sign-in page.` },
+  CustomMessage_Authentication: { subject: "Your portal sign-in code", label: "your sign-in code", heading: "Your sign-in code", lead: `Use this code to sign in to ${link("1NEON", PORTAL)}.` },
   CustomMessage_ForgotPassword: { subject: "Your 1NEON reset code", label: "your reset code", heading: "Your reset code", lead: "Enter this code to choose a new password." },
   CustomMessage_UpdateUserAttribute: { subject: "Confirm your new email for 1NEON", label: "confirm your email", heading: "Confirm your new email", lead: `Enter this code in ${link("1NEON", PORTAL)} to confirm this address.` },
   CustomMessage_VerifyUserAttribute: { subject: "Confirm your email for 1NEON", label: "confirm your email", heading: "Confirm your email", lead: `Enter this code in ${link("1NEON", PORTAL)} to confirm this address.` },

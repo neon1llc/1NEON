@@ -266,8 +266,18 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
   transition: max-width .6s ease, opacity .45s ease; }
 .signin .word.open .rest { max-width: calc(var(--n) * (1ch + .02em) + 1px); opacity: 1; }
 .signin input { background: rgba(255, 255, 255, .04); color: #D6F5DC; border-color: rgba(0, 255, 65, .3); text-align: center; }
-.signin .btn-primary { background: var(--neon); border-color: var(--neon); color: var(--void); width: 100%; margin-top: 12px; box-shadow: 0 0 18px rgba(108, 255, 168, .3); }
+.signin .btn-primary { background: var(--neon); border-color: var(--neon); color: var(--void); width: 100%; box-shadow: 0 0 18px rgba(108, 255, 168, .3); }
 .signin .fine { font-size: 12px; color: #84A98C; margin: 18px 0 0; }
+/* Each sign-in step's lines sit at one even gap */
+.signin form.stack { display: grid; gap: 12px; }
+.signin form.stack > * { margin: 0; }
+/* The email, with remember me sliding in to its right once the address looks real */
+.signin .email-row { display: flex; align-items: center; gap: 0; }
+.signin .email-row input[type="email"] { flex: 1; min-width: 0; }
+.signin .remember { display: inline-flex; align-items: center; gap: 6px; max-width: 0; overflow: hidden; opacity: 0; white-space: nowrap;
+  font: 12px var(--mono); color: #84A98C; cursor: pointer; transition: max-width .35s ease, opacity .35s ease, margin .35s ease; }
+.signin .email-row.ok .remember { max-width: 130px; opacity: 1; margin-left: 10px; }
+.signin .remember input { width: 16px; height: 16px; min-height: 0; margin: 0; padding: 0; accent-color: var(--neon); }
 .signin .fine a { color: #84A98C; }
 .signin .legal-links { margin-top: 8px; white-space: nowrap; }
 /* Sign-in steps: stacked buttons, and a wide, spaced-out code field */

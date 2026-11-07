@@ -112,7 +112,7 @@ describe("email", () => {
     const out = message(event, new Date("2026-11-06T20:22:00Z"));
     expect(out.response.emailSubject).toBe("Your portal sign-in code");
     expect(out.response.emailMessage).toMatch(/user-select:all">\{####\}<\/span>/);
-    expect(out.response.emailMessage).toContain('the <a href="https://neon1.tech/1NEON/"');
+    expect(out.response.emailMessage).toContain('sign in to <a href="https://neon1.tech/1NEON/"');
     expect(out.response.emailMessage).toContain("Sent Nov 6, 2026, 8:22 PM UTC");
     expect(out.response.emailMessage).toContain("neon1 · your sign-in code");
     // The link finishes sign-in with the code in the fragment, never in a server-visible query

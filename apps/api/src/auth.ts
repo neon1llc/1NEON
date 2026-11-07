@@ -17,7 +17,7 @@ import type { Config } from "./config.ts";
 
 
 // Cookie names; the __Secure- prefix makes browsers refuse them over plain HTTP
-export const COOKIE = { access: "__Secure-1neon_at", refresh: "__Secure-1neon_rt", flow: "__Secure-1neon_flow", step: "__Secure-1neon_step" } as const;
+export const COOKIE = { access: "__Secure-1neon_at", refresh: "__Secure-1neon_rt", flow: "__Secure-1neon_flow", step: "__Secure-1neon_step", remember: "__Secure-1neon_rm" } as const;
 
 
 /** Where an on-page sign-in stands: waiting for a code, a passkey, a method choice, or done */
@@ -143,8 +143,12 @@ export class CognitoAuth {
   private async finish(c: Context, access?: string, idToken?: string, refresh?: string): Promise<Verified | undefined> {
     if (!access || !idToken) return undefined;
     const id = await this.idt.verify(idToken);
-    setCookie(c, COOKIE.access, access, this.cookieOpts(15 * 60));
-    if (refresh) setCookie(c, COOKIE.refresh, refresh, this.cookieOpts(30 * 24 * 3600));
+    // Remember me (the default) keeps the refresh token 30 days; without it both cookies end with the browser
+    const forget = getCookie(c, COOKIE.remember) === "0";
+    deleteCookie(c, COOKIE.remember, { path: "/1NEON/api", secure: true });
+    const opts = (maxAge: number) => (forget ? { ...this.cookieOpts(maxAge), maxAge: undefined } : this.cookieOpts(maxAge));
+    setCookie(c, COOKIE.access, access, opts(15 * 60));
+    if (refresh) setCookie(c, COOKIE.refresh, refresh, opts(30 * 24 * 3600));
     return { sub: id.sub, email: String(id.email ?? "").toLowerCase(), emailVerified: String(id.email_verified) === "true", accessToken: access };
   }
 
@@ -187,7 +191,9 @@ export class CognitoAuth {
   }
 
   /** POST /auth/start: begin with an email; Cognito answers the same way whether or not it knows the person */
-  async start(c: Context, email: string) {
+  async start(c: Context, email: string, remember = true) {
+    // Held for the steps to come, like Cognito's own session
+    setCookie(c, COOKIE.remember, remember ? "1" : "0", this.cookieOpts(300));
     const r = await this.idp.send(new InitiateAuthCommand({ ClientId: this.cfg.clientId, AuthFlow: "USER_AUTH", AuthParameters: { USERNAME: email } }));
     return this.next(c, email, r);
   }

@@ -48,18 +48,18 @@ export function branded(p: MailParts) {
   // The code is one unbroken text node that selects whole on a tap or double click; spacing is
   // letter-spacing only, so nothing extra lands in the clipboard
   const code = p.code
-    ? `<p style="margin:28px 0 8px;text-align:center"><span style="display:inline-block;font:700 30px ${MONO};letter-spacing:.2em;color:${BRAND};background:#fff;border:1px solid rgba(3,87,4,.3);border-radius:10px;padding:14px 14px 14px 20px;-webkit-user-select:all;user-select:all">${p.code}</span></p>`
+    ? `<p style="margin:22px 0 0;text-align:center"><span style="display:inline-block;font:700 30px ${MONO};letter-spacing:.2em;color:${BRAND};background:#fff;border:1px solid rgba(3,87,4,.3);border-radius:10px;padding:14px 14px 14px 20px;-webkit-user-select:all;user-select:all">${p.code}</span></p>`
     : "";
   const button = p.button
-    ? `<p style="margin:30px 0 8px;text-align:center"><a href="${esc(p.button.url)}" style="display:inline-block;background:${BRAND};color:#fff;text-decoration:none;padding:13px 24px;border-radius:8px;font:600 14px ${MONO};letter-spacing:.02em">${esc(p.button.label)}</a></p>`
+    ? `<p style="margin:22px 0 0;text-align:center"><a href="${esc(p.button.url)}" style="display:inline-block;background:${BRAND};color:#fff;text-decoration:none;padding:13px 24px;border-radius:8px;font:600 14px ${MONO};letter-spacing:.02em">${esc(p.button.label)}</a></p>`
     : "";
-  const note = p.note ? `<p style="margin:18px 0 0;text-align:center;color:${MUTED};font-size:13px">${p.note}</p>` : "";
+  const note = p.note ? `<p style="margin:22px 0 0;text-align:center;color:${MUTED};font-size:13px">${p.note}</p>` : "";
   // The sign-off sits inside the card and ends with the send time. Gmail collapses trailing content
   // that repeats earlier messages in a thread, and sign-in codes thread under one subject, so a
   // detail unique to each message keeps the sign-off on screen
-  // Each sign-off line stays on one line, small enough to fit a phone's mail view
+  // Each sign-off line stays on one line, centered and small enough to fit a phone's mail view
   const line = `white-space:nowrap;font:11px/1.7 ${MONO};color:${MUTED}`;
-  const signoff = `<div style="margin:26px 0 0;padding-top:14px;border-top:1px solid rgba(18,36,26,.1)"><div style="${line}">${link("neon1", "https://neon1.tech/")} · 1 is glad to be of service.</div><div style="${line}">${sentAt(p.at ?? new Date())}</div></div>`;
+  const signoff = `<div style="margin:22px 0 0;padding-top:18px;border-top:1px solid rgba(18,36,26,.1);text-align:center"><div style="${line}">${link("neon1", "https://neon1.tech/")} · 1 is glad to be of service.</div><div style="${line}">${sentAt(p.at ?? new Date())}</div></div>`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light only"><meta name="viewport" content="width=device-width"></head>
 <body style="margin:0;background:${PAPER};font:16px/1.6 ${SANS};color:${INK}">
 <span style="display:none;max-height:0;overflow:hidden">${esc(p.preheader)}</span>
@@ -73,7 +73,7 @@ export function branded(p: MailParts) {
 </td></tr>
 <tr><td>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;border:1px solid rgba(18,36,26,.1)">
-<tr><td style="background:#fff;border-radius:12px;padding:26px 22px 22px">
+<tr><td style="background:#fff;border-radius:12px;padding:24px 20px 22px;text-align:center">
 ${p.body}${code}${button}${note}${signoff}
 </td></tr>
 </table>

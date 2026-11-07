@@ -18,7 +18,8 @@ import { Avatar, Icon, initials, LayerBadge, LAYERS, layerName } from "./ui.tsx"
 
 /** The signed-in person and their organizations; a 401 here means "show sign-in" */
 export function useMe() {
-  return useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me"), retry: false });
+  // A dropped connection (common on phones waking up) is retried a few times; an HTTP answer is final
+  return useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me"), retry: (n, e) => !(e instanceof HttpError) && n < 4, retryDelay: (n) => Math.min(800 * 2 ** n, 6000) });
 }
 
 
@@ -53,7 +54,7 @@ export function Root() {
   if (me.isPending) return arriving ? <div className="signin" aria-busy="true" /> : <div className="content muted" aria-busy="true">Loading…</div>;
   if (me.error) {
     if (me.error instanceof HttpError && me.error.status === 401) return <SignIn />;
-    return <div className="content">Couldn't reach 1NEON. <button className="linkish" onClick={() => me.refetch()}>Try again</button></div>;
+    return <div className="content">Couldn't reach 1NEON. Check your connection, then <button className="linkish" onClick={() => me.refetch()}>try again</button>.</div>;
   }
   const data = me.data!;
   // Landing on /1NEON/: the operator starts at All clients, everyone else in their first client organization
@@ -141,6 +142,9 @@ function SignIn() {
   // Invite links carry the email, so it's filled in already
   const [email, setEmail] = useState(() => saved?.email ?? new URLSearchParams(location.search).get("email") ?? "");
   const [code, setCode] = useState("");
+  // Remember me: keep the sign-in for 30 days; unchecked, it ends when the browser closes
+  const [remember, setRemember] = useState(true);
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
   const [at, setAt] = useState<Step>(() => (saved ? { step: saved.step, methods: saved.methods } : { step: "email" }));
   const [busy, setBusy] = useState(false);
   const qc = useQueryClient();
@@ -207,9 +211,16 @@ function SignIn() {
         {problem === "failed" && <p className="notice" role="alert">{fromLink ? "That link only works in the browser where you asked for the code. Type the code there instead, or start again here." : "Sign-in didn't finish. Please try again."}</p>}
         {/* Step 1: the email */}
         {(at.step === "email" || at.step === "failed" || at.step === "not_invited") && (
-          <form onSubmit={(e) => { e.preventDefault(); void send({ op: "start", email: email.trim() }); }}>
+          <form className="stack" onSubmit={(e) => { e.preventDefault(); void send({ op: "start", email: email.trim(), remember }); }}>
             <label className="sr" htmlFor="email">Your email</label>
-            <input id="email" type="email" required autoComplete="email webauthn" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+            {/* Remember me fades in beside the email once it looks like a real address */}
+            <div className={`email-row${emailOk ? " ok" : ""}`}>
+              <input id="email" type="email" required autoComplete="email webauthn" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <label className="remember" aria-hidden={!emailOk}>
+                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} tabIndex={emailOk ? 0 : -1} />
+                remember me
+              </label>
+            </div>
             <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? "One moment…" : "Continue"}</button>
           </form>
         )}
@@ -223,7 +234,7 @@ function SignIn() {
         )}
         {/* Step 2b: the emailed code, or an authenticator app's code */}
         {(at.step === "code" || at.step === "totp") && (
-          <form onSubmit={(e) => { e.preventDefault(); void send({ op: "answer", kind: at.step, value: code.trim() }); }}>
+          <form className="stack" onSubmit={(e) => { e.preventDefault(); void send({ op: "answer", kind: at.step, value: code.trim() }); }}>
             <p className="fine">{at.step === "code" ? <>We sent a code to <b>{email}</b>.</> : "Enter the code from your authenticator app."}</p>
             {at.wrong && <p className="notice" role="alert">That code didn't match. Check it and try again.</p>}
             <label className="sr" htmlFor="code">Code</label>

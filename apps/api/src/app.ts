@@ -173,14 +173,14 @@ export function createApp(d: Deps) {
 
   // On-page sign-in: each call returns the next step; "done" means the cookies are set
   const SignInBody = z.discriminatedUnion("op", [
-    z.object({ op: z.literal("start"), email: z.string().trim().toLowerCase().email().max(254) }),
+    z.object({ op: z.literal("start"), email: z.string().trim().toLowerCase().email().max(254), remember: z.boolean().default(true) }),
     z.object({ op: z.literal("choose"), method: z.enum(["code", "passkey"]) }),
     z.object({ op: z.literal("answer"), kind: z.enum(["code", "totp", "passkey"]), value: z.string().min(1).max(20000) }),
   ]);
   app.post("/auth/step", async (c) => {
     if (!d.auth) fail(404, "not_found", "Sign-in runs through the demo accounts locally.");
     const b = SignInBody.parse(await c.req.json());
-    const r = b.op === "start" ? await d.auth.start(c, b.email) : b.op === "choose" ? await d.auth.choose(c, b.method) : await d.auth.answer(c, b.kind, b.value);
+    const r = b.op === "start" ? await d.auth.start(c, b.email, b.remember) : b.op === "choose" ? await d.auth.choose(c, b.method) : await d.auth.answer(c, b.kind, b.value);
     if (r.next.step !== "done") return c.json({ ...r.next, wrong: "wrong" in r ? r.wrong : undefined });
     const result = await admit("verified" in r ? r.verified : undefined);
     // Not invited: drop the cookies Cognito's tokens just set
