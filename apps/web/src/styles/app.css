@@ -380,9 +380,7 @@ fieldset legend { font: 12px var(--mono); color: var(--muted); }
 .signin .lost .fine { margin: 0; }
 .signin .lost .fine a { color: #84A98C; }
 
-/* Neo sits bottom-right here (n1chat-right), clear of the side rail, and above the rain
- * controls on the sign-in screen */
-body:has(.signin) .n1chat-launch.n1chat-portal { bottom: 64px; }
+/* Neo sits bottom-right inside the portal (n1chat-right), clear of the side rail; the public screens put it back bottom left (below) */
 
 /* --- Frame, rework: labeled menu on wide screens, search and help in the top bar, a phone tab bar --- */
 /* The chooser shows in full only where labels show; the initials box stands in elsewhere */
