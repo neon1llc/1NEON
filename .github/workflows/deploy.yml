@@ -113,7 +113,7 @@ jobs:
             echo "ok $ref"
           done
 
-      # Old hashed assets are kept for 14 days for open tabs and rollback, then removed. Anything this
+      # Old hashed assets are kept for 14 days for open tabs and rollback, then removed (none old is fine). Anything this
       # build still uses is never removed, however old
       - name: Prune old assets
         working-directory: apps/web/dist
@@ -121,7 +121,7 @@ jobs:
           set -euo pipefail
           cutoff=$(date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
           aws s3api list-objects-v2 --bucket "$APP_BUCKET" --prefix 1NEON/assets/ \
-            --query "Contents[?LastModified<'$cutoff'].Key" --output text | tr '\t' '\n' | grep -v '^None$' | while read -r key; do
+            --query "Contents[?LastModified<'$cutoff'].Key" --output text | tr '\t' '\n' | { grep -v '^None$' || true; } | while read -r key; do
               [ -z "$key" ] && continue
               [ -e "${key}" ] && continue
               aws s3 rm "s3://$APP_BUCKET/$key"
