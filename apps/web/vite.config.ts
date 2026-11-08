@@ -22,6 +22,7 @@ export default defineConfig({
       "/1NEON/api": "http://localhost:8787",
       "/shared": { target: site, changeOrigin: true },
       "/fonts": { target: site, changeOrigin: true },
+      "/chat/api": { target: site, changeOrigin: true },
     },
   },
   // dist/1NEON mirrors the bucket's 1NEON/ prefix; source maps are built but never linked or uploaded

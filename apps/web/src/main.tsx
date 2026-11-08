@@ -77,3 +77,11 @@ createRoot(document.getElementById("root")!).render(
     </QueryClientProvider>
   </StrictMode>,
 );
+
+
+// The site's "ask neon1" window, answered from neon1's public pages through /chat/api on this
+// origin. It's optional: if the site's module can't load, the portal works without it
+const CHAT = "/shared/chat.js";
+import(/* @vite-ignore */ CHAT)
+  .then((m: { chat(opts: { className?: string }): unknown }) => m.chat({ className: "n1chat-portal" }))
+  .catch(() => undefined);

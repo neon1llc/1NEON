@@ -1,6 +1,6 @@
 # Privacy policy
 
-*Last updated November 7, 2026.*
+*Last updated November 8, 2026.*
 
 NEON1 LLC ("neon1", "I", "me") runs the website neon1.tech and the 1NEON client portal at neon1.tech/1NEON. This policy explains what information I collect, why, and what you can do about it.
 
@@ -12,7 +12,7 @@ NEON1 LLC ("neon1", "I", "me") runs the website neon1.tech and the 1NEON client 
 
 ## What I collect
 
-**On the website.** No accounts, analytics, or tracking. Like any website, the servers that deliver it (Amazon CloudFront) handle your IP address and browser details to send you the pages, and AWS may keep them briefly for security and operations. Your browser saves the rain display settings you pick, on your device only. If you email me or book a call through Calendly, I receive what you send, such as your name, email address, and message. Calendly handles bookings under its own privacy policy.
+**On the website.** No accounts, analytics, or tracking. Like any website, the servers that deliver it (Amazon CloudFront) handle your IP address and browser details to send you the pages, and AWS may keep them briefly for security and operations. Your browser saves the rain display settings you pick, on your device only. If you use the "ask neon1" window on the website or in the portal, your questions go to Amazon Bedrock, which writes an answer from neon1's public pages and doesn't keep your questions or use them to train models. I don't store or log what you type there, and the hourly question limit counts visitors by a one-way code, not by IP address. If you email me or book a call through Calendly, I receive what you send, such as your name, email address, and message. Calendly handles bookings under its own privacy policy.
 
 **In the 1NEON portal**, which is available only to people invited by me or by an administrator of their organization:
 
@@ -37,7 +37,7 @@ I use a small number of service providers, each only for the purpose listed:
 
 | Provider | Purpose |
 |---|---|
-| Amazon Web Services (United States) | Hosting, storage, sign-in, and email delivery |
+| Amazon Web Services (United States) | Hosting, storage, sign-in, email delivery, and answers in the "ask neon1" window |
 | Google (Google sign-in, Google Workspace) | Optional sign-in with Google; my business email |
 | Calendly | Booking calls from the website |
 

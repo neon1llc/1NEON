@@ -374,3 +374,7 @@ fieldset legend { font: 12px var(--mono); color: var(--muted); }
 .signin .lost .fine { margin: 0; }
 .signin .lost .fine a { color: #84A98C; }
 
+/* The site's "ask neon1" window sits bottom-right here, clear of the side rail, and above the
+ * rain controls on the sign-in screen */
+.n1chat-launch.n1chat-portal, .n1chat.n1chat-portal { left: auto; right: 16px; }
+body:has(.signin) .n1chat-launch.n1chat-portal { bottom: 64px; }
