@@ -692,3 +692,13 @@ details.history summary { cursor: pointer; font: 12px var(--mono); color: var(--
 /* Requirement priority on each row: must stands out, nice to have recedes */
 .tag.prio-must { color: var(--accent); border-color: var(--accent); }
 .tag.prio-could { opacity: .7; }
+/* Repeatable needs: each is a borderless group; a second need gets a small header with Remove */
+.need { border: 0; padding: 0; margin: 0; display: grid; gap: 12px; min-width: 0; }
+.need + .need { border-top: 1px dashed var(--line-strong); padding-top: 14px; }
+.need-h { display: flex; justify-content: space-between; width: 100%; padding: 0; font: 12px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+/* The + chip opens a chip-sized field for the person's own action word */
+.chip.add { font-weight: 700; color: var(--accent); min-width: 32px; }
+.chip-input { width: 160px; min-height: 26px; padding: 2px 11px; border-radius: 99px; font: 12px var(--mono); }
+.dates { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dates input { flex: 0 0 auto; width: 160px; min-height: 32px; }
+.another { justify-self: start; }

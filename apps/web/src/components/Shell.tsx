@@ -239,7 +239,7 @@ function SignIn() {
             <label className="sr" htmlFor="email">Your email</label>
             {/* Remember me opens under the email once it looks like a real address */}
             <div className={`email-row${emailOk ? " ok" : ""}`}>
-              <input id="email" type="email" required autoComplete="email webauthn" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <input id="email" type="email" required autoComplete="email webauthn" placeholder="i.e. you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
               <label className="remember" aria-hidden={!emailOk}>
                 <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} tabIndex={emailOk ? 0 : -1} />
                 remember me

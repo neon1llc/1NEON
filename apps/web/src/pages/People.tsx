@@ -119,7 +119,7 @@ function Invite() {
       {/* Addresses, then the access level they all get */}
       <div>
         <label htmlFor="emails">Email addresses</label>
-        <textarea id="emails" value={emails} onChange={(e) => setEmails(e.target.value)} placeholder="dana@example.com, lee@example.com" style={{ minHeight: 64 }} autoFocus />
+        <textarea id="emails" value={emails} onChange={(e) => setEmails(e.target.value)} placeholder="i.e. dana@example.com, lee@example.com" style={{ minHeight: 64 }} autoFocus />
         <p className="muted small" style={{ margin: "6px 0 0" }}>They get an email from neon1 with a link to sign in. Only invited emails can sign in.</p>
       </div>
       <div>

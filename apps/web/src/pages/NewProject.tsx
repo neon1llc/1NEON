@@ -116,10 +116,10 @@ export function NewProject() {
         {/* Step 2: basics */}
         {step === 1 && (
           <>
-            <div><label htmlFor="n">Name</label><input id="n" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required autoFocus placeholder="Move the file server to the cloud" /></div>
-            <div><label htmlFor="s">In one or two sentences, what is this?</label><textarea id="s" value={projectSummary} onChange={(e) => setSummary(e.target.value)} maxLength={500} rows={2} placeholder="Patients email forms to one inbox, and staff retype them into the record." /></div>
-            <div><label htmlFor="o">What will be true when it's done?</label><textarea id="o" value={outcome} onChange={(e) => setOutcome(e.target.value)} maxLength={500} rows={2} placeholder="Patients upload once, and the front desk sees what's missing at a glance." /></div>
-            <div><label htmlFor="x">One real example of how it works today</label><textarea id="x" value={example} onChange={(e) => setExample(e.target.value)} maxLength={2000} rows={3} placeholder="Every Monday, Dana exports the schedule to a spreadsheet and emails it to the front desk…" /></div>
+            <div><label htmlFor="n">Name</label><input id="n" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required autoFocus placeholder="i.e. move the file server to the cloud" /></div>
+            <div><label htmlFor="s">In one or two sentences, what is this?</label><textarea id="s" value={projectSummary} onChange={(e) => setSummary(e.target.value)} maxLength={500} rows={2} placeholder="i.e. patients email forms to one inbox, and staff retype them into the record." /></div>
+            <div><label htmlFor="o">What will be true when it's done?</label><textarea id="o" value={outcome} onChange={(e) => setOutcome(e.target.value)} maxLength={500} rows={2} placeholder="i.e. patients upload once, and the front desk sees what's missing at a glance." /></div>
+            <div><label htmlFor="x">One real example of how it works today</label><textarea id="x" value={example} onChange={(e) => setExample(e.target.value)} maxLength={2000} rows={3} placeholder="i.e. every Monday, Dana exports the schedule to a spreadsheet and emails it to the front desk…" /></div>
             <div><label htmlFor="d">Target date (optional)</label><input id="d" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} style={{ maxWidth: 220 }} /></div>
           </>
         )}
@@ -132,8 +132,8 @@ export function NewProject() {
               const set = (patch: Partial<MetricDraft>) => setMetrics(metrics.map((x, j) => (j === i ? { ...x, ...patch } : x)));
               return (
                 <div key={i} className="card" style={{ padding: 14, display: "grid", gap: 10, gridTemplateColumns: "2fr 1fr 1fr 1fr" }}>
-                  <div><label htmlFor={`mt${i}`}>Measure</label><input id={`mt${i}`} value={m.title} onChange={(e) => set({ title: e.target.value })} placeholder="Hours a week on scheduling" /></div>
-                  <div><label htmlFor={`mu${i}`}>Unit</label><input id={`mu${i}`} value={m.unit} onChange={(e) => set({ unit: e.target.value })} placeholder="hours" /></div>
+                  <div><label htmlFor={`mt${i}`}>Measure</label><input id={`mt${i}`} value={m.title} onChange={(e) => set({ title: e.target.value })} placeholder="i.e. hours a week on scheduling" /></div>
+                  <div><label htmlFor={`mu${i}`}>Unit</label><input id={`mu${i}`} value={m.unit} onChange={(e) => set({ unit: e.target.value })} placeholder="i.e. hours" /></div>
                   <div><label htmlFor={`mb${i}`}>Now</label><input id={`mb${i}`} inputMode="decimal" value={m.baseline} onChange={(e) => set({ baseline: e.target.value })} /></div>
                   <div><label htmlFor={`mg${i}`}>Target</label><input id={`mg${i}`} inputMode="decimal" value={m.target} onChange={(e) => set({ target: e.target.value })} /></div>
                 </div>

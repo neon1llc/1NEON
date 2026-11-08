@@ -284,7 +284,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
               <option value="on_track">On track</option><option value="at_risk">At risk</option><option value="off_track">Off track</option><option value="not_started">Not started</option>
             </select>
           </div>
-          <div><label htmlFor="up-t">In a sentence</label><input id="up-t" value={post.title} onChange={(e) => setPost({ ...post, title: e.target.value })} maxLength={160} placeholder="Migration finished; testing starts Monday." /></div>
+          <div><label htmlFor="up-t">In a sentence</label><input id="up-t" value={post.title} onChange={(e) => setPost({ ...post, title: e.target.value })} maxLength={160} placeholder="i.e. migration finished; testing starts Monday" /></div>
           <div className="actions"><button className="btn btn-primary" disabled={!post.title.trim()}>Post</button><button type="button" className="btn btn-ghost" onClick={() => setPosting(false)}>Cancel</button></div>
         </form>
       </Dialog>
@@ -523,6 +523,17 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
   const guide = GUIDE[kind];
   const label = KIND_LABEL[kind][0];
 
+  // Each need in a request becomes its own item, sent in order, then the form closes
+  const sendAll = async (drafts: { title: string; body: string; dueDate?: string; fields: Record<string, unknown> }[]) => {
+    try {
+      for (const d of drafts) await api(`${path}/items`, { method: "POST", body: { kind, ...d } });
+      setOpen(false);
+      if (drafts.length > 1) toast(`${drafts.length} requests sent`);
+    } catch (e) {
+      toast(problem(e));
+    }
+    refresh();
+  };
   // Send one item, then close the form
   const send = async (item: { title: string; body: string; fields: Record<string, unknown> }) => {
     try {
@@ -546,7 +557,7 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
     );
   }
   // Requests are built as one guided sentence
-  if (kind === "request") return <RequestBuilder onSubmit={(d) => void send(d)} onCancel={() => setOpen(false)} />;
+  if (kind === "request") return <RequestBuilder onSubmit={(ds) => void sendAll(ds)} onCancel={() => setOpen(false)} />;
 
   // Blank or non-numeric values are left unset
   const num = (s: string) => (s.trim() === "" || Number.isNaN(Number(s)) ? undefined : Number(s));
@@ -561,7 +572,7 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
   return (
     <form className="card add-form" onSubmit={(e) => { e.preventDefault(); if (title.trim()) submit(); }}>
       {guide && <p className="small muted hint">{guide.hint}</p>}
-      <input aria-label={`${label} title`} placeholder={guide ? `For example: ${guide.title}` : label} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} required autoFocus />
+      <input aria-label={`${label} title`} placeholder={guide ? `i.e. ${guide.title}` : label} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} required autoFocus />
       {guide && !title && <Starters kind={kind} taken={taken} onPick={setTitle} />}
       {/* Requirements: how much it matters, as three chips */}
       {kind === "requirement" && (
@@ -571,12 +582,12 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
       {/* Measures need a unit, a baseline, and a target; options need a cost */}
       {kind === "metric" && (
         <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr 1fr" }}>
-          <input aria-label="Unit" placeholder="Unit, such as hours" value={extra.unit} onChange={(e) => setExtra({ ...extra, unit: e.target.value })} />
+          <input aria-label="Unit" placeholder="Unit, i.e. hours" value={extra.unit} onChange={(e) => setExtra({ ...extra, unit: e.target.value })} />
           <input aria-label="Now" placeholder="Now" inputMode="decimal" value={extra.baseline} onChange={(e) => setExtra({ ...extra, baseline: e.target.value })} />
           <input aria-label="Target" placeholder="Target" inputMode="decimal" value={extra.target} onChange={(e) => setExtra({ ...extra, target: e.target.value })} />
         </div>
       )}
-      {kind === "option" && <input aria-label="Cost" placeholder="Cost, such as $4,800 fixed" value={extra.cost} onChange={(e) => setExtra({ ...extra, cost: e.target.value })} />}
+      {kind === "option" && <input aria-label="Cost" placeholder="Cost, i.e. $4,800 fixed" value={extra.cost} onChange={(e) => setExtra({ ...extra, cost: e.target.value })} />}
       <div style={{ display: "flex", gap: 8 }}>
         <button className="btn btn-primary" type="submit" disabled={!title.trim()}>Add</button>
         <button className="btn btn-ghost" type="button" onClick={() => setOpen(false)}>Cancel</button>
@@ -700,7 +711,7 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
         <h2>Approve "{approving?.title}"?</h2>
         <p className="muted small">This records a decision tied to this exact version of the option. It can't be edited afterwards; a later change needs a new approval.</p>
         <label htmlFor="cond">Conditions (optional)</label>
-        <textarea id="cond" value={conditions} onChange={(e) => setConditions(e.target.value)} maxLength={2000} placeholder="For example: only if the work happens after 6pm" />
+        <textarea id="cond" value={conditions} onChange={(e) => setConditions(e.target.value)} maxLength={2000} placeholder="i.e. only if the work happens after 6pm" />
         <div className="actions">
           <button className="btn btn-primary" onClick={() => void approve()}>Approve</button>
           <button className="btn btn-ghost" onClick={() => setApproving(undefined)}>Cancel</button>
