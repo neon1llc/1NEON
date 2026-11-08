@@ -316,6 +316,8 @@ export const STORY: Section[] = [
         await add("training", "Front desk walkthrough, recorded for new staff");
       }, 900, "Pradeep uploaded the runbook");
       await s.go(`${base}/projects`, "Projects");
+      // The page remembers List or Timeline; the project row is in List
+      await s.click({ sel: "[role=tab]", text: "List" }, 500);
       await s.click({ sel: ".ptr", text: "Orders without retyping" }, 1000);
       await s.click({ sel: "nav.tabs a", text: "Normalize" }, 1000);
       await s.say("She checks off the handover as each step is done");

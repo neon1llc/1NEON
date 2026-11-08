@@ -3,7 +3,7 @@
 // step checks for pause and for a jump, so Back, Next, and the section list cut cleanly.
 
 
-import { liveEngine } from "../lib/api.ts";
+import { devUser, liveEngine } from "../lib/api.ts";
 import { clearCache, navigate, refreshAll } from "../lib/nav.ts";
 
 
@@ -110,7 +110,16 @@ function shapeFor(el: Element): "arrow" | "hand" | "beam" {
 export class Player {
   private cursor?: Cursor;
   private token = { cut: false };
-  private snaps = new Map<number, { data: unknown; path: string }>();
+  // The run in progress; a jump waits for it to stop before touching the data, so runs never overlap
+  private running?: Promise<void>;
+  // Each section's start: the data, the page, and who was signed in
+  private snaps = new Map<number, { data: unknown; path: string; who: string }>();
+  // A section that already failed once and was restarted, so a second failure stops instead of looping
+  private retried = -1;
+  // Someone clicked around the portal while paused; resuming starts the section over, cleanly
+  private touched = false;
+  /** How fast it plays: 1 is the calm default, 0.5 half as fast, 2 twice as fast */
+  speed = (() => { try { return Number(localStorage.getItem("1neon.liveSpeed")) || 1; } catch { return 1; } })();
   private listeners = new Set<(v: View) => void>();
   private steps = 0;
   private est = new Map<number, number>();
@@ -143,15 +152,29 @@ export class Player {
   /** Start from the first section */
   start() {
     this.cursor ??= new Cursor();
-    void this.runFrom(0);
+    // Clicks in the portal while paused mean someone explored; note it for resuming
+    document.addEventListener("pointerdown", (e) => {
+      if (this.view.paused && (e.target as Element).closest("#root")) this.touched = true;
+    }, true);
+    void this.goTo(0);
   }
   pause() {
     this.emit({ paused: true });
   }
   resume() {
-    // Finished: play again from the top
+    // Finished, or the page was changed by hand while paused: play this section again from its start
     if (this.view.done) return void this.goTo(0);
+    if (this.touched) { this.touched = false; return void this.goTo(this.view.index); }
     this.emit({ paused: false });
+  }
+  /** Change the speed; it applies from the next movement */
+  setSpeed(v: number) {
+    this.speed = Math.min(2, Math.max(0.5, v));
+    try { localStorage.setItem("1neon.liveSpeed", String(this.speed)); } catch { /* private mode */ }
+  }
+  // Today's movements were tuned at 1.5x of the calm default; every duration scales from there
+  private pace(ms: number) {
+    return (ms * 1.5) / this.speed;
   }
   toggle() {
     if (this.view.paused || this.view.done) this.resume();
@@ -162,15 +185,20 @@ export class Player {
   async goTo(i: number) {
     if (i < 0 || i >= this.sections.length) return;
     this.token.cut = true;
-    this.token = { cut: false };
-    void this.runFrom(i);
+    const token = (this.token = { cut: false });
+    const prev = this.running;
+    this.touched = false;
+    this.running = (async () => {
+      await prev?.catch(() => undefined);
+      if (!token.cut) await this.runFrom(i, token);
+    })();
   }
 
   // --- Running --------------------------------------------------------------
 
   // Run section i and everything after it; earlier unreached sections run fast first
-  private async runFrom(i: number) {
-    const token = this.token;
+  private async runFrom(i: number, token: { cut: boolean }) {
+    let current = i;
     const engine = await liveEngine();
     if (!engine) return;
     // The nearest saved start at or before i
@@ -185,6 +213,7 @@ export class Player {
         this.cursor?.hide(true);
         this.emit({ skipping: true, paused: false, done: false, index: i, title: this.sections[i]!.title, caption: "Catching up…", progress: 0 });
         for (let k = from; k < i; k++) {
+          current = k;
           this.save(k, engine);
           await this.sections[k]!.run(this.stage(token));
         }
@@ -193,10 +222,12 @@ export class Player {
       }
       // Then play from i to the end at watching speed
       for (let k = i; k < this.sections.length; k++) {
+        current = k;
         this.save(k, engine);
         this.steps = 0;
         this.emit({ index: k, title: this.sections[k]!.title, caption: "", progress: 0, skipping: false, done: false, paused: false });
         await this.sections[k]!.run(this.stage(token));
+        if (this.retried === k) this.retried = -1;
         this.est.set(k, this.steps);
         this.emit({ progress: 1 });
         if (k < this.sections.length - 1) await this.stage(token).wait(900);
@@ -209,7 +240,14 @@ export class Player {
       this.cursor?.hide(false);
       if (!(e instanceof Cut)) {
         console.error(e);
-        this.emit({ paused: true, skipping: false, caption: "Something went off script. Pick a section to carry on." });
+        // The first stumble in a section restarts it from its saved start; a second one waits for a choice
+        if (this.retried !== current && !token.cut) {
+          this.retried = current;
+          this.emit({ caption: "One moment…" });
+          void this.goTo(current);
+        } else {
+          this.emit({ paused: true, skipping: false, caption: "Something went off script. Pick a section to carry on." });
+        }
       }
     }
   }
@@ -217,13 +255,16 @@ export class Player {
   // Save the data and the page at a section's start, the first time it's reached
   private save(k: number, engine: Awaited<ReturnType<typeof liveEngine>>) {
     if (!engine || this.snaps.has(k)) return;
-    this.snaps.set(k, { data: engine.snapshot(), path: location.pathname.replace(/^\/1NEON\/live/, "") || "/" });
+    this.snaps.set(k, { data: engine.snapshot(), path: location.pathname.replace(/^\/1NEON\/live/, "") || "/", who: devUser.get() });
   }
 
   // Put the data back, then the page, then refetch what's shown
-  private async restore(s: { data: unknown; path: string }) {
+  private async restore(s: { data: unknown; path: string; who: string }) {
     const engine = await liveEngine();
     engine?.restore(s.data as never);
+    // Whoever was signed in at that point is signed in again (nobody, at the very start)
+    devUser.set(s.who);
+    scrollTo({ top: 0 });
     this.unhover();
     clearCache();
     navigate(s.path);
@@ -255,7 +296,7 @@ export class Player {
     };
     const pause = async (ms: number) => {
       if (p.fast) return void (await frame());
-      const end = performance.now() + ms;
+      const end = performance.now() + p.pace(ms);
       while (performance.now() < end) {
         await tick();
         await sleep(Math.min(80, end - performance.now()));
@@ -277,7 +318,7 @@ export class Player {
       const c = p.cursor!;
       if (p.fast) { c.x = x; c.y = y; c.place(); return; }
       const sx = c.x, sy = c.y;
-      const ms = Math.max(280, Math.min(950, Math.hypot(x - sx, y - sy) * 1.1));
+      const ms = p.pace(Math.max(280, Math.min(950, Math.hypot(x - sx, y - sy) * 1.1)));
       const t0 = performance.now();
       for (;;) {
         await tick();
@@ -346,7 +387,7 @@ export class Player {
           now += ch;
           setter.call(el, now);
           el.dispatchEvent(new Event("input", { bubbles: true }));
-          if (!p.fast) await sleep(ch === " " ? 75 : 40 + Math.random() * 32);
+          if (!p.fast) await sleep(p.pace(ch === " " ? 75 : 40 + Math.random() * 32));
         }
         await pause(after);
       },
@@ -395,7 +436,7 @@ export class Player {
         const ox = p.cursor!.x - r.left, oy = p.cursor!.y - r.top;
         const sx = p.cursor!.x, sy = p.cursor!.y;
         const tx = rb.left + Math.min(rb.width / 2, 70), ty = rb.top + 70;
-        const ms = p.fast ? 0 : 1200;
+        const ms = p.fast ? 0 : p.pace(1200);
         const t0 = performance.now();
         // Carry the ghost with the cursor, easing in and out, tilting a little mid-air
         for (;;) {
@@ -408,7 +449,7 @@ export class Player {
           ghost.style.transform = `translate(${p.cursor!.x - ox - r.left}px, ${p.cursor!.y - oy - r.top}px) rotate(${2 * Math.sin(t * Math.PI)}deg)`;
           if (drop) b.classList.toggle("live-target", t > 0.4);
           // Whatever is under the cursor hears the drag passing over it
-          else document.elementFromPoint(p.cursor!.x, p.cursor!.y)?.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
+          else document.elementsFromPoint(p.cursor!.x, p.cursor!.y).find((el) => !el.closest(".live-shield, .live-ghost, .live-cursor"))?.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
           if (t >= 1) break;
           await frame();
         }

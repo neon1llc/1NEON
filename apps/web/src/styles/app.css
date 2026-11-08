@@ -870,3 +870,13 @@ body:has(.live-bar) #root { cursor: default; }
 /* The yes to texts: a checkbox with the carrier wording beside it */
 .notify .sms-consent { display: grid; font: 13px/1.5 var(--sans, inherit); color: var(--text); letter-spacing: 0; text-transform: none; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg); font-size: 13px; line-height: 1.5; }
 .notify .sms-consent input { width: 18px; height: 18px; min-height: 0; margin-top: 2px; accent-color: var(--accent); }
+/* Speed: a small gauge chip beside play, opening a slider */
+.live-speed-wrap { position: relative; flex: none; }
+.live-speed { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 9px; border-radius: 99px; border: 1px solid rgba(108, 255, 168, .35); background: transparent; color: #9AFF9A; font: 12px var(--mono); cursor: pointer; }
+.live-speed:hover { background: rgba(108, 255, 168, .12); }
+.live-speed-pop { position: absolute; left: 50%; top: calc(100% + 8px); transform: translateX(-50%); z-index: 2; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: #0d0208; border: 1px solid rgba(108, 255, 168, .35); box-shadow: 0 12px 30px rgba(0, 0, 0, .45); color: #a3c2aa; white-space: nowrap; animation: rise .2s ease both; }
+.live-speed-pop input { width: 150px; min-height: 0; padding: 0; border: 0; background: none; accent-color: #6cffa8; }
+/* While playing, a clear layer over the portal: a click pauses instead of changing the page under the cursor */
+.live-shield { position: fixed; inset: var(--demo-h, 76px) 0 0 0; z-index: 59; cursor: default; }
+.live-speed-now { color: #9AFF9A; min-width: 36px; text-align: right; }
+@media (max-width: 640px) { .live-speed span { display: none; } .live-speed { padding: 0 8px; } .live-speed-pop { left: -60px; transform: none; } .live-speed-pop input { width: 120px; } }
