@@ -141,7 +141,7 @@ export function RequestBuilder({ onSubmit, onCancel }: { onSubmit: (d: RequestDr
         <input aria-label="Who it's for" value={who} onChange={(e) => setWho(e.target.value)} maxLength={60} placeholder="such as the front desk" list="req-who" />
         <datalist id="req-who">{WHO.map((w) => <option key={w} value={w} />)}</datalist>
       </div>
-      <div className="line"><span>Today,</span><input aria-label="What happens today" value={today} onChange={(e) => setToday(e.target.value)} maxLength={300} placeholder="such as: we retype every form into the record" /></div>
+      <div className="line"><span>Today,</span><input aria-label="What happens today" value={today} onChange={(e) => setToday(e.target.value)} maxLength={300} placeholder="such as: forms get retyped" /></div>
       <div className="line"><span>It comes up</span><Pick label="How often" options={OFTEN} value={often} onChange={setOften} /></div>
       <div className="line"><span>and I need it</span><Pick label="When" options={WHEN} value={when} onChange={setWhen} /></div>
       <div className="actions">
