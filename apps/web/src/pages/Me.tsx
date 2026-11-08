@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { applyTheme, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, useToast } from "../components/ui.tsx";
-import { api, devUser, isDev } from "../lib/api.ts";
+import { api, BASE_PATH, devUser, pickPerson } from "../lib/api.ts";
 import { problem } from "../lib/hooks.ts";
 import { passkeyCreation } from "../lib/passkey.ts";
 import { useHelp } from "../components/Help.tsx";
@@ -61,11 +61,11 @@ export function MePage() {
       toast(problem(e));
     }
   };
-  // Dev: forget the demo user. Production: the API revokes tokens and returns Cognito's logout URL
+  // Dev and demo: forget who you picked. Production: the API revokes tokens and returns Cognito's logout URL
   const signOut = async () => {
-    if (isDev) {
+    if (pickPerson) {
       devUser.set("");
-      location.href = "/1NEON/";
+      location.href = `${BASE_PATH}/`;
       return;
     }
     const r = await api<{ redirect: string }>("/auth/logout", { method: "POST" }).catch(() => ({ redirect: "/1NEON/" }));

@@ -42,7 +42,8 @@ import { z } from "zod";
 import { CognitoAuth, type Verified } from "./auth.ts";
 import type { Config } from "./config.ts";
 import type { Directory, Mailer, Storage } from "./services.ts";
-import { inviteEmail, MemoryStorage, passkeyEmail } from "./services.ts";
+import { inviteEmail, passkeyEmail } from "./emails.ts";
+import { MemoryStorage } from "./local.ts";
 import { checkTotp, newTotp } from "./totp.ts";
 import { keys, Repo } from "./store/repo.ts";
 import { ConflictError } from "./store/types.ts";
@@ -128,7 +129,7 @@ export function createApp(d: Deps) {
     });
     app.get("/dev-files/:key", (c) => {
       const f = mem.files.get(c.req.param("key"));
-      return f ? new Response(f.bytes, { headers: { "content-type": f.type } }) : c.notFound();
+      return f ? new Response(new Uint8Array(f.bytes), { headers: { "content-type": f.type } }) : c.notFound();
     });
   }
 
@@ -142,7 +143,7 @@ export function createApp(d: Deps) {
   });
 
   // Liveness for checks and deploys; no identity needed
-  app.get("/health", (c) => c.json({ ok: true, env: cfg.env, version: process.env.APP_VERSION ?? "dev" }));
+  app.get("/health", (c) => c.json({ ok: true, env: cfg.env, version: (typeof process === "undefined" ? undefined : process.env.APP_VERSION) ?? "dev" }));
 
   // --- Sign-in (Cognito) -------------------------------------------------
 

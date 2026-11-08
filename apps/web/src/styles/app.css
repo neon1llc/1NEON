@@ -736,5 +736,39 @@ html[data-slide="back"]::view-transition-new(stage) { animation: .42s cubic-bezi
 .filters .check { min-height: 40px; }
 
 /* Neo: bottom left on the public screens (sign-in, FAQs, legal), exactly as on neon1.tech; bottom right once inside the portal */
-body:not(:has(.shell)) .n1chat-launch.n1chat-right, body:not(:has(.shell)) .n1chat.n1chat-right { left: 16px; right: auto; }
-body:not(:has(.shell)) .n1chat-right.n1chat-grow, body:not(:has(.shell)) .n1chat-right.n1chat-fold { animation-name: n1chat-grow; }
+body:not(:has(.shell:not(.example))) .n1chat-launch.n1chat-right, body:not(:has(.shell:not(.example))) .n1chat.n1chat-right { left: 16px; right: auto; }
+body:not(:has(.shell:not(.example))) .n1chat-right.n1chat-grow, body:not(:has(.shell:not(.example))) .n1chat-right.n1chat-fold { animation-name: n1chat-grow; }
+
+/* --- The demo (/1NEON/demo): a slim strip above the portal; the frame moves down to make room --- */
+.demo-bar { position: fixed; inset: 0 0 auto 0; z-index: 45; height: var(--demo-h, 36px); display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--void, #0d0208); color: #c9f5d6; font: 12px var(--mono); border-bottom: 1px solid rgba(0, 255, 65, .3); }
+.demo-tag { color: var(--void, #0d0208); background: var(--neon, #6cffa8); border-radius: 99px; padding: 2px 10px; font-weight: 700; letter-spacing: .06em; }
+.demo-note { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.demo-acts { display: flex; gap: 14px; }
+.demo-bar .linkish { color: var(--neon, #6cffa8); font: inherit; }
+body:has(.demo-bar) { --demo-h: 36px; padding-top: var(--demo-h); }
+body:has(.demo-bar) .side { top: var(--demo-h); }
+body:has(.demo-bar) .top { top: var(--demo-h); }
+@media (max-width: 640px) { .demo-note { display: none; } .demo-acts { margin-left: auto; } }
+/* The demo's picker: each person with what they can do */
+.demo-pick { display: grid; gap: 8px; }
+.demo-pick .eyebrow { margin: 6px 0 0; }
+.demo-pick button { display: grid; gap: 2px; text-align: left; }
+.demo-pick button b { font-weight: 600; }
+.demo-pick button span { font-size: 12px; opacity: .75; }
+
+/* --- /1NEON/example: the portal's top bar over a readable column of cards --- */
+.example .top { justify-content: space-between; }
+.example .top-acts { display: flex; gap: 8px; align-items: center; }
+.example-body { max-width: 920px; margin: 0 auto; padding-top: 40px; }
+.example-layer { margin-top: 48px; scroll-margin-top: 80px; }
+.example-h { display: flex; align-items: center; gap: 10px; font-size: 26px; margin: 0 0 4px; }
+.example-cards { display: grid; gap: 14px; margin-top: 14px; }
+.example-cards h3 { margin: 0 0 8px; font-size: 16px; }
+.example-list { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
+.example-list li { position: relative; padding-left: 26px; }
+.example-list li::before { content: ""; position: absolute; left: 0; top: 4px; width: 14px; height: 14px; border-radius: 99px; border: 1.5px solid var(--line-strong); }
+.example-list li.done::before, .example-list li.picked::before { background: var(--accent); border-color: var(--accent); }
+.example-list li.now::before { border-color: var(--accent); box-shadow: inset 0 0 0 3px var(--panel), inset 0 0 0 10px var(--accent); }
+.example-list .tag { margin-left: 8px; }
+.example-end { margin: 48px 0 24px; }
+@media (max-width: 640px) { .example-body { padding-top: 24px; } .example .top-acts .btn-ghost { display: none; } }

@@ -4,7 +4,7 @@
 
 import type { DocumentRecord, Layer } from "@1neon/domain";
 import { useRef, useState, type ReactNode } from "react";
-import { api, HttpError } from "../lib/api.ts";
+import { api, HttpError, openable, send } from "../lib/api.ts";
 import { problem, useRefresh } from "../lib/hooks.ts";
 import { useOrg, useSession } from "./Shell.tsx";
 import { ago, LayerBadge, useToast } from "./ui.tsx";
@@ -26,7 +26,7 @@ export async function uploadFiles(tid: string, files: File[], target: FileTarget
       body: { name: f.name, contentType: f.type || "application/octet-stream", size: f.size, ...target },
     });
     // A blocked or dropped connection throws rather than returning a status; both get a plain message
-    const r = await fetch(upload, { method: "PUT", headers: { "content-type": f.type || "application/octet-stream" }, body: f }).catch(() => undefined);
+    const r = await send(upload, { method: "PUT", headers: { "content-type": f.type || "application/octet-stream" }, body: f }).catch(() => undefined);
     if (!r?.ok) throw new Error(`Couldn't send ${f.name} to storage. Check your connection and try again.`);
     await api(`/t/${tid}/docs/${doc.id}/done${doc.projectId ? `?p=${doc.projectId}` : ""}`, { method: "POST" });
   }
@@ -112,7 +112,9 @@ export function FileList({ docs, projectName, empty = "No files yet." }: { docs:
   const download = async (d: DocumentRecord) => {
     try {
       const { url } = await api<{ url: string }>(`/t/${org.id}/docs/${d.id}/download${q(d)}`);
-      location.href = url;
+      // In the demo the file comes from this browser, so it's saved under its own name from a local link
+      const a = Object.assign(document.createElement("a"), { href: await openable(url), download: d.name });
+      a.click();
     } catch (e) {
       toast(problem(e));
     }

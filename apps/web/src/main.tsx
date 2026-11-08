@@ -22,6 +22,8 @@ import { Projects } from "./pages/Projects.tsx";
 import { Settings } from "./pages/Settings.tsx";
 import { Workflow } from "./pages/Workflow.tsx";
 import { WorkspacePage } from "./pages/Workspace.tsx";
+import { BASE_PATH, DEMO } from "./lib/api.ts";
+import { Example } from "./pages/Example.tsx";
 import "./styles/app.css";
 
 
@@ -39,6 +41,7 @@ const router = createBrowserRouter(
     { path: "terms", element: <Legal doc="terms" /> },
     { path: "cookies", element: <Legal doc="cookies" /> },
     { path: "faqs", element: <Faqs /> },
+    { path: "example", element: <Example /> },
     { path: "faq", element: <Navigate to="/faqs" replace /> },
     { path: "help", element: <Navigate to="/faqs" replace /> },
     {
@@ -69,7 +72,7 @@ const router = createBrowserRouter(
       ],
     },
   ],
-  { basename: "/1NEON" },
+  { basename: BASE_PATH },
 );
 
 
@@ -90,7 +93,8 @@ createRoot(document.getElementById("root")!).render(
 // load, the portal works without it
 const CHAT = "/shared/chat.js";
 type ChatOptions = { className?: string; light?: () => boolean; watch?: Element[] };
-import(/* @vite-ignore */ CHAT)
+// The demo makes no calls at all, so it leaves Neo out
+if (!DEMO) import(/* @vite-ignore */ CHAT)
   .then((m: { chat(opts: ChatOptions): unknown }) =>
     m.chat({ className: "n1chat-portal n1chat-right", light: () => !document.querySelector(".signin"), watch: [document.getElementById("root")!] }),
   )

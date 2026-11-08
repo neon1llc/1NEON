@@ -5,7 +5,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { api, devUser, HttpError, isDev } from "../lib/api.ts";
+import { api, DEMO as IN_DEMO, devUser, HttpError, pickPerson, resetDemo } from "../lib/api.ts";
 import { passkeyAssertion } from "../lib/passkey.ts";
 import { cleanCode, clearStep, loadStep, saveStep, session } from "../lib/signin.ts";
 import type { Me, OrgResponse, OrgSummary } from "../lib/types.ts";
@@ -101,12 +101,11 @@ export function Root() {
 // --- Sign-in -------------------------------------------------------------------
 
 
-// Local demo accounts; the buttons only render in a dev build
-const DEMO = [
-  ["pradeep@neon1.tech", "Pradeep (neon1 operator)"],
-  ["raj@acmedental.example", "Raj Patel (Acme Dental admin)"],
-  ["dana@acmedental.example", "Dana Kim (Acme Dental editor)"],
-  ["lee@harborauto.example", "Lee Moreno (Harbor Auto, invited)"],
+// The demo's people, each with what they can do; the buttons render in a dev build and in /1NEON/demo
+const PEOPLE = [
+  ["raj@acmedental.example", "Raj Patel", "Acme Dental's owner: approves options and manages people"],
+  ["dana@acmedental.example", "Dana Kim", "Acme Dental's office manager: adds requests, answers, and files"],
+  ["pradeep@neon1.tech", "Pradeep", "neon1's lead engineer: every client, proposals, and the work"],
 ] as const;
 
 
@@ -233,8 +232,18 @@ function SignIn() {
         <Wordmark />
         {problem === "not_invited" && <p className="notice" role="alert">That email hasn't been invited yet. Ask your organization's admin, or neon1.</p>}
         {problem === "failed" && <p className="notice" role="alert">{fromLink ? "That link only works in the browser where you asked for the code. Type the code there instead, or start again here." : "Sign-in didn't finish. Please try again."}</p>}
+        {/* The demo: no accounts, just pick who to be */}
+        {IN_DEMO && (
+          <div className="dev demo-pick" aria-label="Demo people">
+            <p className="fine">A working copy of 1NEON with made-up clients. Everything you do stays in this browser.</p>
+            <p className="eyebrow">Try it as</p>
+            {PEOPLE.map(([e, name, role]) => (
+              <button key={e} onClick={() => pick(e)}><b>{name}</b><span>{role}</span></button>
+            ))}
+          </div>
+        )}
         {/* Step 1: the email */}
-        {(at.step === "email" || at.step === "failed" || at.step === "not_invited") && (
+        {!IN_DEMO && (at.step === "email" || at.step === "failed" || at.step === "not_invited") && (
           <form className="stack" onSubmit={(e) => { e.preventDefault(); void send({ op: "start", email: email.trim(), remember }); }}>
             <label className="sr" htmlFor="email">Your email</label>
             {/* Remember me opens under the email once it looks like a real address */}
@@ -267,17 +276,17 @@ function SignIn() {
           </form>
         )}
         {at.step !== "email" && <p className="fine"><button className="linkish" onClick={restart}>Use a different email</button></p>}
-        <p className="fine">Sign in with a code sent to your email, or a passkey. 1NEON uses only the cookies it needs to keep you signed in.</p>
+        {!IN_DEMO && <p className="fine">Sign in with a code sent to your email, or a passkey. 1NEON uses only the cookies it needs to keep you signed in.</p>}
         {/* The three policies on one line of their own */}
         <p className="fine legal-links">
           <Link to="/faqs">FAQs</Link> · <Link to="/cookies">Cookies</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
         </p>
-        {/* Demo accounts exist only in local builds */}
-        {isDev && (
+        {/* Local builds also offer the demo people under the real form */}
+        {pickPerson && !IN_DEMO && (
           <div className="dev" aria-label="Local demo accounts">
             <p className="fine" style={{ margin: "6px 0 0" }}>Local demo: sign in as</p>
-            {DEMO.map(([e, label]) => (
-              <button key={e} onClick={() => pick(e)}>{label}</button>
+            {PEOPLE.map(([e, name]) => (
+              <button key={e} onClick={() => pick(e)}>{name}</button>
             ))}
           </div>
         )}
@@ -397,6 +406,27 @@ function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; childr
 }
 
 
+
+/** The demo's strip above the portal: what this is, who you're being, and a way to start over */
+function DemoBar() {
+  const me = useSession();
+  const qc = useQueryClient();
+  // Back to the picker as someone else; the demo's data stays as it is
+  const switchPerson = () => { devUser.set(""); void qc.invalidateQueries(); };
+  // Start over forgets every change made on this device
+  const startOver = () => { if (confirm("Start the demo over? Every change you made here goes away.")) void resetDemo(); };
+  return (
+    <div className="demo-bar" role="region" aria-label="Demo">
+      <span className="demo-tag">demo</span>
+      <span className="demo-note">You're {me.user.name || me.user.email}. Everything stays in this browser.</span>
+      <span className="demo-acts">
+        <button className="linkish" onClick={switchPerson}>Switch person</button>
+        <button className="linkish" onClick={startOver}>Start over</button>
+      </span>
+    </div>
+  );
+}
+
 // The frame itself, inside the help context so the ? button and search can use it
 function FrameBody({ org, all, children }: { org?: OrgSummary; all?: boolean; children: ReactNode }) {
   const me = useSession();
@@ -420,6 +450,7 @@ function FrameBody({ org, all, children }: { org?: OrgSummary; all?: boolean; ch
   const base = org ? `/o/${org.slug}` : "";
   return (
     <div className={`shell${rail ? " has-rail" : ""}`}>
+      {IN_DEMO && <DemoBar />}
       {/* Scrim behind the full menu; a tap outside closes it */}
       {open && <div className="scrim" onClick={() => setOpen(false)} aria-hidden="true" />}
       <aside className={`side${open ? " open" : ""}`} aria-label="Menu">

@@ -16,6 +16,16 @@ export class MemoryTable implements TableStore {
   // Every row, keyed by its PK and SK pair
   private rows = new Map<string, Row>();
 
+  /** Every row, for the browser demo to save on the device */
+  snapshot(): Row[] {
+    return [...this.rows.values()].map(clone);
+  }
+
+  /** Replace every row with a saved snapshot */
+  restore(rows: Row[]) {
+    this.rows = new Map(rows.map((r) => [k(r.PK, r.SK), clone(r)]));
+  }
+
   // Single-row read; expired rows read as missing
   async get(pk: string, sk: string) {
     const r = this.rows.get(k(pk, sk));
