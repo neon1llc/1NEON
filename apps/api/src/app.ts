@@ -767,7 +767,9 @@ export function createApp(d: Deps) {
       rank = rankBetween(rank, "");
       items.push(Item.parse({ ...base, id: newId("i"), rank, ...i }));
     };
+    // The real example: answered in the wizard, or asked as the first discovery question
     if (input.example) push({ kind: "discovery", title: "One real example of how it works today", body: input.example, status: "done" });
+    else if (input.template !== "blank") push({ kind: "discovery", title: "One real example of how it works today" });
     for (const ti of tpl.items) push({ kind: ti.kind, title: ti.title, body: ti.body ?? "", fields: ti.fields ?? {} });
     for (const m of input.metrics) push({ kind: "metric", title: m.title, fields: { unit: m.unit, baseline: m.baseline, target: m.target, direction: m.baseline !== undefined && m.target !== undefined && m.target < m.baseline ? "down" : "up", baselineDate: m.baseline !== undefined ? ts.slice(0, 10) : undefined, readings: [] } });
     // A project and its starter items land together, or not at all (in batches DynamoDB accepts)

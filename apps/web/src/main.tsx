@@ -22,7 +22,8 @@ import { Projects } from "./pages/Projects.tsx";
 import { Settings } from "./pages/Settings.tsx";
 import { Workflow } from "./pages/Workflow.tsx";
 import { WorkspacePage } from "./pages/Workspace.tsx";
-import { BASE_PATH, DEMO } from "./lib/api.ts";
+import { BASE_PATH, DEMO, devUser, LIVE } from "./lib/api.ts";
+import { setCache, setNavigate } from "./lib/nav.ts";
 import { Example } from "./pages/Example.tsx";
 import "./styles/app.css";
 
@@ -77,6 +78,13 @@ const router = createBrowserRouter(
 
 
 // Mount the app
+// The live playback always starts at the person picker, from a fresh story
+if (LIVE) devUser.set("");
+
+// Code outside React (the live playback) navigates through the same router
+setNavigate((to) => void router.navigate(to));
+setCache({ invalidateQueries: () => queries.invalidateQueries(), clear: () => queries.clear() });
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queries}>
@@ -99,3 +107,14 @@ if (!DEMO) import(/* @vite-ignore */ CHAT)
     m.chat({ className: "n1chat-portal n1chat-right", light: () => !document.querySelector(".signin"), watch: [document.getElementById("root")!] }),
   )
   .catch(() => undefined);
+
+
+// /1NEON/live: the controls above the portal, then the story starts playing once the page settles
+if (LIVE) {
+  void Promise.all([import("./live/player.ts"), import("./live/story.ts"), import("./live/LiveBar.tsx")]).then(([{ Player }, { STORY }, { LiveBar }]) => {
+    const player = new Player(STORY);
+    const host = document.body.appendChild(document.createElement("div"));
+    createRoot(host).render(<LiveBar player={player} />);
+    setTimeout(() => player.start(), 1200);
+  });
+}

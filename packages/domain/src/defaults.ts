@@ -63,9 +63,9 @@ export interface Template {
 }
 
 
-// Discovery questions and the handoff checklist every real project needs
+// Discovery questions and the handoff checklist every real project needs. The wizard already asks
+// for one real example, so it isn't repeated here
 const common: TemplateItem[] = [
-  { kind: "discovery", title: "Show me one real example of how this works today" },
   { kind: "discovery", title: "Who does this work, and how often?" },
   { kind: "discovery", title: "What would 'better' look like in three months?" },
   { kind: "handoff", title: "Accounts are in the client's name" },

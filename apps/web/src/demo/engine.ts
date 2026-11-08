@@ -15,7 +15,7 @@ import type { Row } from "../../../api/src/store/types.ts";
 const DB = "1neon-demo";
 const STORE = "state";
 const KEY = "v1";
-interface Saved { rows: Row[]; files: [string, { type: string; bytes: Uint8Array }][] }
+export interface Saved { rows: Row[]; files: [string, { type: string; bytes: Uint8Array }][] }
 
 
 // Open (or create) the demo's database; a blocked or missing IndexedDB means no saving, not no demo
@@ -52,12 +52,17 @@ async function store(s: Saved | undefined) {
 }
 
 
+// The live playback starts fresh every time from its own story and never saves
+const live = location.pathname.startsWith("/1NEON/live");
+
 // Built once per page: restore what this device saved, or start from the demo organizations
 const table = new MemoryTable();
 const storage = new MemoryStorage();
 const ready = (async () => {
-  const saved = await load();
-  if (saved?.rows.length) {
+  const saved = live ? undefined : await load();
+  if (live) {
+    await (await import("../live/seed.ts")).liveSeed(new Repo(table));
+  } else if (saved?.rows.length) {
     table.restore(saved.rows);
     for (const [k, f] of saved.files) storage.files.set(k, f);
   } else {
@@ -77,6 +82,7 @@ const ready = (async () => {
 // Saves are coalesced, so a burst of changes writes once
 let pending: ReturnType<typeof setTimeout> | undefined;
 function save() {
+  if (live) return;
   clearTimeout(pending);
   pending = setTimeout(() => void store({ rows: table.snapshot(), files: [...storage.files] }), 150);
 }
@@ -95,4 +101,37 @@ export async function demoFetch(url: string, init: RequestInit = {}): Promise<Re
 export async function resetDemo() {
   clearTimeout(pending);
   await store(undefined);
+}
+
+
+/** Everything right now, so the playback can come back to the start of a section */
+export function snapshot(): Saved {
+  return { rows: table.snapshot(), files: [...storage.files] };
+}
+
+/** Put everything back as it was in a snapshot */
+export function restore(s: Saved) {
+  table.restore(s.rows);
+  storage.files.clear();
+  for (const [k, f] of s.files) storage.files.set(k, f);
+}
+
+/** Call the API as someone else, the way their own browser would: for the other side of the story */
+export async function actAs<T>(email: string, path: string, method = "GET", body?: unknown): Promise<T> {
+  const r = await demoFetch(`/1NEON/api${path}`, {
+    method,
+    headers: { "x-1neon": "1", "x-dev-user": email, ...(body === undefined ? {} : { "content-type": "application/json" }) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await r.text();
+  if (!r.ok) throw new Error(`${method} ${path}: ${r.status} ${text.slice(0, 200)}`);
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+/** Upload a small text file as someone else: the record, the bytes, then the finished mark */
+export async function uploadAs(email: string, tid: string, name: string, text: string, target: { layer: string; projectId?: string; itemId?: string }) {
+  const bytes = new TextEncoder().encode(text);
+  const { doc, upload } = await actAs<{ doc: { id: string; projectId?: string }; upload: string }>(email, `/t/${tid}/docs`, "POST", { name, contentType: "text/plain", size: bytes.length, ...target });
+  await demoFetch(upload, { method: "PUT", headers: { "content-type": "text/plain" }, body: bytes });
+  await actAs(email, `/t/${tid}/docs/${doc.id}/done${doc.projectId ? `?p=${doc.projectId}` : ""}`, "POST");
 }

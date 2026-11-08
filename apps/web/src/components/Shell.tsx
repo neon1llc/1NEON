@@ -5,7 +5,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { api, DEMO as IN_DEMO, devUser, HttpError, pickPerson, resetDemo } from "../lib/api.ts";
+import { api, DEMO as IN_DEMO, LIVE as IN_LIVE, devUser, HttpError, pickPerson, resetDemo } from "../lib/api.ts";
 import { passkeyAssertion } from "../lib/passkey.ts";
 import { cleanCode, clearStep, loadStep, saveStep, session } from "../lib/signin.ts";
 import type { Me, OrgResponse, OrgSummary } from "../lib/types.ts";
@@ -107,6 +107,11 @@ const PEOPLE = [
   ["raj@acmedental.example", "Raj Patel", "Acme Dental's owner: approves options and manages people"],
   ["dana@acmedental.example", "Dana Kim", "Acme Dental's office manager: adds requests, answers, and files"],
   ["pradeep@neon1.tech", "Pradeep", "neon1's lead engineer: every client, proposals, and the work"],
+] as const;
+// The live playback's two people: the bakery's owner, and neon1
+const LIVE_PEOPLE = [
+  ["maria@maplestreetbakery.example", "Maria Lopez", "Maple Street Bakery's owner"],
+  ["pradeep@neon1.tech", "Pradeep", "neon1's lead engineer"],
 ] as const;
 
 
@@ -238,9 +243,10 @@ function SignIn() {
           <div className="dev demo-pick" aria-label="Demo people">
             <p className="fine">A working copy of 1NEON with made-up clients. Everything you do stays in this browser.</p>
             <p className="eyebrow">Try it as</p>
-            {PEOPLE.map(([e, name, role]) => (
+            {(IN_LIVE ? LIVE_PEOPLE : PEOPLE).map(([e, name, role]) => (
               <button key={e} onClick={() => pick(e)}><b>{name}</b><span>{role}</span></button>
             ))}
+            {!IN_LIVE && <p className="fine"><a href="/1NEON/live">Or watch a whole project play out</a></p>}
           </div>
         )}
         {/* Step 1: the email */}
@@ -451,7 +457,7 @@ function FrameBody({ org, all, children }: { org?: OrgSummary; all?: boolean; ch
   const base = org ? `/o/${org.slug}` : "";
   return (
     <div className={`shell${rail ? " has-rail" : ""}`}>
-      {IN_DEMO && <DemoBar />}
+      {IN_DEMO && !IN_LIVE && <DemoBar />}
       {/* Scrim behind the full menu; a tap outside closes it */}
       {open && <div className="scrim" onClick={() => setOpen(false)} aria-hidden="true" />}
       <aside className={`side${open ? " open" : ""}`} aria-label="Menu">

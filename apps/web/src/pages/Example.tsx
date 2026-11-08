@@ -1,5 +1,5 @@
 // apps/web/src/pages/Example.tsx - /1NEON/example: one made-up project, start to finish, in the
-// portal's own frame. Public, no sign-in; every step links into the working demo.
+// portal's own frame. Public, no sign-in; it links to the working demo and the live playback.
 
 
 import { LayerBadge, LAYERS, layerName } from "../components/ui.tsx";
@@ -66,6 +66,7 @@ export function Example() {
         <div className="crumb"><a href="/1NEON/">1NEON</a> / Example</div>
         <span className="top-acts">
           <a className="btn btn-ghost btn-sm" href="/">neon1.tech</a>
+          <a className="btn btn-ghost btn-sm" href="/1NEON/live">Watch it live</a>
           <a className="btn btn-primary btn-sm" href="/1NEON/demo/">Try the demo</a>
         </span>
       </header>
@@ -102,6 +103,7 @@ export function Example() {
           <p>That's the whole loop. A real project follows the same steps, with its own need and numbers.</p>
           <div className="actions">
             <a className="btn btn-primary" href="/1NEON/demo/">Try the demo</a>
+            <a className="btn btn-ghost" href="/1NEON/live">Watch a project play out</a>
             <a className="btn btn-ghost" href="https://calendly.com/1isgladtobeofservice/neon1-consultation" target="_blank" rel="noopener">Book a free call</a>
           </div>
         </section>

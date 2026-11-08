@@ -7,7 +7,8 @@ import type { ApiError } from "@1neon/domain";
 
 // Every API call is same-origin under /1NEON/api; the dev user lives in localStorage
 const BASE = "/1NEON/api";
-const DEV_KEY = "1neon.devUser";
+// The live playback keeps its own "who am I", so it never changes who you are in the demo
+const DEV_KEY = location.pathname.startsWith("/1NEON/live") ? "1neon.liveUser" : "1neon.devUser";
 
 
 /** A non-2xx reply, carrying the API's { error, message, current? } body */
@@ -45,10 +46,14 @@ export const devUser = {
 // True only in Vite's dev server; production builds drop the dev paths
 export const isDev = import.meta.env.DEV;
 
-/** /1NEON/demo: the whole portal runs in this browser, with its own copy of the API and nothing sent anywhere */
-export const DEMO = location.pathname === "/1NEON/demo" || location.pathname.startsWith("/1NEON/demo/");
-// The router's base: the demo keeps every page under /1NEON/demo
-export const BASE_PATH = DEMO ? "/1NEON/demo" : "/1NEON";
+// Is the page under this path, or the path itself?
+const under = (p: string) => location.pathname === p || location.pathname.startsWith(`${p}/`);
+/** /1NEON/live: the demo playing itself, a whole project from start to finish */
+export const LIVE = under("/1NEON/live");
+/** /1NEON/demo (and live): the whole portal runs in this browser, with its own copy of the API and nothing sent anywhere */
+export const DEMO = LIVE || under("/1NEON/demo");
+// The router's base: the demo and the live playback keep every page under their own path
+export const BASE_PATH = LIVE ? "/1NEON/live" : DEMO ? "/1NEON/demo" : "/1NEON";
 // Pick a person to be, as in local development: true in the dev server and in the demo
 export const pickPerson = isDev || DEMO;
 // The in-browser API, loaded only for the demo so the real portal never carries it
@@ -64,6 +69,9 @@ export async function openable(url: string): Promise<string> {
   if (!engine) return url;
   return URL.createObjectURL(await (await send(url)).blob());
 }
+
+/** The live playback's handle on the in-browser API: act as someone else, and save or restore everything */
+export const liveEngine = () => engine;
 
 /** Start the demo over, then reload into it */
 export async function resetDemo() {

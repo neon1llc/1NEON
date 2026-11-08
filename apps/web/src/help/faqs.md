@@ -8,7 +8,7 @@ Short answers about using 1NEON. Signed in? Tap **?** at the top right of any pa
 The portal where you and I run your projects together. Each project keeps what you need, the work, the results, and the handover in one place.
 
 ### Can I try it first?
-Yes. [The demo](/1NEON/demo/) is a working copy of 1NEON with made-up clients. Pick who to be, and everything you change stays in your browser. [The example](/1NEON/example) walks one made-up project from start to finish.
+Yes. [The demo](/1NEON/demo/) is a working copy of 1NEON with made-up clients. Pick who to be, and everything you change stays in your browser. [The example](/1NEON/example) walks one made-up project from start to finish, and [the live playback](/1NEON/live) plays one out on screen, step by step, with controls to pause or jump between sections.
 
 ### How do I get in?
 You need an invite. Open the link in your invite email, enter your email address, and type the code I send you. No password needed.
