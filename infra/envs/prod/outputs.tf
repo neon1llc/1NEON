@@ -8,3 +8,6 @@ output "trigger_function" { value = module.api.trigger_function }
 output "api_domain" { value = module.api.api_domain }
 output "user_pool_id" { value = module.auth.user_pool_id }
 output "client_id" { value = module.auth.client_id }
+
+# The toll-free number texts come from, for its registration
+output "sms_number" { value = module.sms.number }

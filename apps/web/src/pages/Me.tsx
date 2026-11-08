@@ -24,7 +24,7 @@ export function MePage() {
   const [totpOpen, setTotpOpen] = useState(false);
   useTopBar(<span>Your profile</span>, []);
   // Edits stay local until Save
-  const [draft, setDraft] = useState({ name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme, menu: me.user.menu ?? "rail", notify: me.user.notify ?? {} });
+  const [draft, setDraft] = useState({ name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme, menu: me.user.menu ?? "rail", notify: me.user.notify ?? {}, smsConsent: Boolean(me.user.smsConsentAt) });
   const [busy, setBusy] = useState(false);
   // Save the profile; the theme applies immediately and is kept with the account
   const save = async () => {
@@ -109,11 +109,25 @@ export function MePage() {
         {/* Notifications: every kind shows under the bell; choose which also email you */}
         <div className="card small notify" id="notifications">
           <b>Notifications</b>
-          <span className="muted">Everything shows under the bell. Choose what also reaches you by email. Important ones start on.</span>
+          <span className="muted">Everything shows under the bell. Choose what also reaches you by email or text. Important ones email you to start.</span>
+          {/* Texts need a mobile number and a clear yes, worded the way carriers require */}
+          {draft.phone.trim() ? (
+            <label className="sms-consent">
+              <input type="checkbox" checked={draft.smsConsent} onChange={(e) => setDraft({ ...draft, smsConsent: e.target.checked })} />
+              <span>
+                <b>Text me at {draft.phone.trim()}</b> about the kinds I choose below.
+                <span className="muted"> Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. See the <Link to="/privacy">Privacy policy</Link> and <Link to="/terms">Terms</Link>.</span>
+              </span>
+            </label>
+          ) : (
+            <span className="muted">To get texts, add a phone number above.</span>
+          )}
           <table className="notify-table">
-            <thead><tr><th scope="col">When</th><th scope="col">Email</th><th scope="col">Text <span className="tag">soon</span></th></tr></thead>
+            <thead><tr><th scope="col">When</th><th scope="col">Email</th><th scope="col">Text</th></tr></thead>
             <tbody>
               {NOTIFY_GROUPS.map((g) => {
+                // Text switches open once there's a number and a yes to texts
+                const texts = draft.smsConsent && Boolean(draft.phone.trim());
                 // The saved choice, or the group's default
                 const cur = draft.notify[g.id] ?? { email: g.email, sms: false };
                 const set = (patch: Partial<typeof cur>) => setDraft({ ...draft, notify: { ...draft.notify, [g.id]: { ...cur, ...patch } } });
@@ -121,7 +135,7 @@ export function MePage() {
                   <tr key={g.id}>
                     <th scope="row"><span>{g.label}{g.level === "critical" && <span className="tag rec">important</span>}</span><span className="muted">{g.hint}</span></th>
                     <td><input type="checkbox" aria-label={`Email me: ${g.label}`} checked={cur.email} onChange={(e) => set({ email: e.target.checked })} /></td>
-                    <td><input type="checkbox" aria-label={`Text me: ${g.label} (coming soon)`} checked={false} disabled /></td>
+                    <td><input type="checkbox" aria-label={`Text me: ${g.label}`} checked={texts && cur.sms} disabled={!texts} onChange={(e) => set({ sms: e.target.checked })} /></td>
                   </tr>
                 );
               })}

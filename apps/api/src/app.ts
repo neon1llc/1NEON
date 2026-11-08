@@ -44,7 +44,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { CognitoAuth, type Verified } from "./auth.ts";
 import type { Config } from "./config.ts";
-import type { Directory, Mailer, Storage } from "./services.ts";
+import type { Directory, Mailer, Storage, Texter } from "./services.ts";
 import { inviteEmail, noticeEmail, passkeyEmail } from "./emails.ts";
 import { MemoryStorage } from "./local.ts";
 import { checkTotp, newTotp } from "./totp.ts";
@@ -59,6 +59,8 @@ export interface Deps {
   directory: Directory;
   mailer: Mailer;
   storage: Storage;
+  // Optional: without it, nobody gets texts
+  texter?: Texter;
   auth?: CognitoAuth;
 }
 
@@ -127,9 +129,17 @@ export function createApp(d: Deps) {
       for (const m of members) {
         if (m.status !== "joined" || m.userId === e.actorId) continue;
         const u = await repo.getUser(m.userId);
-        if (!u || !wants(u.notify, e.action, "email")) continue;
-        const mail = noticeEmail({ orgName: tenant?.name ?? "1NEON", by, summary: e.summary, url: `${cfg.publicUrl}/1NEON/o/${tenant?.slug ?? ""}/workspace`, important: groupOf(e.action).level === "critical" });
-        await d.mailer.send(u.email, mail.subject, mail.text, mail.html);
+        if (!u) continue;
+        if (wants(u.notify, e.action, "email")) {
+          const mail = noticeEmail({ orgName: tenant?.name ?? "1NEON", by, summary: e.summary, url: `${cfg.publicUrl}/1NEON/o/${tenant?.slug ?? ""}/workspace`, important: groupOf(e.action).level === "critical" });
+          await d.mailer.send(u.email, mail.subject, mail.text, mail.html).catch((err) => console.error(JSON.stringify({ level: "error", message: `notify email: ${String(err)}` })));
+        }
+        // Texts go only to people who agreed to them, at a number that reads as a real US mobile
+        const to = e164(u.phone);
+        if (d.texter && u.smsConsentAt && to && wants(u.notify, e.action, "sms")) {
+          // One person's failed text (an unregistered number, a carrier refusal) never stops the rest
+          await d.texter.send(to, `1NEON · ${tenant?.name ?? "neon1"}: ${e.summary} (${by}). Reply STOP to opt out.`.slice(0, 300)).catch((err) => console.error(JSON.stringify({ level: "error", message: `notify text: ${String(err)}` })));
+        }
       }
     }
   }
@@ -305,8 +315,10 @@ export function createApp(d: Deps) {
   app.patch("/me", async (c) => {
     const { user } = who(c);
     const input = await body(c, UpdateMeInput);
-    const { version, ...patch } = input;
-    const next: User = { ...user, ...defined(patch), version: user.version + 1, updatedAt: now(), updatedBy: user.id };
+    const { version, smsConsent, ...patch } = input;
+    // Agreeing to texts is recorded with its time, as carriers expect; turning them off clears it
+    const consent = smsConsent === undefined ? {} : { smsConsentAt: smsConsent ? user.smsConsentAt ?? now() : undefined };
+    const next: User = { ...user, ...defined(patch), ...consent, version: user.version + 1, updatedAt: now(), updatedBy: user.id };
     await repo.saveUser(next, version);
     return c.json(next);
   });
@@ -1107,6 +1119,17 @@ export function createApp(d: Deps) {
   }
 
   return app;
+}
+
+
+/** A phone number as E.164 (+15551234567), or undefined if it doesn't read as a US or full international number */
+export function e164(phone: string | undefined) {
+  const raw = (phone ?? "").trim();
+  const digits = raw.replace(/\D/g, "");
+  if (raw.startsWith("+") && digits.length >= 10 && digits.length <= 15) return `+${digits}`;
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return undefined;
 }
 
 

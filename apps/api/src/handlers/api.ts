@@ -6,7 +6,7 @@ import { handle } from "hono/aws-lambda";
 import { createApp } from "../app.ts";
 import { CognitoAuth } from "../auth.ts";
 import { loadConfig } from "../config.ts";
-import { CognitoDirectory, S3Storage, SesMailer } from "../services.ts";
+import { AwsTexter, CognitoDirectory, S3Storage, SesMailer } from "../services.ts";
 import { DynamoTable } from "../store/dynamo.ts";
 import { Repo } from "../store/repo.ts";
 
@@ -26,6 +26,8 @@ const app = createApp({
   directory: new CognitoDirectory(cfg.userPoolId),
   mailer: new SesMailer(cfg.mailFrom),
   storage: new S3Storage(cfg.docsBucket),
+  // Texts only once the toll-free number is set up
+  texter: cfg.smsFrom ? new AwsTexter(cfg.smsFrom) : undefined,
   auth: new CognitoAuth({ userPoolId: cfg.userPoolId, clientId: cfg.clientId, authDomain: cfg.authDomain, publicUrl: cfg.publicUrl }),
 });
 

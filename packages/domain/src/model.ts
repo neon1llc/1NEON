@@ -96,6 +96,8 @@ export const User = z.object({
   passkey: z.boolean().optional(),
   // Which notifications reach this person by email or text; missing groups use their defaults
   notify: z.record(z.string().max(24), z.object({ email: z.boolean(), sms: z.boolean() })).optional(),
+  // When this person agreed to texts at their number; texts are never sent without it
+  smsConsentAt: isoDate.optional(),
   ...versioned,
 });
 export type User = z.infer<typeof User>;

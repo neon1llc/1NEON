@@ -77,6 +77,14 @@ module "api" {
   user_pool_id          = module.auth.user_pool_id
   user_pool_arn         = module.auth.user_pool_arn
   client_id             = module.auth.client_id
+  sms_number_arn        = module.sms.number_arn
+}
+
+
+# Text messages: the toll-free number and its opt-out list
+module "sms" {
+  source = "../../modules/sms"
+  name   = local.name
 }
 
 

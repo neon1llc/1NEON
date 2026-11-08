@@ -31,13 +31,15 @@ Please don't put passwords, keys, or other secrets in the portal. The portal is 
 
 I don't use your information for marketing, and I don't use automated decision-making that affects you.
 
+**Text messages.** If you add a mobile number and agree to texts in your profile, 1NEON texts you about the kinds of changes you choose, such as file uploads or a project moving stage. Message frequency varies with your projects. Message and data rates may apply. Reply STOP to any text to opt out, or HELP for help, and you can turn texts off in your profile at any time. Your number and your agreement are used only to send these notices. I never sell or share mobile numbers or text consent with third parties or affiliates for their marketing.
+
 ## Who else processes it
 
 I use a small number of service providers, each only for the purpose listed:
 
 | Provider | Purpose |
 |---|---|
-| Amazon Web Services (United States) | Hosting, storage, sign-in, email delivery, and answers from Neo, the site's assistant |
+| Amazon Web Services (United States) | Hosting, storage, sign-in, email and text message delivery, and answers from Neo, the site's assistant |
 | Google (Google sign-in, Google Workspace) | Optional sign-in with Google; my business email |
 | Calendly | Booking calls from the website |
 
@@ -57,7 +59,7 @@ You can view and update your profile at any time in the portal. You can also ask
 
 - give you a copy of your information, or your organization's data, in a common format;
 - correct or delete your information; or
-- stop sending you non-essential emails.
+- stop sending you non-essential emails or texts.
 
 Your organization's administrator controls who can access its workspace. If a request concerns your organization's project content, I may need to involve that administrator. I'll respond within 30 days. Depending on where you live, you may have additional rights under laws such as the GDPR or state privacy laws, and you can complain to your local data protection authority.
 

@@ -13,6 +13,7 @@ import {
   UsernameExistsException,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { DeleteObjectCommand, GetObjectCommand, GetObjectTaggingCommand, GetObjectAttributesCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { SendTextMessageCommand, PinpointSMSVoiceV2Client } from "@aws-sdk/client-pinpoint-sms-voice-v2";
 import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -49,6 +50,12 @@ export interface Storage {
   scan(key: string): Promise<"pending" | "clean" | "infected">;
   // Remove the file
   remove(key: string): Promise<void>;
+}
+
+
+/** Outbound text messages; `to` is an E.164 number such as +15551234567 */
+export interface Texter {
+  send(to: string, body: string): Promise<void>;
 }
 
 
@@ -170,7 +177,17 @@ export class SesMailer implements Mailer {
 }
 
 
+/** Texts through AWS End User Messaging, from 1NEON's toll-free number; replies of STOP opt out on AWS's side */
+export class AwsTexter implements Texter {
+  private client = new PinpointSMSVoiceV2Client({});
+  constructor(private from: string) {}
+  async send(to: string, body: string) {
+    await this.client.send(new SendTextMessageCommand({ DestinationPhoneNumber: to, OriginationIdentity: this.from, MessageBody: body, MessageType: "TRANSACTIONAL" }));
+  }
+}
+
+
 // The local and test stand-ins and the email templates live in their own files, free of AWS, so the
 // browser demo can run the same API; they're re-exported here for existing imports
-export { MemoryDirectory, MemoryMailer, MemoryStorage } from "./local.ts";
+export { MemoryDirectory, MemoryMailer, MemoryStorage, MemoryTexter } from "./local.ts";
 export { inviteEmail, passkeyEmail } from "./emails.ts";

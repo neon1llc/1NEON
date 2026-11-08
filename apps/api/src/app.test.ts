@@ -7,7 +7,7 @@ import type { CustomMessageTriggerEvent } from "aws-lambda";
 import { createApp } from "./app.ts";
 import { message } from "./handlers/auth-triggers.ts";
 import { seed } from "./seed.ts";
-import { MemoryDirectory, MemoryMailer, MemoryStorage } from "./services.ts";
+import { MemoryDirectory, MemoryMailer, MemoryStorage, MemoryTexter } from "./services.ts";
 import { MemoryTable } from "./store/memory.ts";
 import { Repo } from "./store/repo.ts";
 
@@ -506,5 +506,30 @@ describe("notifications", () => {
     expect(mailer.sent.filter((m) => m.to === "dana@acmedental.example").length).toBe(1);
     await call("dana@acmedental.example", "POST", `/t/${s.acme.id}/notifications/seen`);
     expect((await call("dana@acmedental.example", "GET", `/t/${s.acme.id}/notifications`)).json.unread).toBe(0);
+  });
+});
+
+
+// Texts: only with consent, only for the kinds chosen, and only to a number that reads as real
+describe("texts", () => {
+  it("texts a stage move to someone who agreed and chose texts for workflow", async () => {
+    const texter = new MemoryTexter();
+    app = createApp({ cfg: { env: "local", publicUrl: "https://neon1.tech", operatorEmails: [OP], devAuth: true }, repo, directory: new MemoryDirectory(), mailer, storage: new MemoryStorage(), texter });
+    const me = await call("dana@acmedental.example", "GET", "/me");
+    // Without consent nothing goes out, even with texts chosen
+    const u1 = await call("dana@acmedental.example", "PATCH", "/me", { version: me.json.user.version, phone: "(555) 010-2030", notify: { workflow: { email: false, sms: true } } });
+    const list = await call("raj@acmedental.example", "GET", `/t/${s.acme.id}/projects`);
+    let p = list.json.find((x: { key: string }) => x.key === "FLOW-1");
+    await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/projects/${p.id}/move`, { version: p.version, stageId: "build", reason: "Early start" });
+    expect(texter.sent.length).toBe(0);
+    // With consent, the next move is texted to her number in E.164
+    const u2 = await call("dana@acmedental.example", "PATCH", "/me", { version: u1.json.version, smsConsent: true });
+    expect(u2.json.smsConsentAt).toBeTruthy();
+    p = (await call("raj@acmedental.example", "GET", `/t/${s.acme.id}/projects`)).json.find((x: { key: string }) => x.key === "FLOW-1");
+    const mv = await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/projects/${p.id}/move`, { version: p.version, stageId: "verify", reason: "Testing" });
+    expect(mv.status, JSON.stringify(mv.json)).toBeLessThan(300);
+    expect(texter.sent).toHaveLength(1);
+    expect(texter.sent[0]!.to).toBe("+15550102030");
+    expect(texter.sent[0]!.body).toMatch(/Reply STOP/);
   });
 });

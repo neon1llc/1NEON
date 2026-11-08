@@ -867,3 +867,6 @@ body:has(.live-bar) #root { cursor: default; }
 .live-pop { position: fixed; right: 20px; top: calc(var(--demo-h, 76px) + 70px); z-index: 62; max-width: min(320px, calc(100vw - 40px)); padding: 10px 14px; border-radius: var(--r-sm, 10px); background: var(--panel); border: 1px solid var(--accent); box-shadow: 0 12px 28px rgba(0, 0, 0, .18); font: 13px var(--mono); color: var(--text); animation: pop-in 3.2s ease both; }
 .live-pop::before { content: "● "; color: var(--accent); }
 @keyframes pop-in { 0% { opacity: 0; transform: translateY(-6px); } 10%, 85% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+/* The yes to texts: a checkbox with the carrier wording beside it */
+.sms-consent { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg); font-size: 13px; line-height: 1.5; }
+.sms-consent input { width: 18px; height: 18px; min-height: 0; margin-top: 2px; accent-color: var(--accent); }

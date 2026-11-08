@@ -126,6 +126,8 @@ export const UpdateMeInput = z.object({
   menu: z.enum(["rail", "hidden"]).optional(),
   tour: Tour.optional(),
   notify: NotifyPrefs.optional(),
+  // Yes or no to texts; the API records when
+  smsConsent: z.boolean().optional(),
 });
 
 

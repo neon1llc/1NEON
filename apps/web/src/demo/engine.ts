@@ -4,7 +4,7 @@
 
 
 import { createApp } from "../../../api/src/app.ts";
-import { MemoryDirectory, MemoryMailer, MemoryStorage } from "../../../api/src/local.ts";
+import { MemoryDirectory, MemoryMailer, MemoryStorage, MemoryTexter } from "../../../api/src/local.ts";
 import { seed } from "../../../api/src/seed.ts";
 import { MemoryTable } from "../../../api/src/store/memory.ts";
 import { Repo } from "../../../api/src/store/repo.ts";
@@ -74,6 +74,7 @@ const ready = (async () => {
     repo: new Repo(table),
     directory: new MemoryDirectory(),
     mailer: new MemoryMailer(),
+    texter: new MemoryTexter(),
     storage,
   });
 })();

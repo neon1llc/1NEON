@@ -19,6 +19,8 @@ variable "operator_emails" { type = string }
 variable "user_pool_id" { type = string }
 variable "user_pool_arn" { type = string }
 variable "client_id" { type = string }
+# The toll-free number texts come from (its ARN)
+variable "sms_number_arn" { type = string }
 variable "log_retention_days" {
   type    = number
   default = 90
@@ -103,6 +105,11 @@ data "aws_iam_policy_document" "api" {
     resources = [var.user_pool_arn]
   }
   statement {
+    sid       = "Texts"
+    actions   = ["sms-voice:SendTextMessage"]
+    resources = [var.sms_number_arn]
+  }
+  statement {
     sid       = "Mail"
     actions   = ["ses:SendEmail"]
     resources = [var.ses_identity_arn, "arn:aws:ses:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:configuration-set/${var.ses_configuration_set}"]
@@ -176,6 +183,7 @@ resource "aws_lambda_function" "api" {
       AUTH_DOMAIN                         = var.auth_domain
       PUBLIC_URL                          = var.public_url
       MAIL_FROM                           = var.mail_from
+      SMS_FROM                            = var.sms_number_arn
       OPERATOR_EMAILS                     = var.operator_emails
       NODE_OPTIONS                        = "--enable-source-maps"
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"

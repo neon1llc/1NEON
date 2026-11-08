@@ -2,7 +2,7 @@
 // sign-in accounts, and mail, all kept in memory. No AWS here, so the demo bundle stays small.
 
 
-import type { Directory, Mailer, Storage } from "./services.ts";
+import type { Directory, Mailer, Storage, Texter } from "./services.ts";
 
 
 /** Local and test stand-ins */
@@ -58,3 +58,12 @@ export class MemoryMailer implements Mailer {
 }
 
 
+
+
+// Keeps texts in memory so tests (and the demo) can read them
+export class MemoryTexter implements Texter {
+  readonly sent: { to: string; body: string }[] = [];
+  async send(to: string, body: string) {
+    this.sent.push({ to, body });
+  }
+}
