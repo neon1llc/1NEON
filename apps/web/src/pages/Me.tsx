@@ -8,6 +8,7 @@ import { Link } from "react-router";
 import { applyTheme, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, useToast } from "../components/ui.tsx";
 import { api, BASE_PATH, devUser, pickPerson } from "../lib/api.ts";
+import { NOTIFY_GROUPS } from "@1neon/domain";
 import { problem } from "../lib/hooks.ts";
 import { passkeyCreation } from "../lib/passkey.ts";
 import { useHelp } from "../components/Help.tsx";
@@ -23,7 +24,7 @@ export function MePage() {
   const [totpOpen, setTotpOpen] = useState(false);
   useTopBar(<span>Your profile</span>, []);
   // Edits stay local until Save
-  const [draft, setDraft] = useState({ name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme, menu: me.user.menu ?? "rail" });
+  const [draft, setDraft] = useState({ name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme, menu: me.user.menu ?? "rail", notify: me.user.notify ?? {} });
   const [busy, setBusy] = useState(false);
   // Save the profile; the theme applies immediately and is kept with the account
   const save = async () => {
@@ -105,6 +106,28 @@ export function MePage() {
             ))}
           </div>
         </fieldset>
+        {/* Notifications: every kind shows under the bell; choose which also email you */}
+        <div className="card small notify" id="notifications">
+          <b>Notifications</b>
+          <span className="muted">Everything shows under the bell. Choose what also reaches you by email. Important ones start on.</span>
+          <table className="notify-table">
+            <thead><tr><th scope="col">When</th><th scope="col">Email</th><th scope="col">Text <span className="tag">soon</span></th></tr></thead>
+            <tbody>
+              {NOTIFY_GROUPS.map((g) => {
+                // The saved choice, or the group's default
+                const cur = draft.notify[g.id] ?? { email: g.email, sms: false };
+                const set = (patch: Partial<typeof cur>) => setDraft({ ...draft, notify: { ...draft.notify, [g.id]: { ...cur, ...patch } } });
+                return (
+                  <tr key={g.id}>
+                    <th scope="row"><span>{g.label}{g.level === "critical" && <span className="tag rec">important</span>}</span><span className="muted">{g.hint}</span></th>
+                    <td><input type="checkbox" aria-label={`Email me: ${g.label}`} checked={cur.email} onChange={(e) => set({ email: e.target.checked })} /></td>
+                    <td><input type="checkbox" aria-label={`Text me: ${g.label} (coming soon)`} checked={false} disabled /></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
         {/* Strong sign-in status: admins need it for people and settings */}
         <div className="card small security" data-tour="passkey">
           <b>Sign-in security</b>

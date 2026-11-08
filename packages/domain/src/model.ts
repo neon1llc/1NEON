@@ -94,6 +94,8 @@ export const User = z.object({
   tour: Tour.optional(),
   // Set once a passkey is added through the profile, so the portal can offer it to confirm
   passkey: z.boolean().optional(),
+  // Which notifications reach this person by email or text; missing groups use their defaults
+  notify: z.record(z.string().max(24), z.object({ email: z.boolean(), sms: z.boolean() })).optional(),
   ...versioned,
 });
 export type User = z.infer<typeof User>;
@@ -113,6 +115,8 @@ export const Member = z.object({
   invitedAt: isoDate,
   joinedAt: isoDate.optional(),
   lastSeenAt: isoDate.optional(),
+  // When this person last opened their notifications here; newer events count as new
+  seenAt: isoDate.optional(),
   ...versioned,
 });
 export type Member = z.infer<typeof Member>;

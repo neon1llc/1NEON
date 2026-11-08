@@ -33,6 +33,9 @@ Open the project's **Needs** tab and tap **Add request**. Finish a sentence with
 ### Do I have to write a lot?
 No. Each section says what belongs there, shows an example, and offers suggestions you can add with one tap. Discovery questions take a short answer right where they're asked, and a real example helps most.
 
+### How do I know when something changes?
+The bell at the top glows softly when something new happens, like a file upload, a decision, or a project moving stage. Tap it to see what changed and who did it. Important changes also email you; choose which in your profile under **Notifications**.
+
 ### How do I comment or change an item?
 Tap the item. A panel opens with its status, owner, due date, and details, and a place to comment. Everyone in your organization sees the comments.
 

@@ -65,7 +65,7 @@ const ready = (async () => {
   }
   // The demo's people sign in by picking who to be; Pradeep is the neon1 operator, as in real use
   return createApp({
-    cfg: { env: "local", publicUrl: `${location.origin}/1NEON/demo`, operatorEmails: ["pradeep@neon1.tech"], devAuth: true },
+    cfg: { env: "local", publicUrl: location.origin, operatorEmails: ["pradeep@neon1.tech"], devAuth: true },
     repo: new Repo(table),
     directory: new MemoryDirectory(),
     mailer: new MemoryMailer(),

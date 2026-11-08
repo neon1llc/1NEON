@@ -9,6 +9,7 @@ import { api, DEMO as IN_DEMO, devUser, HttpError, pickPerson, resetDemo } from 
 import { passkeyAssertion } from "../lib/passkey.ts";
 import { cleanCode, clearStep, loadStep, saveStep, session } from "../lib/signin.ts";
 import type { Me, OrgResponse, OrgSummary } from "../lib/types.ts";
+import { Bell } from "./Bell.tsx";
 import { Offline } from "./Glitch.tsx";
 import { Rain } from "./Rain.tsx";
 import { FileText as FileIcon, Folder as FolderIcon, Home as HomeIcon, Kanban as KanbanIcon, Menu as MenuIcon, Search as SearchIcon } from "lucide-react";
@@ -517,6 +518,7 @@ function FrameBody({ org, all, children }: { org?: OrgSummary; all?: boolean; ch
             <span className="hide-sm">Search</span>
             <span className="kbd hide-sm">{/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl K"}</span>
           </button>
+          {org && <Bell tid={org.id} slug={org.slug} />}
           <button className="icon-btn help-btn" onClick={help.open} data-tour="help" aria-label="Help for this page" title="Help for this page">?</button>
         </header>
         <Crumbs.Provider value={setTop}>

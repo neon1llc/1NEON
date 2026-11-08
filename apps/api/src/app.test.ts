@@ -487,3 +487,23 @@ describe("session step-up", () => {
     expect(await repo.sessionStrong("s1", me.id)).toBe(false);
   });
 });
+
+
+// Notifications: others' changes count as new until opened, and important ones email by default
+describe("notifications", () => {
+  it("counts others' changes, clears on open, and emails a project move", async () => {
+    const list = await call("raj@acmedental.example", "GET", `/t/${s.acme.id}/projects`);
+    const p = list.json.find((x: { key: string }) => x.key === "FLOW-1");
+    await call("dana@acmedental.example", "POST", `/t/${s.acme.id}/notifications/seen`);
+    await new Promise((r) => setTimeout(r, 5));
+    await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/projects/${p.id}/items`, { kind: "request", title: "Text reminders" });
+    await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/projects/${p.id}/move`, { version: p.version, stageId: "build", reason: "Starting early" });
+    const n = await call("dana@acmedental.example", "GET", `/t/${s.acme.id}/notifications`);
+    expect(n.json.unread).toBe(2);
+    expect(n.json.events[0].group).toBe("workflow");
+    // Moves are critical, so Dana gets an email; the new request isn't, so she doesn't
+    expect(mailer.sent.filter((m) => m.to === "dana@acmedental.example").length).toBe(1);
+    await call("dana@acmedental.example", "POST", `/t/${s.acme.id}/notifications/seen`);
+    expect((await call("dana@acmedental.example", "GET", `/t/${s.acme.id}/notifications`)).json.unread).toBe(0);
+  });
+});

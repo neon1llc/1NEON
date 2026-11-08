@@ -22,7 +22,10 @@ import {
   can,
   canApprove,
   formatClientId,
+  groupOf,
   settableStatus,
+  wants,
+  type AuditEvent,
   itemFields,
   newId,
   rankBetween,
@@ -42,7 +45,7 @@ import { z } from "zod";
 import { CognitoAuth, type Verified } from "./auth.ts";
 import type { Config } from "./config.ts";
 import type { Directory, Mailer, Storage } from "./services.ts";
-import { inviteEmail, passkeyEmail } from "./emails.ts";
+import { inviteEmail, noticeEmail, passkeyEmail } from "./emails.ts";
 import { MemoryStorage } from "./local.ts";
 import { checkTotp, newTotp } from "./totp.ts";
 import { keys, Repo } from "./store/repo.ts";
@@ -108,6 +111,28 @@ const REASONS = {
 export function createApp(d: Deps) {
   const { repo, cfg } = d;
   const app = new Hono<Env>().basePath("/1NEON/api");
+
+  // Notifications ride on the audit trail: after any write that records events, email the people
+  // who want that kind of event. A mail failure never undoes or fails the change itself
+  const write = repo.table.write.bind(repo.table);
+  repo.table.write = async (ops) => {
+    await write(ops);
+    const events = ops.flatMap((o) => ("put" in o && o.put.type === "audit" ? [o.put as unknown as AuditEvent] : []));
+    if (events.length) await notifyOut(events).catch((e) => console.error(JSON.stringify({ level: "error", message: `notify: ${String(e)}` })));
+  };
+  async function notifyOut(events: AuditEvent[]) {
+    for (const e of events) {
+      const [members, tenant, actor] = await Promise.all([repo.listMembers(e.tenantId), repo.getTenant(e.tenantId), repo.getUser(e.actorId)]);
+      const by = actor?.name || actor?.email || "Someone";
+      for (const m of members) {
+        if (m.status !== "joined" || m.userId === e.actorId) continue;
+        const u = await repo.getUser(m.userId);
+        if (!u || !wants(u.notify, e.action, "email")) continue;
+        const mail = noticeEmail({ orgName: tenant?.name ?? "1NEON", by, summary: e.summary, url: `${cfg.publicUrl}/1NEON/o/${tenant?.slug ?? ""}/workspace`, important: groupOf(e.action).level === "critical" });
+        await d.mailer.send(u.email, mail.subject, mail.text, mail.html);
+      }
+    }
+  }
 
   // Known errors keep their status; a version conflict returns the current record for the conflict dialog
   app.onError((err, c) => {
@@ -254,6 +279,8 @@ export function createApp(d: Deps) {
         const next: Member = { ...m, status: "joined", joinedAt: m.joinedAt ?? t, lastSeenAt: t, version: m.version + 1, updatedAt: t, updatedBy: user.id };
         await repo.saveMember(next, { version: m.version }).catch(() => undefined);
         if (joined) await repo.table.write([repo.auditOp({ tenantId: m.tenantId, actorId: user.id, action: "member.joined", target: user.id, summary: `${user.name || user.email} joined` })]);
+        // A first visit after two hours away counts as signing in, for anyone who wants to know
+        else if (!m.lastSeenAt || Date.parse(t) - Date.parse(m.lastSeenAt) > 2 * 60 * 60 * 1000) await repo.table.write([repo.auditOp({ tenantId: m.tenantId, actorId: user.id, action: "member.signedin", target: user.id, summary: `${user.name || user.email} signed in` })]);
       }
     }
     const active = memberships.filter((m) => m.status !== "deactivated");
@@ -592,6 +619,31 @@ export function createApp(d: Deps) {
   app.get("/t/:tid/activity", async (c) => {
     need(c, "read");
     return c.json(await repo.listAudit(c.get("tenant").id, 100));
+  });
+
+  // Notifications: what others did here lately, each with its group and importance, and when the
+  // caller last looked. Info-level events (sign-ins) show in the list but never count as new
+  app.get("/t/:tid/notifications", async (c) => {
+    need(c, "read");
+    const t = c.get("tenant");
+    const me = actorId(c);
+    const [events, member] = await Promise.all([repo.listAudit(t.id, 60), repo.getMember(t.id, me)]);
+    // Never opened: only the last three days count as new, so older history doesn't all light up at once
+    const seenAt = member?.seenAt ?? new Date(Date.now() - 3 * 864e5).toISOString();
+    const list = events.filter((e) => e.actorId !== me).slice(0, 40).map((e) => {
+      const g = groupOf(e.action);
+      return { ...e, group: g.id, level: g.level, unread: e.at > seenAt && g.level !== "info" };
+    });
+    return c.json({ seenAt, unread: list.filter((e) => e.unread).length, events: list });
+  });
+
+  // Opening the list marks everything up to now as seen
+  app.post("/t/:tid/notifications/seen", async (c) => {
+    need(c, "read");
+    const t = c.get("tenant");
+    const m = await repo.getMember(t.id, actorId(c));
+    if (m) await repo.saveMember({ ...m, seenAt: now(), version: m.version + 1, updatedAt: now(), updatedBy: actorId(c) }, { version: m.version });
+    return c.body(null, 204);
   });
 
   // People

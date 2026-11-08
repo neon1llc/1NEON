@@ -1,6 +1,7 @@
 // packages/domain/src/api.ts - Request bodies for the API, shared with the web client.
 
 
+import { NotifyPrefs } from "./notify.ts";
 import { z } from "zod";
 import { AccessLevel, Health, ItemKind, Layer, ProjectRole, Theme, Tour, email, id } from "./model.ts";
 
@@ -124,6 +125,7 @@ export const UpdateMeInput = z.object({
   theme: Theme.optional(),
   menu: z.enum(["rail", "hidden"]).optional(),
   tour: Tour.optional(),
+  notify: NotifyPrefs.optional(),
 });
 
 

@@ -58,3 +58,28 @@ export function passkeyEmail(opts: { url: string; what?: string; at?: Date }) {
   });
   return { subject, text, html };
 }
+
+
+/** A notification by email: who did what, where, with a link to look */
+export function noticeEmail(opts: { orgName: string; by: string; summary: string; url: string; important?: boolean; at?: Date }) {
+  const at = opts.at ?? new Date();
+  const subject = `${opts.orgName}: ${opts.summary}`.slice(0, 140);
+  const text = [
+    `${opts.by} in ${opts.orgName}: ${opts.summary}`,
+    "",
+    `Open 1NEON: ${opts.url}`,
+    "",
+    "Choose which of these reach you in your 1NEON profile, under Notifications.",
+    sentAt(at),
+  ].join("\n");
+  const html = branded({
+    label: opts.important ? "something important changed" : "something changed",
+    preheader: `${opts.by}: ${opts.summary}`,
+    heading: opts.summary,
+    body: `<p style="margin:0">${esc(opts.by)} in <b>${esc(opts.orgName)}</b>.</p>`,
+    button: { label: "Open 1NEON", url: opts.url },
+    note: "Choose which of these reach you in your 1NEON profile, under Notifications.",
+    at,
+  });
+  return { subject, text, html };
+}
