@@ -85,9 +85,13 @@ createRoot(document.getElementById("root")!).render(
 );
 
 
-// The site's "ask neon1" window, answered from neon1's public pages through /chat/api on this
-// origin. It's optional: if the site's module can't load, the portal works without it
+// Neo, the site's assistant window, answered from neon1's public pages through /chat/api on this
+// origin. Dark on the sign-in screen, light in the app; optional: if the site's module can't
+// load, the portal works without it
 const CHAT = "/shared/chat.js";
+type ChatOptions = { className?: string; light?: () => boolean; watch?: Element[] };
 import(/* @vite-ignore */ CHAT)
-  .then((m: { chat(opts: { className?: string }): unknown }) => m.chat({ className: "n1chat-portal" }))
+  .then((m: { chat(opts: ChatOptions): unknown }) =>
+    m.chat({ className: "n1chat-portal n1chat-right", light: () => !document.querySelector(".signin"), watch: [document.getElementById("root")!] }),
+  )
   .catch(() => undefined);
