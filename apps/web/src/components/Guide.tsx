@@ -151,8 +151,9 @@ function Goals({ value, onChange }: { value: string[]; onChange: (v: string[]) =
   const toggle = (g: string) => onChange(value.includes(g) ? value.filter((x) => x !== g) : [...value, g]);
   // Their own words join the chosen goals as a chip of their own
   const add = () => {
-    const w = word.trim().toLowerCase();
-    if (w && !value.includes(w)) onChange([...value, w]);
+    // Their words keep their capitals (names, places); the same words twice are added once
+    const w = word.trim();
+    if (w && !value.some((g) => g.toLowerCase() === w.toLowerCase())) onChange([...value, w]);
     setWord("");
     setAdding(false);
   };
