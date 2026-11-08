@@ -92,6 +92,12 @@ export class CognitoAuth {
     return { httpOnly: true, secure: true, sameSite: "Strict" as const, path: "/1NEON/api", maxAge };
   }
 
+  // Same cookie, but gone when the browser closes. Access tokens last 15 minutes anyway, and a
+  // closed browser with Remember me comes back through the refresh cookie
+  private sessionOnly() {
+    return { ...this.cookieOpts(0), maxAge: undefined };
+  }
+
   // Must match a callback URL registered on the app client
   get redirectUri() {
     return `${this.cfg.publicUrl}/1NEON/api/auth/callback`;
@@ -116,7 +122,8 @@ export class CognitoAuth {
     // A token that fails verification reads as signed out, not as a server error
     const p = await this.access.verify(tokens.access_token).catch(() => undefined);
     if (!p) return undefined;
-    setCookie(c, COOKIE.access, tokens.access_token, this.cookieOpts(15 * 60));
+    // The renewed access cookie is session-only, like the first; Remember me rides on the refresh cookie alone
+    setCookie(c, COOKIE.access, tokens.access_token, this.sessionOnly());
     return { sub: p.sub, jti: p.origin_jti as string | undefined };
   }
 
@@ -161,12 +168,12 @@ export class CognitoAuth {
     if (!access || !idToken) return undefined;
     const id = await this.idt.verify(idToken);
     const at = await this.access.verify(access);
-    // Remember me (the default) keeps the refresh token 30 days; without it both cookies end with the browser
+    // Remember me (the default) keeps the refresh cookie 30 days; without it the refresh cookie ends
+    // with the browser. The access cookie always does, so a refresh can't make it outlive the choice
     const forget = getCookie(c, COOKIE.remember) === "0";
     deleteCookie(c, COOKIE.remember, { path: "/1NEON/api", secure: true });
-    const opts = (maxAge: number) => (forget ? { ...this.cookieOpts(maxAge), maxAge: undefined } : this.cookieOpts(maxAge));
-    setCookie(c, COOKIE.access, access, opts(15 * 60));
-    if (refresh) setCookie(c, COOKIE.refresh, refresh, opts(30 * 24 * 3600));
+    setCookie(c, COOKIE.access, access, this.sessionOnly());
+    if (refresh) setCookie(c, COOKIE.refresh, refresh, forget ? this.sessionOnly() : this.cookieOpts(30 * 24 * 3600));
     return { sub: id.sub, email: String(id.email ?? "").toLowerCase(), emailVerified: String(id.email_verified) === "true", accessToken: access, jti: at.origin_jti as string | undefined, method };
   }
 

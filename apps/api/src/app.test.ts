@@ -449,3 +449,41 @@ describe("upcoming and insights", () => {
     expect(Object.values(ins.json.byLayer).reduce((a: number, b) => a + (b as number), 0)).toBe(ins.json.projects);
   });
 });
+
+
+// Session assurance (SEC-R01): bound to one session, one person, and a limited time
+describe("session step-up", () => {
+  // The operator's own user record
+  const operator = async () => (await repo.getUser((await repo.userIdForEmail(OP))!))!;
+
+  it("counts a passkey or authenticator check only for this session, this person, and a while", async () => {
+    const me = await operator();
+    // A code-only sign-in is not strong
+    await repo.saveSession("code-session", me.id, false);
+    expect(await repo.sessionStrong("code-session", me.id)).toBe(false);
+    // A step-up marks only its own session
+    await repo.saveSession("strong-session", me.id, true);
+    expect(await repo.sessionStrong("strong-session", me.id)).toBe(true);
+    expect(await repo.sessionStrong("code-session", me.id)).toBe(false);
+    // Someone else can't borrow it, and no session ID never counts
+    expect(await repo.sessionStrong("strong-session", "someone-else")).toBe(false);
+    expect(await repo.sessionStrong(undefined, me.id)).toBe(false);
+  });
+
+  it("expires the step-up and treats rows without an expiry as not strong", async () => {
+    const me = await operator();
+    // A row written before the time limit existed
+    await repo.table.write([{ put: { PK: "SESSION#old", SK: "META", userId: me.id, strong: true }, guard: { always: true } }]);
+    expect(await repo.sessionStrong("old", me.id)).toBe(false);
+    // A step-up whose window has passed
+    await repo.table.write([{ put: { PK: "SESSION#stale", SK: "META", userId: me.id, strong: true, strongUntil: new Date(Date.now() - 1000).toISOString() }, guard: { always: true } }]);
+    expect(await repo.sessionStrong("stale", me.id)).toBe(false);
+  });
+
+  it("forgets assurance on sign-out", async () => {
+    const me = await operator();
+    await repo.saveSession("s1", me.id, true);
+    await repo.deleteSession("s1");
+    expect(await repo.sessionStrong("s1", me.id)).toBe(false);
+  });
+});

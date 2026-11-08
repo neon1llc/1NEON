@@ -97,7 +97,7 @@ async function body<S extends z.ZodType>(c: Context, schema: S): Promise<z.infer
 const REASONS = {
   not_member: [404, "not_found", "That organization doesn't exist, or you don't have access to it."],
   forbidden: [403, "forbidden", "Your access level doesn't allow that."],
-  strong_auth_required: [403, "strong_auth_required", "Set up a passkey or an authenticator app first, then try again."],
+  strong_auth_required: [403, "strong_auth_required", "Confirm it's you with your passkey or authenticator app (or set one up on your profile), then try again."],
   read_only_view: [403, "read_only", "All clients is read only. Open the organization to make changes."],
   not_decider: [403, "not_decider", "Only this project's decision maker can approve. An admin can name one on the project."],
 } as const;
@@ -154,7 +154,7 @@ export function createApp(d: Deps) {
     if (!uid) return "not_invited";
     // Remember which Cognito identity (email code, passkey, or Google) maps to this person
     await repo.linkSubject(r.sub, uid);
-    // Admin actions trust this session only if it signed in with a passkey
+    // Admin actions trust this session only if it signed in with a passkey, and only for a while
     if (r.jti) await repo.saveSession(r.jti, uid, r.method === "passkey");
     const user = await repo.getUser(uid);
     if (user) {
@@ -198,6 +198,9 @@ export function createApp(d: Deps) {
 
   // Revoke the refresh token, clear cookies, and send the browser to Cognito's logout
   app.post("/auth/logout", async (c) => {
+    // Forget this session's admin assurance first; its last access token may still be valid for minutes
+    const ident = d.auth ? await d.auth.identify(c).catch(() => undefined) : undefined;
+    if (ident?.jti) await repo.deleteSession(ident.jti).catch(() => undefined);
     const url = d.auth ? await d.auth.logout(c) : "/1NEON/";
     return c.json({ redirect: url });
   });
@@ -210,7 +213,8 @@ export function createApp(d: Deps) {
     const { user, jti } = found;
     // The operator role comes from configuration, never from the database, so no data edit can grant it
     const operator = cfg.operatorEmails.includes(user.email);
-    // Strong means this session signed in with a passkey; locally the seeded flag stands in
+    // Strong means this session proved a passkey or authenticator within the step-up window; a failed
+    // lookup throws and fails the request rather than granting anything. Locally the seeded flag stands in
     const strongAuth = cfg.devAuth ? user.strongAuth || operator : await repo.sessionStrong(jti, user.id);
     c.set("who", { user, actor: { userId: user.id, operator, strongAuth }, jti });
     await next();

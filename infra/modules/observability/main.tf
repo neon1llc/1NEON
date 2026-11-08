@@ -52,10 +52,16 @@ locals {
       dims      = { ApiId = var.api_id }
       what      = "The HTTP API returned server errors."
     }
-    table-throttles = {
-      namespace = "AWS/DynamoDB", metric = "ThrottledRequests", stat = "Sum", threshold = 1
+    # ThrottledRequests is only published per operation; these two are published per table
+    table-read-throttles = {
+      namespace = "AWS/DynamoDB", metric = "ReadThrottleEvents", stat = "Sum", threshold = 1
       dims      = { TableName = var.table_name }
-      what      = "DynamoDB throttled requests."
+      what      = "DynamoDB throttled reads."
+    }
+    table-write-throttles = {
+      namespace = "AWS/DynamoDB", metric = "WriteThrottleEvents", stat = "Sum", threshold = 1
+      dims      = { TableName = var.table_name }
+      what      = "DynamoDB throttled writes."
     }
   }
 }

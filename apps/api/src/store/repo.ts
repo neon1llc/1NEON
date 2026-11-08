@@ -37,6 +37,10 @@ export const keys = {
 };
 
 
+// How long a passkey or authenticator check keeps a session trusted for admin actions
+export const STEP_UP_MS = 12 * 60 * 60 * 1000;
+
+
 /** Strip storage-only attributes before returning a row as an entity */
 function entity<T>(row: Row | undefined): T | undefined {
   if (!row) return undefined;
@@ -143,17 +147,26 @@ export class Repo {
     await this.table.write([{ put: { ...keys.subject(sub), userId: uid }, guard: { always: true } }]);
   }
 
-  // A session's sign-in method; it lives as long as its refresh token (30 days)
+  // A session's assurance. The row lives as long as its refresh token (30 days), but a passkey or
+  // authenticator check only counts for STEP_UP_MS; after that admin actions ask again
   async saveSession(jti: string, userId: string, strong: boolean) {
     const ttl = Math.floor(Date.now() / 1000) + 30 * 24 * 3600;
-    await this.table.write([{ put: { ...keys.session(jti), userId, strong, ttl }, guard: { always: true } }]);
+    const strongUntil = strong ? new Date(Date.now() + STEP_UP_MS).toISOString() : undefined;
+    await this.table.write([{ put: { ...keys.session(jti), userId, strong, strongUntil, ttl }, guard: { always: true } }]);
   }
 
-  // Strong only when this very session signed in with a passkey, for this person
+  // Strong only when this very session proved a passkey or authenticator, for this person, recently.
+  // Rows without an expiry (written before the time limit) read as not strong, so this fails closed
   async sessionStrong(jti: string | undefined, userId: string) {
     if (!jti) return false;
     const row = await this.table.get(keys.session(jti).PK, "META");
-    return row?.userId === userId && row?.strong === true;
+    const until = typeof row?.strongUntil === "string" ? Date.parse(row.strongUntil) : NaN;
+    return row?.userId === userId && row?.strong === true && until > Date.now();
+  }
+
+  // Sign-out forgets the session's assurance at once, even while its last access token lives
+  async deleteSession(jti: string) {
+    await this.table.write([{ delete: keys.session(jti) }]);
   }
 
   // The authenticator app record, if any

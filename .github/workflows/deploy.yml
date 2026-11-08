@@ -7,7 +7,8 @@ name: deploy
 on:
   push:
     branches: [main]
-    paths: ["apps/**", "packages/**", "package-lock.json", ".github/workflows/deploy.yml"]
+    # Root package.json and the shared tsconfig change the build too
+    paths: ["apps/**", "packages/**", "package.json", "package-lock.json", "tsconfig.base.json", ".github/workflows/deploy.yml"]
   workflow_dispatch:
 
 # Read-only by default; the job adds the OIDC token it needs
@@ -56,6 +57,17 @@ jobs:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
 
+      # Refuse to ship into the wrong place: the caller must be the role's own account, and the
+      # app bucket must exist there
+      - name: Check the target
+        env:
+          ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          expected=$(cut -d: -f5 <<<"$ROLE_ARN")
+          actual=$(aws sts get-caller-identity --query Account --output text)
+          [ "$expected" = "$actual" ] || { echo "::error::credentials are for another account"; exit 1; }
+          aws s3api head-bucket --bucket "$APP_BUCKET" --expected-bucket-owner "$actual"
+
       # API first, so the new app never calls an old API. Source maps stay out of the zip
       - name: Ship Lambda functions
         working-directory: apps/api/dist
@@ -68,11 +80,13 @@ jobs:
             echo "shipped $name"
           done
 
-      # Hashed assets cache for a year; the shell (index.html) and the unhashed arrive.js are always revalidated
+      # Hashed assets cache for a year; the shell (index.html) and the unhashed arrive.js are always revalidated.
+      # New assets go up first and old ones stay, so open tabs and a rollback still find their files;
+      # the shell switches over only once everything it names is in place
       - name: Upload the web app
         working-directory: apps/web/dist
         run: |
-          aws s3 sync 1NEON "s3://$APP_BUCKET/1NEON" --delete --exclude '*.map' --exclude index.html --exclude arrive.js \
+          aws s3 sync 1NEON "s3://$APP_BUCKET/1NEON" --exclude '*.map' --exclude index.html --exclude arrive.js \
             --cache-control 'public, max-age=31536000, immutable'
           aws s3 cp 1NEON/index.html "s3://$APP_BUCKET/1NEON/index.html" \
             --cache-control 'no-cache' --content-type 'text/html; charset=utf-8'
@@ -83,6 +97,32 @@ jobs:
       - name: Invalidate the CDN
         run: aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths '/1NEON/*' >/dev/null
 
-      # The deployed API answers its health check through neon1.tech
+      # Through neon1.tech: the API reports this commit, and the shell plus every asset it names loads.
+      # Each curl is checked on its own, so a cut-off transfer fails the step
       - name: Verify
-        run: curl -fsS https://neon1.tech/1NEON/api/health
+        run: |
+          set -euo pipefail
+          want="${GITHUB_SHA::7}"
+          health=$(curl -fsS --retry 3 --retry-all-errors https://neon1.tech/1NEON/api/health)
+          grep -q "\"version\":\"$want\"" <<<"$health" || { echo "::error::API reports $health, expected $want"; exit 1; }
+          shell=$(curl -fsS --retry 3 --retry-all-errors -H 'cache-control: no-cache' https://neon1.tech/1NEON/)
+          refs=$(grep -oE '/1NEON/(assets/[^"?]+|arrive\.js)' <<<"$shell" | sort -u)
+          [ -n "$refs" ] || { echo "::error::the shell names no assets"; exit 1; }
+          for ref in $refs; do
+            curl -fsS -o /dev/null "https://neon1.tech$ref" || { echo "::error::$ref did not load"; exit 1; }
+            echo "ok $ref"
+          done
+
+      # Old hashed assets are kept for 14 days for open tabs and rollback, then removed. Anything this
+      # build still uses is never removed, however old
+      - name: Prune old assets
+        working-directory: apps/web/dist
+        run: |
+          set -euo pipefail
+          cutoff=$(date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          aws s3api list-objects-v2 --bucket "$APP_BUCKET" --prefix 1NEON/assets/ \
+            --query "Contents[?LastModified<'$cutoff'].Key" --output text | tr '\t' '\n' | grep -v '^None$' | while read -r key; do
+              [ -z "$key" ] && continue
+              [ -e "${key}" ] && continue
+              aws s3 rm "s3://$APP_BUCKET/$key"
+            done
