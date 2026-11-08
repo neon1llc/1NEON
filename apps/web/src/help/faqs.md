@@ -24,6 +24,12 @@ The four layers every project moves through, N E O N. **Needs** is what you want
 ### What should I do first on a project?
 Look at **Next step** at the top of the project. It says what has to happen now and who it's waiting on.
 
+### How do I tell you what I need?
+Open the project's **Needs** tab and tap **Add request**. Finish one sentence with a few taps: what you'd like, who it's for, what happens today, how often it comes up, and when you need it. Only the first choice is required.
+
+### Do I have to write a lot?
+No. Each section says what belongs there, shows an example, and offers suggestions you can add with one tap. Discovery questions take a short answer right where they're asked, and a real example helps most.
+
 ### How do I comment or change an item?
 Tap the item. A panel opens with its status, owner, due date, and details, and a place to comment. Everyone in your organization sees the comments.
 

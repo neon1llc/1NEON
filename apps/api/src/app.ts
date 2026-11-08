@@ -459,7 +459,8 @@ export function createApp(d: Deps) {
     const waiting: { projectId: string; projectKey: string; itemId: string; title: string; kind: string; action: "approve" | "upload" | "do" }[] = [];
     for (const p of live) {
       const items = await repo.listItems(t.id, p.id);
-      const decider = canApprove(actor, c.get("access"), p.people).ok;
+      // A project with an approved option no longer asks anyone to approve the others
+      const decider = canApprove(actor, c.get("access"), p.people).ok && !items.some((i) => i.kind === "option" && i.status === "approved");
       for (const i of items) {
         const action = i.kind === "option" && i.status === "proposed" && decider ? "approve"
           : i.kind === "file_request" && i.status !== "done" && !actor.operator ? "upload"

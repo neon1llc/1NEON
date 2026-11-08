@@ -188,6 +188,7 @@ a.row:hover { background: var(--accent-soft); }
 .pcard .meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; font: 12px var(--mono); color: var(--muted); }
 /* All clients lanes, one board per organization */
 .lanes { display: grid; gap: 18px; }
+.lanes, .lane { min-width: 0; }
 .lane h3 { font-size: 13px; margin: 0 0 8px; display: flex; gap: 10px; align-items: baseline; }
 
 /* Layers */
@@ -672,3 +673,22 @@ details.history summary { cursor: pointer; font: 12px var(--mono); color: var(--
 .keys li { display: flex; align-items: center; gap: 8px; }
 .keys i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .keys b { margin-left: auto; font-family: var(--mono); }
+
+/* --- Guided input: hints, one-tap starters, the request sentence, and in-place answers --- */
+.add-row { display: grid; gap: 8px; margin-top: 8px; justify-items: start; }
+.add-row .starters, .add-form .starters { margin: 0; gap: 6px; }
+.starters .chip { border-style: dashed; }
+.add-form { display: grid; gap: 8px; margin-top: 10px; padding: 14px; }
+.add-form .hint { margin: 0; }
+/* The request sentence: each line is words, then chips or a short field, wrapping on phones */
+.sentence { display: grid; gap: 12px; margin-top: 10px; padding: 16px; }
+.sentence .eyebrow { margin: 0; }
+.line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.line > span:first-child { font-size: 15px; min-width: 88px; }
+.line input { flex: 1 1 220px; min-height: 36px; }
+.pick { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.answer { display: grid; gap: 6px; margin-top: 6px; justify-items: start; }
+.answer textarea { width: 100%; min-height: 0; }
+/* Requirement priority on each row: must stands out, nice to have recedes */
+.tag.prio-must { color: var(--accent); border-color: var(--accent); }
+.tag.prio-could { opacity: .7; }

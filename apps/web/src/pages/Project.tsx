@@ -6,6 +6,7 @@ import { betterWhen, canApprove, KIND_LAYER, metricProgress, MetricFields, Optio
 import { ArrowRight, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
+import { GUIDE, Pick, RequestBuilder, Starters } from "../components/Guide.tsx";
 import { ItemPanel, STATUS_WORDS } from "../components/ItemPanel.tsx";
 import { Link, NavLink, useLocation, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
@@ -106,7 +107,9 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
   const members = useMembers(org.id);
   const names = new Map(members.data?.map((m) => [m.userId, m.name || m.email]) ?? []);
   const actor = { userId: me.user.id, operator: me.operator, strongAuth: false };
-  const proposed = items.filter((i) => i.kind === "option" && i.status === "proposed");
+  // Once an option is approved, the others stop asking for a decision
+  const decided = items.some((i) => i.kind === "option" && i.status === "approved");
+  const proposed = decided ? [] : items.filter((i) => i.kind === "option" && i.status === "proposed");
   const files = items.filter((i) => i.kind === "file_request" && i.status !== "done");
   const mine = items.filter((i) => i.assigneeId === me.user.id && i.status !== "done");
   const deciders = p.people.filter((x) => x.role === "decision_maker").map((x) => names.get(x.userId) ?? "the decision maker");
@@ -440,10 +443,12 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
             ) : (
               <div>{list.map((i) => (
                 <ItemRow key={i.id} item={i} path={path} marker={edits.find((e) => e.recordId === i.id)} onToggle={CHECKABLE.has(kind) && canWrite ? () => void patch(i, { status: i.status === "done" ? "open" : "done" }) : undefined}
-                  extra={kind === "file_request" ? <FileAsk item={i} docs={docs.filter((d) => d.itemId === i.id)} /> : undefined} />
+                  extra={kind === "file_request" ? <FileAsk item={i} docs={docs.filter((d) => d.itemId === i.id)} />
+                    : kind === "discovery" && !i.body.trim() && canWrite ? <Answer question={i.title} onSave={(text) => void patch(i, { body: text, status: "done" })} />
+                    : undefined} />
               ))}</div>
             )}
-            {(canWrite || kind === "request") && <AddItem kind={kind} path={path} />}
+            {(canWrite || kind === "request") && <AddItem kind={kind} path={path} taken={list.map((i) => i.title)} />}
           </section>
         );
       })}
@@ -493,6 +498,7 @@ function ItemRow({ item, path, marker, onToggle, extra }: { item: Item; path: st
       {/* Owner, due date, and status at a glance */}
       <span className="item-meta">
         {item.dueDate && <span className="small muted">{item.dueDate.slice(5)}</span>}
+        {item.kind === "requirement" && <span className={`tag prio-${String(item.fields.priority ?? "should")}`}>{PRIORITY_WORDS[String(item.fields.priority ?? "should")]}</span>}
         {item.status !== "open" && item.status !== "done" && <span className="tag">{STATUS_WORDS[item.status] ?? item.status}</span>}
         {owner && <Avatar id={owner.userId} name={owner.name || owner.email} size={22} />}
       </span>
@@ -502,26 +508,25 @@ function ItemRow({ item, path, marker, onToggle, extra }: { item: Item; path: st
 }
 
 
-/** The inline form that adds an item of one kind */
-function AddItem({ kind, path }: { kind: ItemKind; path: string }) {
+/** The inline form that adds an item of one kind. Each kind says what belongs in it, with an example
+ * and one-tap starters; requests are a sentence of taps; requirements pick must, should, or could */
+function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: string[] }) {
   const { org } = useOrg();
   const toast = useToast();
   const refresh = useRefresh(org.id);
-  // Closed to a link until someone adds; extra holds the measure and option fields
+  // Closed to a link until someone adds; extra holds the measure, option, and requirement fields
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [extra, setExtra] = useState({ unit: "", baseline: "", target: "", cost: "" });
-  if (!open) return <button className="linkish small" style={{ marginTop: 8 }} onClick={() => setOpen(true)}>+ Add {KIND_LABEL[kind][0].toLowerCase()}</button>;
-  // Blank or non-numeric values are left unset
-  const num = (s: string) => (s.trim() === "" || Number.isNaN(Number(s)) ? undefined : Number(s));
-  // Measures and options carry extra fields; every kind gets a title and details
-  const submit = async () => {
-    const fields: Record<string, unknown> = {};
-    if (kind === "metric") Object.assign(fields, { unit: extra.unit, baseline: num(extra.baseline), target: num(extra.target) });
-    if (kind === "option") Object.assign(fields, { cost: extra.cost });
+  const [priority, setPriority] = useState<"must" | "should" | "could" | "">("should");
+  const guide = GUIDE[kind];
+  const label = KIND_LABEL[kind][0];
+
+  // Send one item, then close the form
+  const send = async (item: { title: string; body: string; fields: Record<string, unknown> }) => {
     try {
-      await api(`${path}/items`, { method: "POST", body: { kind, title: title.trim(), body, fields } });
+      await api(`${path}/items`, { method: "POST", body: { kind, ...item } });
       setTitle("");
       setBody("");
       setOpen(false);
@@ -530,23 +535,69 @@ function AddItem({ kind, path }: { kind: ItemKind; path: string }) {
     }
     refresh();
   };
+
+  // On an empty group, starters show even while closed, so the common answers are one tap away
+  if (!open) {
+    return (
+      <div className="add-row">
+        <button className="linkish small" onClick={() => setOpen(true)}>+ Add {label.toLowerCase()}</button>
+        {guide && kind !== "request" && !taken.length && <Starters kind={kind} taken={taken} onPick={(s) => { setTitle(s); setOpen(true); }} />}
+      </div>
+    );
+  }
+  // Requests are built as one guided sentence
+  if (kind === "request") return <RequestBuilder onSubmit={(d) => void send(d)} onCancel={() => setOpen(false)} />;
+
+  // Blank or non-numeric values are left unset
+  const num = (s: string) => (s.trim() === "" || Number.isNaN(Number(s)) ? undefined : Number(s));
+  // Measures, options, and requirements carry extra fields; every kind gets a title and details
+  const submit = () => {
+    const fields: Record<string, unknown> = {};
+    if (kind === "metric") Object.assign(fields, { unit: extra.unit, baseline: num(extra.baseline), target: num(extra.target) });
+    if (kind === "option") Object.assign(fields, { cost: extra.cost });
+    if (kind === "requirement") Object.assign(fields, { priority: priority || "should" });
+    void send({ title: title.trim(), body, fields });
+  };
   return (
-    <form className="card" style={{ display: "grid", gap: 8, marginTop: 10, padding: 14 }} onSubmit={(e) => { e.preventDefault(); if (title.trim()) void submit(); }}>
-      <input aria-label={`${KIND_LABEL[kind][0]} title`} placeholder={`${KIND_LABEL[kind][0]}`} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} required autoFocus />
-      <textarea aria-label="Details" placeholder="Details (optional)" value={body} onChange={(e) => setBody(e.target.value)} style={{ minHeight: 60 }} />
+    <form className="card add-form" onSubmit={(e) => { e.preventDefault(); if (title.trim()) submit(); }}>
+      {guide && <p className="small muted hint">{guide.hint}</p>}
+      <input aria-label={`${label} title`} placeholder={guide ? `For example: ${guide.title}` : label} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} required autoFocus />
+      {guide && !title && <Starters kind={kind} taken={taken} onPick={setTitle} />}
+      {/* Requirements: how much it matters, as three chips */}
+      {kind === "requirement" && (
+        <div className="line"><span className="small muted">This is a</span><Pick label="Priority" options={PRIORITY} value={priority} onChange={setPriority} /></div>
+      )}
+      {(!guide || guide.body) && <textarea aria-label="Details" placeholder={guide?.body ? `${guide.body} (optional)` : "Details (optional)"} value={body} onChange={(e) => setBody(e.target.value)} rows={2} />}
       {/* Measures need a unit, a baseline, and a target; options need a cost */}
       {kind === "metric" && (
         <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr 1fr" }}>
-          <input aria-label="Unit" placeholder="Unit" value={extra.unit} onChange={(e) => setExtra({ ...extra, unit: e.target.value })} />
+          <input aria-label="Unit" placeholder="Unit, such as hours" value={extra.unit} onChange={(e) => setExtra({ ...extra, unit: e.target.value })} />
           <input aria-label="Now" placeholder="Now" inputMode="decimal" value={extra.baseline} onChange={(e) => setExtra({ ...extra, baseline: e.target.value })} />
           <input aria-label="Target" placeholder="Target" inputMode="decimal" value={extra.target} onChange={(e) => setExtra({ ...extra, target: e.target.value })} />
         </div>
       )}
       {kind === "option" && <input aria-label="Cost" placeholder="Cost, such as $4,800 fixed" value={extra.cost} onChange={(e) => setExtra({ ...extra, cost: e.target.value })} />}
       <div style={{ display: "flex", gap: 8 }}>
-        <button className="btn btn-primary" type="submit">Add</button>
+        <button className="btn btn-primary" type="submit" disabled={!title.trim()}>Add</button>
         <button className="btn btn-ghost" type="button" onClick={() => setOpen(false)}>Cancel</button>
       </div>
+    </form>
+  );
+}
+
+
+// Requirement priority, in MoSCoW order, and the short word each row shows
+const PRIORITY = [["must", "must have"], ["should", "should have"], ["could", "nice to have"]] as const;
+const PRIORITY_WORDS: Record<string, string> = { must: "must", should: "should", could: "nice" };
+
+
+/** An unanswered discovery question answers in place: one short box, saved as the answer */
+function Answer({ question, onSave }: { question: string; onSave: (text: string) => void }) {
+  const [text, setText] = useState("");
+  return (
+    <form className="answer" onSubmit={(e) => { e.preventDefault(); if (text.trim()) onSave(text.trim()); }}>
+      <textarea aria-label={`Answer: ${question}`} placeholder="Answer in your own words. A real example helps most." value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={2000} />
+      {text.trim() && <button className="btn btn-primary btn-sm" type="submit">Save answer</button>}
     </form>
   );
 }
@@ -589,6 +640,8 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
   const [approving, setApproving] = useState<Item>();
   const [conditions, setConditions] = useState("");
   if (!items.length) return null;
+  // After a decision, the other options can still be chosen instead, but quietly
+  const decided = items.some((o) => o.status === "approved");
   // Move an option between draft, proposed, and declined
   const setStatus = async (o: Item, status: string) => {
     try {
@@ -633,8 +686,8 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
               <Meter label="Effort" value={f.effortScore} />
               {/* The decision maker approves a proposed option; editors move drafts along */}
               <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-                {o.status === "proposed" && decider && <button className="btn btn-primary" onClick={() => { setConditions(""); setApproving(o); }}>Approve this option</button>}
-                {o.status === "proposed" && !decider && <span className="small muted">Waiting on {deciders.length ? deciders.join(" or ") : "a client admin"}</span>}
+                {o.status === "proposed" && decider && <button className={`btn ${decided ? "btn-ghost" : "btn-primary"}`} onClick={() => { setConditions(""); setApproving(o); }}>{decided ? "Choose this instead" : "Approve this option"}</button>}
+                {o.status === "proposed" && !decider && !decided && <span className="small muted">Waiting on {deciders.length ? deciders.join(" or ") : "a client admin"}</span>}
                 {canWrite && o.status === "draft" && <button className="btn btn-ghost" onClick={() => void setStatus(o, "proposed")}>Share with client</button>}
                 {canWrite && o.status === "proposed" && <button className="btn btn-ghost" onClick={() => void setStatus(o, "draft")}>Back to draft</button>}
               </div>
@@ -647,7 +700,7 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
         <h2>Approve "{approving?.title}"?</h2>
         <p className="muted small">This records a decision tied to this exact version of the option. It can't be edited afterwards; a later change needs a new approval.</p>
         <label htmlFor="cond">Conditions (optional)</label>
-        <textarea id="cond" value={conditions} onChange={(e) => setConditions(e.target.value)} maxLength={2000} placeholder="Approved if the work happens after 6pm." />
+        <textarea id="cond" value={conditions} onChange={(e) => setConditions(e.target.value)} maxLength={2000} placeholder="For example: only if the work happens after 6pm" />
         <div className="actions">
           <button className="btn btn-primary" onClick={() => void approve()}>Approve</button>
           <button className="btn btn-ghost" onClick={() => setApproving(undefined)}>Cancel</button>
