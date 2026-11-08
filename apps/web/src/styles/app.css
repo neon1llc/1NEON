@@ -706,3 +706,33 @@ details.history summary { cursor: pointer; font: 12px var(--mono); color: var(--
 .dates { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .dates input { flex: 0 0 auto; width: 160px; min-height: 32px; }
 .another { justify-self: start; }
+
+/* --- Motion: an assembly line between states, and a gentle arrival for pages, forms, and rows --- */
+/* The part that changes gets its own layer; it's clipped to its own box, so it slides out under the menu side */
+.slide-stage { view-transition-name: stage; }
+::view-transition-group(stage) { animation-duration: .42s; animation-timing-function: cubic-bezier(.3, .7, .2, 1); overflow: clip; }
+/* While sliding, everything else holds still instead of crossfading */
+html[data-slide]::view-transition-old(root), html[data-slide]::view-transition-new(root) { animation: none; }
+html[data-slide="next"]::view-transition-old(stage) { animation: .42s cubic-bezier(.3, .7, .2, 1) both slide-to-left; }
+html[data-slide="next"]::view-transition-new(stage) { animation: .42s cubic-bezier(.3, .7, .2, 1) both slide-from-right; }
+html[data-slide="back"]::view-transition-old(stage) { animation: .42s cubic-bezier(.3, .7, .2, 1) both slide-to-right; }
+html[data-slide="back"]::view-transition-new(stage) { animation: .42s cubic-bezier(.3, .7, .2, 1) both slide-from-left; }
+/* The outgoing state is gone by two thirds of the way, and the incoming one shows from a third, so they barely overlap */
+@keyframes slide-to-left { 65% { opacity: 0; } to { transform: translateX(-60%); opacity: 0; } }
+@keyframes slide-from-right { from { transform: translateX(60%); opacity: 0; } 35% { opacity: 0; } }
+@keyframes slide-to-right { 65% { opacity: 0; } to { transform: translateX(60%); opacity: 0; } }
+@keyframes slide-from-left { from { transform: translateX(-60%); opacity: 0; } 35% { opacity: 0; } }
+/* Arrivals: pages, opened forms, new needs, and new rows rise into place */
+.page-in, .add-form, .sentence, .need + .need, .answer, .chip-input { animation: rise .32s cubic-bezier(.3, .7, .2, 1) both; }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) {
+  .page-in, .add-form, .sentence, .need + .need, .answer, .chip-input { animation: none; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
+
+/* --- Rows that mix fields, chips, selects, and checks: every control on one centered line, one height --- */
+.filters .chips, .add-row .chips, .line .chips { margin: 0; }
+.filters > *, .filters .chips > * { align-self: center; }
+.filters input[type="search"], .filters select, .filters .chip { min-height: 40px; }
+.filters .chip { padding: 0 14px; }
+.filters .check { min-height: 40px; }

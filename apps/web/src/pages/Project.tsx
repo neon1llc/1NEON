@@ -13,6 +13,7 @@ import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerName, layerProgress, OnionProgress, Trend, ago, daysSince, useToast } from "../components/ui.tsx";
 import { api, HttpError } from "../lib/api.ts";
 import { problem, useMembers, useProject, useProjects, useRefresh } from "../lib/hooks.ts";
+import { aimBetween } from "../lib/motion.ts";
 import type { EditMarker } from "../lib/types.ts";
 
 
@@ -67,6 +68,8 @@ export function ProjectPage() {
   const { project: p, items } = detail.data;
   // Stage progress: earlier stages are done, the current one is lit
   const stageAt = org.stages.findIndex((s) => s.id === p.stageId);
+  // The open tab's position, so moving to a later tab pans left and an earlier one pans right
+  const at = tab === "overview" ? 0 : LAYERS.indexOf(tab as Layer) + 1;
   // Item counts for each layer tab
   // A measure counts as done once its latest reading reaches the target
   const prog = layerProgress(items.map((i) => (i.kind === "metric" && (metricProgress(MetricFields.parse(i.fields)) ?? 0) >= 1 ? { ...i, status: "done" } : i)), (k) => KIND_LAYER[k as ItemKind]);
@@ -87,14 +90,17 @@ export function ProjectPage() {
       </div>
       {/* What to do now, worked out from the stage and the items */}
       <NextStep project={p} items={items} stage={org.stages[stageAt]} base={base} />
-      {/* Overview, then one tab per layer with its item count */}
+      {/* Overview, then one tab per layer with its item count; at is the open tab's position */}
       <nav className="tabs" aria-label="Project sections" data-tour="layers">
-        <NavLink to={base} end className={() => (tab === "overview" ? "active" : "")}>Overview</NavLink>
-        {LAYERS.map((l) => (
-          <NavLink key={l} to={`${base}/${l}`}><LayerBadge layer={l} />{layerName(l)} <span className="muted" title="done of total">{prog[l][0]}/{prog[l][1]}</span></NavLink>
+        <NavLink to={base} end viewTransition onClick={() => aimBetween(at, 0)} className={() => (tab === "overview" ? "active" : "")}>Overview</NavLink>
+        {LAYERS.map((l, i) => (
+          <NavLink key={l} to={`${base}/${l}`} viewTransition onClick={() => aimBetween(at, i + 1)}><LayerBadge layer={l} />{layerName(l)} <span className="muted" title="done of total">{prog[l][0]}/{prog[l][1]}</span></NavLink>
         ))}
       </nav>
+      {/* The section under the tabs pans by tab order */}
+      <div className="slide-stage">
       {tab === "overview" ? <Overview project={p} items={items} /> : LAYERS.includes(tab as Layer) ? <LayerTab layer={tab as Layer} project={p} items={items} docs={detail.data.docs} edits={detail.data.edits} /> : <Empty text="That section doesn't exist." />}
+      </div>
     </>
   );
 }
