@@ -407,6 +407,9 @@ function FrameBody({ org, all, children }: { org?: OrgSummary; all?: boolean; ch
   const [search, setSearch] = useState(false);
   const [top, setTop] = useState<ReactNode>(null);
   const loc = useLocation();
+  // Each page (a project counts as one, whatever its tab) eases in when you arrive
+  const parts = loc.pathname.split("/");
+  const section = parts.slice(0, parts[3] === "projects" && parts[4] && parts[4] !== "new" ? 5 : 4).join("/");
   // The full menu closes after navigating, and on Escape
   useEffect(() => setOpen(false), [loc.pathname]);
   useEffect(() => {
@@ -486,7 +489,7 @@ function FrameBody({ org, all, children }: { org?: OrgSummary; all?: boolean; ch
           <button className="icon-btn help-btn" onClick={help.open} data-tour="help" aria-label="Help for this page" title="Help for this page">?</button>
         </header>
         <Crumbs.Provider value={setTop}>
-          <main className="content" id="main">{children}</main>
+          <main className="content" id="main"><div className="page-in" key={section}>{children}</div></main>
         </Crumbs.Provider>
       </div>
       {/* Phones: the main places as a tab bar at the bottom, within thumb reach */}

@@ -8,6 +8,7 @@ import { Link } from "react-router";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { daysSince, Empty, Health, LayerBadge, LAYERS, layerName } from "../components/ui.tsx";
 import { useProjects } from "../lib/hooks.ts";
+import { slide } from "../lib/motion.ts";
 
 
 // How the list can be ordered, in plain words
@@ -57,7 +58,8 @@ export function Projects() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [projects.data, archived, layer, q, sort, org.stages]);
 
-  const pick = (v: "list" | "timeline") => { setView(v); write(VIEW_KEY, v); };
+  // List sits left of Timeline, so switching pans that way
+  const pick = (v: "list" | "timeline") => { if (v === view) return; write(VIEW_KEY, v); slide(v === "timeline" ? "next" : "back", () => setView(v)); };
   const order = (s: Sort) => { setSort(s); write(`${VIEW_KEY}.sort`, s); };
   return (
     <>
@@ -92,7 +94,7 @@ export function Projects() {
       )}
       {view === "list" ? (
         // One row per project: key and name, stage with its days, health, and target date
-        <div className="ptable" data-tour="project-list" role="table" aria-label="Projects">
+        <div className="ptable slide-stage" data-tour="project-list" role="table" aria-label="Projects">
           {list.length > 0 && (
             <div className="ptr head" role="row">
               <span role="columnheader">Project</span><span role="columnheader">Stage</span><span role="columnheader">Health</span><span role="columnheader">Target</span>
@@ -138,7 +140,7 @@ function Timeline({ projects, slug, layerOf }: { projects: Project[]; slug: stri
     months.push({ at: d.getTime(), label: d.toLocaleString(undefined, { month: "short" }) });
   }
   return (
-    <div className="timeline" data-tour="project-list">
+    <div className="timeline slide-stage" data-tour="project-list">
       {/* Month ticks and today, lined up with the bars below */}
       <div className="tl-row head" aria-hidden="true">
         <span />

@@ -9,6 +9,7 @@ import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { useToast } from "../components/ui.tsx";
 import { api } from "../lib/api.ts";
 import { problem, useRefresh } from "../lib/hooks.ts";
+import { slide } from "../lib/motion.ts";
 import type { Project } from "@1neon/domain";
 
 
@@ -89,11 +90,12 @@ export function NewProject() {
         ))}
       </div>
       {/* Enter moves to the next step; on the last step it creates the project */}
+      {/* The form pans like an assembly line: forward to the left, Back to the right */}
       <form
-        className="form"
+        className="form slide-stage"
         onSubmit={(e) => {
           e.preventDefault();
-          if (step < STEPS.length - 1) setStep(step + 1);
+          if (step < STEPS.length - 1) slide("next", () => setStep(step + 1));
           else void create();
         }}
       >
@@ -155,7 +157,7 @@ export function NewProject() {
         {error && <p className="notice" role="alert">{error}</p>}
         {/* Back, then Next or Create */}
         <div className="actions">
-          {step > 0 && <button type="button" className="btn btn-ghost" onClick={() => setStep(step - 1)}>Back</button>}
+          {step > 0 && <button type="button" className="btn btn-ghost" onClick={() => slide("back", () => setStep(step - 1))}>Back</button>}
           <button className="btn btn-primary" type="submit" disabled={!ready[step] || busy}>{step < STEPS.length - 1 ? "Next" : busy ? "Creating…" : "Create project"}</button>
         </div>
       </form>
