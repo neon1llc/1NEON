@@ -81,7 +81,17 @@ module "api" {
 }
 
 
-# Text messages: the toll-free number and its opt-out list
+# Text messages: the toll-free number and its opt-out list. Both were made before Terraform could
+# record them (a new toll-free number waits on its registration, which Terraform's create can't), so
+# they're adopted by ID
+import {
+  to = module.sms.aws_pinpointsmsvoicev2_opt_out_list.main
+  id = "1neon-prod"
+}
+import {
+  to = module.sms.aws_pinpointsmsvoicev2_phone_number.notify
+  id = "phone-a146035facd5411888e8b680bcc4f08d"
+}
 module "sms" {
   source = "../../modules/sms"
   name   = local.name

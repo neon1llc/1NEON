@@ -22,6 +22,12 @@ resource "aws_pinpointsmsvoicev2_phone_number" "notify" {
   opt_out_list_name             = aws_pinpointsmsvoicev2_opt_out_list.main.name
   self_managed_opt_outs_enabled = false
   deletion_protection_enabled   = true
+  # A new toll-free number stays pending until its registration is approved, so don't wait on it
+  wait_for_active = false
+  # The registration is filed and linked by hand (it carries the business's tax details)
+  lifecycle {
+    ignore_changes = [registration_id]
+  }
 }
 
 

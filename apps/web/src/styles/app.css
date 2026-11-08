@@ -362,7 +362,7 @@ html.from-site, html.from-site body { background: var(--void); }
 }
 
 /* Plain labels in forms and dialogs */
-form label:not(.card):not(.chip):not(.field):not(.remember), dialog label { display: block; font: 12px var(--mono); color: var(--muted); margin-bottom: 6px; }
+form label:not(.card):not(.chip):not(.field):not(.remember):not(.sms-consent), dialog label { display: block; font: 12px var(--mono); color: var(--muted); margin-bottom: 6px; }
 fieldset legend { font: 12px var(--mono); color: var(--muted); }
 .chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
@@ -798,7 +798,7 @@ body:has(.demo-bar) .top { top: var(--demo-h); }
 .notify-table th, .notify-table td { padding: 8px 6px; border-top: 1px solid var(--line); text-align: left; vertical-align: middle; font-weight: 400; }
 .notify-table thead th { border-top: 0; font: 11px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .notify-table td, .notify-table thead th + th { text-align: center; width: 72px; white-space: nowrap; }
-.notify-table tbody th { display: grid; gap: 2px; }
+.notify-table tbody th > span { display: block; margin: 1px 0; }
 .notify-table tbody th .tag { margin-left: 6px; }
 .notify-table input { width: 18px; height: 18px; min-height: 0; accent-color: var(--accent); }
 
@@ -868,5 +868,5 @@ body:has(.live-bar) #root { cursor: default; }
 .live-pop::before { content: "● "; color: var(--accent); }
 @keyframes pop-in { 0% { opacity: 0; transform: translateY(-6px); } 10%, 85% { opacity: 1; transform: none; } 100% { opacity: 0; } }
 /* The yes to texts: a checkbox with the carrier wording beside it */
-.sms-consent { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg); font-size: 13px; line-height: 1.5; }
-.sms-consent input { width: 18px; height: 18px; min-height: 0; margin-top: 2px; accent-color: var(--accent); }
+.notify .sms-consent { display: grid; font: 13px/1.5 var(--sans, inherit); color: var(--text); letter-spacing: 0; text-transform: none; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg); font-size: 13px; line-height: 1.5; }
+.notify .sms-consent input { width: 18px; height: 18px; min-height: 0; margin-top: 2px; accent-color: var(--accent); }
