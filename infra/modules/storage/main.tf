@@ -111,6 +111,10 @@ resource "aws_s3_bucket_policy" "docs" {
 # --- GuardDuty Malware Protection for S3 (optional until the first client uploads) ---
 
 
+# The account ID for the boundary ARN
+data "aws_caller_identity" "current" {}
+
+
 # GuardDuty assumes this role to read new objects and tag the result
 data "aws_iam_policy_document" "scan_trust" {
   statement {
@@ -128,6 +132,8 @@ resource "aws_iam_role" "scan" {
   count              = var.malware_scan ? 1 : 0
   name               = "${var.name}-malware-scan"
   assume_role_policy = data.aws_iam_policy_document.scan_trust.json
+  # The ceiling set in neon1-aws-infrastructure; this stack can't create or change the role without it
+  permissions_boundary = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/neon1-boundary-1neon"
 }
 
 

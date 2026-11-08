@@ -66,6 +66,8 @@ data "aws_iam_policy_document" "lambda_trust" {
 resource "aws_iam_role" "api" {
   name               = "${var.name}-api"
   assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
+  # The ceiling set in neon1-aws-infrastructure; this stack can't create or change the role without it
+  permissions_boundary = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/neon1-boundary-1neon"
 }
 
 
@@ -73,6 +75,8 @@ resource "aws_iam_role" "api" {
 resource "aws_iam_role" "trigger" {
   name               = "${var.name}-auth-trigger"
   assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
+  # The ceiling set in neon1-aws-infrastructure; this stack can't create or change the role without it
+  permissions_boundary = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/neon1-boundary-1neon"
 }
 
 
