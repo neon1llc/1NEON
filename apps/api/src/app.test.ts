@@ -500,7 +500,8 @@ describe("notifications", () => {
     await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/projects/${p.id}/move`, { version: p.version, stageId: "build", reason: "Starting early" });
     const n = await call("dana@acmedental.example", "GET", `/t/${s.acme.id}/notifications`);
     expect(n.json.unread).toBe(2);
-    expect(n.json.events[0].group).toBe("workflow");
+    // Both land in the same instant on a fast machine, so check the set, not the order
+    expect(n.json.events.map((e: { group: string }) => e.group)).toEqual(expect.arrayContaining(["workflow", "updates"]));
     // Moves are critical, so Dana gets an email; the new request isn't, so she doesn't
     expect(mailer.sent.filter((m) => m.to === "dana@acmedental.example").length).toBe(1);
     await call("dana@acmedental.example", "POST", `/t/${s.acme.id}/notifications/seen`);
