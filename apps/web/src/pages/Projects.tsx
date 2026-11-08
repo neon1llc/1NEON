@@ -66,7 +66,7 @@ export function Projects() {
       {/* Title, the list or timeline switch, and New project for editors */}
       <div className="page-head">
         <h1 className="page-title">Projects</h1>
-        <div className="seg" role="tablist" aria-label="View">
+        <div className="switch" role="tablist" aria-label="View">
           <button role="tab" aria-selected={view === "list"} onClick={() => pick("list")}>List</button>
           <button role="tab" aria-selected={view === "timeline"} onClick={() => pick("timeline")}>Timeline</button>
         </div>

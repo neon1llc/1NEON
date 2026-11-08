@@ -571,9 +571,9 @@ details.history summary { cursor: pointer; font: 12px var(--mono); color: var(--
 /* --- Projects: list and timeline --- */
 .page-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .page-head .page-title { margin-right: auto; }
-.seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 99px; padding: 2px; background: var(--panel); }
-.seg button { border: 0; background: none; padding: 6px 14px; border-radius: 99px; font: 13px var(--mono); color: var(--muted); cursor: pointer; }
-.seg button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+.switch { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 99px; padding: 2px; background: var(--panel); }
+.switch button { border: 0; background: none; padding: 6px 14px; border-radius: 99px; font: 13px var(--mono); color: var(--muted); cursor: pointer; }
+.switch button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
 .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 12px 0 16px; }
 .filters input[type="search"] { max-width: 240px; }
 .filters select { width: auto; }
@@ -736,3 +736,7 @@ html[data-slide="back"]::view-transition-new(stage) { animation: .42s cubic-bezi
 .filters input[type="search"], .filters select, .filters .chip { min-height: 40px; }
 .filters .chip { padding: 0 14px; }
 .filters .check { min-height: 40px; }
+
+/* Neo: bottom left on the public screens (sign-in, FAQs, legal), exactly as on neon1.tech; bottom right once inside the portal */
+body:not(:has(.shell)) .n1chat-launch.n1chat-right, body:not(:has(.shell)) .n1chat.n1chat-right { left: 16px; right: auto; }
+body:not(:has(.shell)) .n1chat-right.n1chat-grow, body:not(:has(.shell)) .n1chat-right.n1chat-fold { animation-name: n1chat-grow; }
