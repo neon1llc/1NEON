@@ -2,7 +2,7 @@
 
 *Last updated November 7, 2026.*
 
-These terms cover your use of neon1.tech and the 1NEON client portal, which are run by NEON1 LLC ("neon1", "I", "me"). Paid work is governed by a separate agreement or signed proposal. If that agreement conflicts with these terms, the agreement wins.
+These terms cover your use of neon1.tech and the 1NEON client portal, which are run by neon1 LLC ("neon1", "I", "me"). Paid work is governed by a separate agreement or signed proposal. If that agreement conflicts with these terms, the agreement wins.
 
 ## 1. The website
 
@@ -42,4 +42,4 @@ New York law governs these terms, and disputes go to the state or federal courts
 
 ## Contact
 
-NEON1 LLC, New York, NY · [hello@neon1.tech](mailto:hello@neon1.tech)
+neon1 LLC, New York, NY · [hello@neon1.tech](mailto:hello@neon1.tech)

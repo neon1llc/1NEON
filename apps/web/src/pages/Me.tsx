@@ -115,7 +115,7 @@ export function MePage() {
             <label className="sms-consent">
               <input type="checkbox" checked={draft.smsConsent} onChange={(e) => setDraft({ ...draft, smsConsent: e.target.checked })} />
               <span>
-                <b>Text me at {draft.phone.trim()}</b> with 1NEON project notices from NEON1 LLC, for the kinds I choose below.
+                <b>Text me at {draft.phone.trim()}</b> with 1NEON project notices from neon1 LLC, for the kinds I choose below.
                 <span className="muted"> Texts are optional and not required to use 1NEON. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. See the <Link to="/privacy">Privacy policy</Link> and <Link to="/terms">Terms</Link>.</span>
               </span>
             </label>
