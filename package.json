@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "1 portal. Needs. Execute. Observe. Normalize.",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "module",
   "engines": { "node": ">=22" },
   "workspaces": ["packages/*", "apps/*"],
