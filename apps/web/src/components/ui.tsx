@@ -204,8 +204,9 @@ export function Dialog({ open, onClose, children, label, className }: { open: bo
     if (!open && d.open) d.close();
   }, [open]);
   return (
-    // A tap on the backdrop (the dialog element itself, outside its content) closes it
-    <dialog ref={ref} aria-label={label} className={className} onClose={onClose} onCancel={onClose} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    // A tap on the backdrop (the dialog element itself, outside its content) closes it. React passes a
+    // nested dialog's close and cancel up to this one, so only this dialog's own events count
+    <dialog ref={ref} aria-label={label} className={className} onClose={(e) => e.target === e.currentTarget && onClose()} onCancel={(e) => e.target === e.currentTarget && onClose()} onClick={(e) => e.target === e.currentTarget && onClose()}>
       {open && <div className="dlg">{children}</div>}
     </dialog>
   );

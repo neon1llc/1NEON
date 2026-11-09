@@ -158,7 +158,7 @@ a.row:hover { background: var(--accent-soft); }
 .problem.compact { padding: 10px 12px; border-radius: var(--r-sm); font-size: 14px; margin: 6px 0; }
 .problem.compact p { margin-bottom: 8px; }
 /* Data still on screen after a refresh failed */
-.notice.stale { justify-content: space-between; flex-wrap: wrap; }
+.notice.stale, .notice.newer { justify-content: space-between; flex-wrap: wrap; }
 
 /* Avatars and status */
 /* Avatars stack; an outline marks someone editing */

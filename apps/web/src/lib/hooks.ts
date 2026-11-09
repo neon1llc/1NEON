@@ -2,6 +2,7 @@
 
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useRef, useState } from "react";
 import type { Project } from "@1neon/domain";
 import { HttpError } from "./api.ts";
 import { read } from "./reads.ts";
@@ -41,6 +42,29 @@ export function useRefresh(tid: string) {
   return () => {
     for (const key of [["projects", tid], ["project", tid], ["workspace", tid], ["members", tid]]) qc.invalidateQueries({ queryKey: key });
   };
+}
+
+
+/**
+ * One submit at a time: run(fn) ignores calls while the last one is still going, so a double click or
+ * a second Enter can't post twice; pending drives the button's disabled state and label
+ */
+export function useSubmit() {
+  // The ref answers at once, before React re-renders with the disabled button
+  const busy = useRef(false);
+  const [pending, setPending] = useState(false);
+  const run = useCallback(async (fn: () => Promise<void>) => {
+    if (busy.current) return;
+    busy.current = true;
+    setPending(true);
+    try {
+      await fn();
+    } finally {
+      busy.current = false;
+      setPending(false);
+    }
+  }, []);
+  return [pending, run] as const;
 }
 
 

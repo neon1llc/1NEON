@@ -13,7 +13,7 @@ import { Link, NavLink, useLocation, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerName, layerProgress, OnionProgress, Trend, ago, daysSince, useToast } from "../components/ui.tsx";
 import { api, HttpError } from "../lib/api.ts";
-import { problem, useMembers, useProject, useProjects, useRefresh } from "../lib/hooks.ts";
+import { problem, useMembers, useProject, useProjects, useRefresh, useSubmit } from "../lib/hooks.ts";
 import { aimBetween } from "../lib/motion.ts";
 import type { EditMarker } from "../lib/types.ts";
 
@@ -180,15 +180,19 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
   const members = useMembers(org.id);
   const toast = useToast();
   const refresh = useRefresh(org.id);
-  // Inline edit of summary and outcome, and the newer version when a save conflicts
+  // Inline edit of summary and outcome. `editBase` is the version the edit started from, so a save
+  // after someone else's change conflicts instead of silently writing over it
   const [editing, setEditing] = useState(false);
+  const [editBase, setEditBase] = useState(p.version);
   const [draft, setDraft] = useState({ summary: p.summary, outcome: p.outcome });
-  const [conflict, setConflict] = useState<Project>();
+  // A save that hit a newer version: that version, and the change being saved, until the person chooses
+  const [conflict, setConflict] = useState<{ current: Project; patch: Record<string, unknown> }>();
   const [peopleOpen, setPeopleOpen] = useState(false);
-  // A written status update with its health, shown on Home
+  // A written status update with its health, shown on Home; one post at a time
   const [posting, setPosting] = useState(false);
   const [post, setPost] = useState({ title: "", health: p.health as string });
-  const postUpdate = async () => {
+  const [sending, runSend] = useSubmit();
+  const postUpdate = () => runSend(async () => {
     try {
       await api(`/t/${org.id}/projects/${p.id}/items`, { method: "POST", body: { kind: "update", title: post.title, fields: { health: post.health } } });
       setPosting(false);
@@ -198,26 +202,37 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
       toast(problem(e));
     }
     refresh();
-  };
+  });
   // The latest decision, measures, and status update feed the overview
   const decision = items.filter((i) => i.kind === "decision").at(-1);
   const metrics = items.filter((i) => i.kind === "metric");
   const update = items.filter((i) => i.kind === "update").at(-1);
   const names = new Map(members.data?.map((m) => [m.userId, m.name || m.email]) ?? []);
 
-  // Save project fields; a 409 opens the conflict dialog with the newer version
+  // Save project fields against `version`; a 409 opens the conflict dialog with the newer version
   const save = async (version: number, patch: Record<string, unknown>) => {
     try {
       await api(`/t/${org.id}/projects/${p.id}`, { method: "PATCH", body: { version, ...patch } });
-      setEditing(false);
+      if ("summary" in patch || "outcome" in patch) setEditing(false);
       setConflict(undefined);
       toast("Saved");
     } catch (e) {
-      if (e instanceof HttpError && e.status === 409 && e.body.current) setConflict(e.body.current as Project);
+      if (e instanceof HttpError && e.status === 409 && e.body.current) setConflict({ current: e.body.current as Project, patch });
       else toast(problem(e));
     }
     refresh();
   };
+  // The summary edit started from an older version than the one now on screen
+  const newerWhileEditing = editing && p.version > editBase && (draft.summary !== p.summary || draft.outcome !== p.outcome);
+  // The rows the conflict dialog compares: only the fields this save was changing
+  const people = (list: Project["people"]) => list.map((x) => `${names.get(x.userId) ?? "Former member"} (${x.role.replace("_", " ")})`).join(", ");
+  const conflictFields = conflict ? [
+    ...("summary" in conflict.patch ? [{ label: "Summary", mine: String(conflict.patch.summary), theirs: conflict.current.summary }] : []),
+    ...("outcome" in conflict.patch ? [{ label: "Done when", mine: String(conflict.patch.outcome), theirs: conflict.current.outcome }] : []),
+    ...("people" in conflict.patch ? [{ label: "People", mine: people(conflict.patch.people as Project["people"]), theirs: people(conflict.current.people) }] : []),
+    ...("health" in conflict.patch ? [{ label: "Health", mine: String(conflict.patch.health).replace("_", " "), theirs: conflict.current.health.replace("_", " ") }] : []),
+    ...("archived" in conflict.patch ? [{ label: "Archived", mine: conflict.patch.archived ? "yes" : "no", theirs: conflict.current.archived ? "yes" : "no" }] : []),
+  ] : [];
 
   return (
     <div className="two">
@@ -226,7 +241,8 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
         {decision && <DecisionCard d={decision} names={names} />}
         {/* Editors can change the summary and outcome in place */}
         {editing ? (
-          <form className="form" onSubmit={(e) => { e.preventDefault(); void save(p.version, draft); }}>
+          <form className="form" onSubmit={(e) => { e.preventDefault(); void save(editBase, draft); }}>
+            {newerWhileEditing && <p className="notice newer" role="status">{names.get(p.updatedBy) ?? "Someone"} saved a newer version while you were editing. Your text is kept; Save asks which version to keep.</p>}
             <div><label htmlFor="ps">What is this?</label><textarea id="ps" value={draft.summary} onChange={(e) => setDraft({ ...draft, summary: e.target.value })} maxLength={500} /></div>
             <div><label htmlFor="po">Done when</label><textarea id="po" value={draft.outcome} onChange={(e) => setDraft({ ...draft, outcome: e.target.value })} maxLength={500} /></div>
             <div className="actions" style={{ justifyContent: "flex-start" }}>
@@ -238,7 +254,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
           <>
             <p className="lead" style={{ marginTop: 0 }}>{p.summary || <span className="muted">No summary yet.</span>}</p>
             <p><b>Done when:</b> {p.outcome || <span className="muted">not written yet</span>}</p>
-            {canWrite && <button className="btn btn-ghost" onClick={() => { setDraft({ summary: p.summary, outcome: p.outcome }); setEditing(true); }}>Edit</button>}
+            {canWrite && <button className="btn btn-ghost" onClick={() => { setDraft({ summary: p.summary, outcome: p.outcome }); setEditBase(p.version); setEditing(true); }}>Edit</button>}
           </>
         )}
         <h2 className="section-h">Measures <small>baseline → target</small></h2>
@@ -291,18 +307,18 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
             </select>
           </div>
           <div><label htmlFor="up-t">In a sentence</label><input id="up-t" value={post.title} onChange={(e) => setPost({ ...post, title: e.target.value })} maxLength={160} placeholder="i.e. migration finished; testing starts Monday" /></div>
-          <div className="actions"><button className="btn btn-primary" disabled={!post.title.trim()}>Post</button><button type="button" className="btn btn-ghost" onClick={() => setPosting(false)}>Cancel</button></div>
+          <div className="actions"><button className="btn btn-primary" disabled={!post.title.trim() || sending}>{sending ? "Posting…" : "Post"}</button><button type="button" className="btn btn-ghost" onClick={() => setPosting(false)}>Cancel</button></div>
         </form>
       </Dialog>
       {/* Who's on the project and in what role; the decision maker approves options */}
-      <PeopleDialog open={peopleOpen} onClose={() => setPeopleOpen(false)} people={p.people} onSave={(people) => { setPeopleOpen(false); void save(p.version, { people }); }} />
-      {/* Keep mine saves again over their version; Take theirs drops the draft */}
+      <PeopleDialog open={peopleOpen} onClose={() => setPeopleOpen(false)} people={p.people} version={p.version} onSave={(list, version) => { setPeopleOpen(false); void save(version, { people: list }); }} />
+      {/* Keep mine saves the same change over their version; Take theirs drops it */}
       <ConflictDialog
         open={Boolean(conflict)}
-        who={names.get(conflict?.updatedBy ?? "") ?? "Someone"}
-        fields={conflict ? [{ label: "Summary", mine: draft.summary, theirs: conflict.summary }, { label: "Done when", mine: draft.outcome, theirs: conflict.outcome }] : []}
-        onKeepMine={() => conflict && void save(conflict.version, draft)}
-        onTakeTheirs={() => { setConflict(undefined); setEditing(false); refresh(); }}
+        who={names.get(conflict?.current.updatedBy ?? "") ?? "Someone"}
+        fields={conflictFields}
+        onKeepMine={() => conflict && void save(conflict.current.version, conflict.patch)}
+        onTakeTheirs={() => { if (conflict && ("summary" in conflict.patch || "outcome" in conflict.patch)) setEditing(false); setConflict(undefined); refresh(); }}
         onClose={() => setConflict(undefined)}
       />
     </div>
@@ -321,18 +337,35 @@ const ROLE_NAMES: Record<Project["people"][number]["role"], string> = {
 };
 
 
-/** Add, remove, and set roles for the people on a project */
-function PeopleDialog({ open, onClose, people, onSave }: { open: boolean; onClose: () => void; people: Project["people"]; onSave: (people: Project["people"]) => void }) {
+/** Add, remove, and set roles for the people on a project. Like the item panel, it works against the
+ * version it opened with: a clean list follows newer versions, an edited one stays and says so */
+function PeopleDialog({ open, onClose, people, version, onSave }: { open: boolean; onClose: () => void; people: Project["people"]; version: number; onSave: (people: Project["people"], version: number) => void }) {
   const { org } = useOrg();
   const members = useMembers(org.id);
+  const [base, setBase] = useState({ people, version });
   const [draft, setDraft] = useState(people);
-  useEffect(() => { if (open) setDraft(people); }, [open, people]);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(base.people);
+  // Opening starts from the newest list; only the open/close change resets the draft
+  useEffect(() => {
+    if (!open) return;
+    setBase({ people, version });
+    setDraft(people);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  // A newer project while open: an untouched list follows it, an edited one is kept
+  useEffect(() => {
+    if (open && !dirty && version !== base.version) {
+      setBase({ people, version });
+      setDraft(people);
+    }
+  }, [open, dirty, people, version, base.version]);
   const active = members.data?.filter((m) => m.status !== "deactivated") ?? [];
   const name = (uid: string) => active.find((m) => m.userId === uid)?.name || active.find((m) => m.userId === uid)?.email || "Former member";
   const addable = active.filter((m) => !draft.some((d) => d.userId === m.userId));
   return (
     <Dialog open={open} onClose={onClose} label="People on this project">
       <h2>People on this project</h2>
+      {dirty && version > base.version && <p className="notice newer" role="status">Someone changed this project while you were editing. Your list is kept; Save asks which to keep.</p>}
       <div className="people-edit">
         {draft.map((d, i) => (
           <div key={d.userId} className="pe-row">
@@ -351,7 +384,7 @@ function PeopleDialog({ open, onClose, people, onSave }: { open: boolean; onClos
         )}
       </div>
       <div className="actions">
-        <button className="btn btn-primary" onClick={() => onSave(draft)}>Save</button>
+        <button className="btn btn-primary" onClick={() => onSave(draft, base.version)}>Save</button>
         <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
       </div>
     </Dialog>
@@ -531,9 +564,11 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
   const [priority, setPriority] = useState<"must" | "should" | "could" | "">("should");
   const guide = GUIDE[kind];
   const label = KIND_LABEL[kind][0];
+  // One add at a time: a double click or a second Enter can't create the item twice
+  const [adding, runAdd] = useSubmit();
 
   // Each need in a request becomes its own item, sent in order, then the form closes
-  const sendAll = async (drafts: { title: string; body: string; dueDate?: string; fields: Record<string, unknown> }[]) => {
+  const sendAll = (drafts: { title: string; body: string; dueDate?: string; fields: Record<string, unknown> }[]) => runAdd(async () => {
     try {
       for (const d of drafts) await api(`${path}/items`, { method: "POST", body: { kind, ...d } });
       setOpen(false);
@@ -542,9 +577,9 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
       toast(problem(e));
     }
     refresh();
-  };
+  });
   // Send one item, then close the form
-  const send = async (item: { title: string; body: string; fields: Record<string, unknown> }) => {
+  const send = (item: { title: string; body: string; fields: Record<string, unknown> }) => runAdd(async () => {
     try {
       await api(`${path}/items`, { method: "POST", body: { kind, ...item } });
       setTitle("");
@@ -554,7 +589,7 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
       toast(problem(e));
     }
     refresh();
-  };
+  });
 
   // On an empty group, starters show even while closed, so the common answers are one tap away
   if (!open) {
@@ -566,7 +601,7 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
     );
   }
   // Requests are built as one guided sentence
-  if (kind === "request") return <RequestBuilder onSubmit={(ds) => void sendAll(ds)} onCancel={() => setOpen(false)} />;
+  if (kind === "request") return <RequestBuilder busy={adding} onSubmit={(ds) => void sendAll(ds)} onCancel={() => setOpen(false)} />;
 
   // Blank or non-numeric values are left unset
   const num = (s: string) => (s.trim() === "" || Number.isNaN(Number(s)) ? undefined : Number(s));
@@ -598,7 +633,7 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
       )}
       {kind === "option" && <input aria-label="Cost" placeholder="Cost, i.e. $4,800 fixed" value={extra.cost} onChange={(e) => setExtra({ ...extra, cost: e.target.value })} />}
       <div style={{ display: "flex", gap: 8 }}>
-        <button className="btn btn-primary" type="submit" disabled={!title.trim()}>Add</button>
+        <button className="btn btn-primary" type="submit" disabled={!title.trim() || adding}>{adding ? "Adding…" : "Add"}</button>
         <button className="btn btn-ghost" type="button" onClick={() => setOpen(false)}>Cancel</button>
       </div>
     </form>

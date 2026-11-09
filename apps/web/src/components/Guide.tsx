@@ -178,7 +178,7 @@ function Goals({ value, onChange }: { value: string[]; onChange: (v: string[]) =
 
 /** A request as one or more needs, each one sentence: "I'd like to ___ for ___. Currently, ___.
  * It happens ___, and it's due ___." Each need with a goal becomes its own request */
-export function RequestBuilder({ onSubmit, onCancel }: { onSubmit: (d: RequestDraft[]) => void; onCancel: () => void }) {
+export function RequestBuilder({ onSubmit, onCancel, busy }: { onSubmit: (d: RequestDraft[]) => void; onCancel: () => void; busy?: boolean }) {
   const [needs, setNeeds] = useState<Need[]>([blankNeed()]);
   // Change one field of one need
   const set = (i: number, patch: Partial<Need>) => setNeeds(needs.map((n, j) => (j === i ? { ...n, ...patch } : n)));
@@ -216,7 +216,7 @@ export function RequestBuilder({ onSubmit, onCancel }: { onSubmit: (d: RequestDr
       ))}
       <button type="button" className="btn btn-ghost btn-sm another" onClick={() => setNeeds([...needs, blankNeed()])}>+ Define another need</button>
       <div className="actions">
-        <button className="btn btn-primary" type="submit" disabled={!ready.length}>{ready.length > 1 ? `Send ${ready.length} requests` : "Send request"}</button>
+        <button className="btn btn-primary" type="submit" disabled={!ready.length || busy}>{busy ? "Sending…" : ready.length > 1 ? `Send ${ready.length} requests` : "Send request"}</button>
         <button className="btn btn-ghost" type="button" onClick={onCancel}>Cancel</button>
       </div>
     </form>
