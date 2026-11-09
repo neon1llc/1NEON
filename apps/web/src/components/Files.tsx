@@ -102,7 +102,7 @@ export function DropZone({ target, children }: { target: FileTarget; children?: 
       onDragLeave={() => setOver(false)}
       onDrop={(e) => { e.preventDefault(); setOver(false); void run([...e.dataTransfer.files]); }}
     >
-      <b>{busy ? "Uploading…" : "Drop files here, or tap to choose"}</b>
+      <b>{busy ? "Uploading…" : matchMedia("(pointer: fine)").matches ? "Drop files here, or click to choose" : "Tap to choose files"}</b>
       {children}
       <input ref={input} type="file" multiple hidden onChange={(e) => { void run([...(e.target.files ?? [])]); e.target.value = ""; }} />
     </div>

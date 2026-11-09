@@ -1,11 +1,12 @@
-// apps/web/src/pages/Me.tsx - Your profile: name, title, phone, theme, menu, and signing out.
+// apps/web/src/pages/Me.tsx - Your profile: name, title, phone, theme, menu, and notices (saved together),
+// then two-step verification, the tutorial, and signing out (each takes effect right away).
 
 
 import type { User } from "@1neon/domain";
 import type { SmsState } from "../lib/types.ts";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
 import { applyTheme, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, useToast } from "../components/ui.tsx";
 import { api, BASE_PATH, devUser, LIVE, pickPerson } from "../lib/api.ts";
@@ -32,6 +33,11 @@ export function MePage() {
   const me = useSession();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  // A link to a part of the profile (#security, #notifications) lands on it
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [hash]);
   const toast = useToast();
   const help = useHelp();
   const [totpOpen, setTotpOpen] = useState(false);
@@ -39,6 +45,13 @@ export function MePage() {
   // Edits stay local until Save
   const [draft, setDraft] = useState({ name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme, menu: me.user.menu ?? "rail", notify: me.user.notify ?? {}, smsConsent: Boolean(me.user.smsConsentAt) });
   const [busy, setBusy] = useState(false);
+  // Anything that differs from what's saved; Save waits for a change
+  const saved = { name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme, menu: me.user.menu ?? "rail", notify: me.user.notify ?? {}, smsConsent: Boolean(me.user.smsConsentAt) };
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  // A previewed theme that was never saved goes back to the saved one on leaving the page
+  const savedTheme = useRef(me.user.theme);
+  savedTheme.current = me.user.theme;
+  useEffect(() => () => applyTheme(savedTheme.current), []);
   // The phone check: a code is texted, then typed here
   const [code, setCode] = useState<string | undefined>(undefined);
   const sms = me.sms?.state ?? "unavailable";
@@ -84,7 +97,7 @@ export function MePage() {
       const { options } = await api<{ options: Parameters<typeof passkeyCreation>[0] }>("/me/passkey/start", { method: "POST", body: {} });
       const credential = await passkeyCreation(options);
       await api("/me/passkey/finish", { method: "POST", body: { credential } });
-      toast("Passkey added. Sign in with it next time to use admin actions.");
+      toast("Passkey added. Use it whenever 1NEON asks you to confirm it's you.");
       qc.invalidateQueries({ queryKey: ["me"] });
     } catch (e) {
       toast(e instanceof DOMException ? "The passkey wasn't made. Try again when you're ready." : problem(e));
@@ -212,6 +225,14 @@ export function MePage() {
             </tbody>
           </table>
         </div>
+        {/* Save covers everything above; it opens only when something changed */}
+        <div className="actions">
+          <button className="btn btn-primary" disabled={busy || !dirty}>{busy ? "Saving…" : "Save"}</button>
+          {dirty && <span className="muted small" role="status">Unsaved changes</span>}
+        </div>
+      </form>
+      {/* Everything below takes effect right away, so it sits outside the profile form */}
+      <div className="form" style={{ marginTop: 28 }}>
         {/* Two-step verification: any one of these confirms it's you before admin actions */}
         <div className="card small security" data-tour="passkey" id="security">
           <b>Two-step verification</b>
@@ -255,12 +276,10 @@ export function MePage() {
             <Link className="btn btn-ghost" to="/faqs">FAQs</Link>
           </div>
         </div>
-        {/* Save, and sign out */}
         <div className="actions">
-          <button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
           <button className="btn btn-ghost" type="button" onClick={() => void signOut()}>Sign out</button>
         </div>
-      </form>
+      </div>
       {/* The authenticator setup has its own form, so it lives outside the profile form: Enter there
           checks the code instead of saving the profile */}
       <TotpSetup open={totpOpen} onClose={() => setTotpOpen(false)} onDone={() => { setTotpOpen(false); qc.invalidateQueries({ queryKey: ["me"] }); }} />

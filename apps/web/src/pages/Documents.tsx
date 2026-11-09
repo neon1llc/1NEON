@@ -36,22 +36,20 @@ export function Documents() {
     <>
       <h1 className="page-title">Files</h1>
       <p className="lead">Private to {org.name}. Every file is checked for viruses before anyone can download it.</p>
-      {/* Where uploads go, then the drop area */}
+      {/* Where uploads go, as one sentence, then the drop area */}
       <div className="file-target">
-        <label>Project
-          <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-            <option value="">General, not one project</option>
-            {q.data?.projects.map((p) => <option key={p.id} value={p.id}>{p.key} · {p.name}</option>)}
-          </select>
-        </label>
-        <label>Layer
-          <select value={layer} onChange={(e) => setLayer(e.target.value as Layer)}>
-            {LAYERS.map((l) => <option key={l} value={l}>{layerName(l)}</option>)}
-          </select>
-        </label>
+        <span>File new uploads under</span>
+        <select aria-label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+          <option value="">the whole organization</option>
+          {q.data?.projects.map((p) => <option key={p.id} value={p.id}>{p.key} · {p.name}</option>)}
+        </select>
+        <span>in</span>
+        <select aria-label="Layer" value={layer} onChange={(e) => setLayer(e.target.value as Layer)}>
+          {LAYERS.map((l) => <option key={l} value={l}>{layerName(l)}</option>)}
+        </select>
       </div>
       <DropZone target={{ layer, projectId: projectId || undefined }}>
-        <span className="muted small">Filed under {layerName(layer)}{projectId ? ` in ${projectName(projectId)}` : ", for the whole organization"}. Files a project asks for can also be sent from its Needs tab.</span>
+        <span className="muted small">Files a project asks for can also be sent from its Needs tab.</span>
       </DropZone>
       {/* Filter by layer, with counts */}
       <div className="chips" role="group" aria-label="Show files from">

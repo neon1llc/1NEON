@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { read } from "../lib/reads.ts";
 import { gate } from "./Reads.tsx";
+import { layerSlug } from "./ui.tsx";
 
 
 // One dated thing, as the API returns it
@@ -51,7 +52,7 @@ export function ComingUp({ tid, base }: { tid: string; base: string }) {
     ["Next week", events.filter((e) => e.date > endWeek && e.date <= endNext)],
     ["Later", events.filter((e) => e.date > endNext)],
   ];
-  const link = (e: Event) => e.itemId ? `${base}/projects/${e.projectKey}/${KIND_LAYER[e.kind as ItemKind] ?? "needs"}#item-${e.itemId}` : `${base}/projects/${e.projectKey}`;
+  const link = (e: Event) => e.itemId ? `${base}/projects/${e.projectKey}/${layerSlug(KIND_LAYER[e.kind as ItemKind] ?? "needs")}#item-${e.itemId}` : `${base}/projects/${e.projectKey}`;
   return (
     <section className="card coming" data-tour="coming-up">
       <div className="coming-head">

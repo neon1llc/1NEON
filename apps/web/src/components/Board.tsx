@@ -35,10 +35,10 @@ export function Board({
   // The card being dragged and the column under the pointer
   const [dragging, setDragging] = useState<string>();
   const [over, setOver] = useState<string>();
-  // Hidden stages keep their projects but don't get a column
-  const visible = stages.filter((s) => !s.hidden);
   // Cards in one column, in rank order
   const byStage = (sid: string) => projects.filter((p) => p.stageId === sid).sort(byRank);
+  // Hidden stages drop off the board, except while projects are still in them, so no project goes missing
+  const visible = stages.filter((s) => !s.hidden || projects.some((p) => p.stageId === s.id));
 
   // Drop before `beforeId`, or at the end of the column; a drop onto the card's own place is ignored
   const drop = (stageId: string, beforeId?: string) => {
@@ -64,8 +64,9 @@ export function Board({
             key={s.id}
             role="listitem"
             data-tour="board-column"
-            className={`col${over === s.id ? " drop" : ""}`}
-            aria-label={`${s.name}, ${cards.length} projects`}
+            className={`col${cards.length ? "" : " empty"}${over === s.id ? " drop" : ""}`}
+            aria-label={`${s.name}, ${cards.length} ${cards.length === 1 ? "project" : "projects"}`}
+            title={cards.length ? undefined : `${s.name}: no projects${s.exit ? `. Done when: ${s.exit}` : ""}`}
             // Columns accept drops; a card accepts a drop to insert before itself
             onDragOver={(e) => {
               if (!onMove || !dragging) return;
@@ -132,14 +133,14 @@ export function Board({
                         onMove({ project: p, stageId: to, after: list.at(-1)?.rank });
                       }}
                     >
-                      <option value="">Move ▸</option>
-                      {visible.filter((x) => x.id !== s.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                      <option value="">Move to…</option>
+                      {stages.filter((x) => !x.hidden && x.id !== s.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                     </select>
                   </label>
                 )}
               </article>
             ))}
-            {cards.length === 0 && <p className="muted small" style={{ padding: "4px" }}>No projects here.</p>}
+            {cards.length === 0 && <p className="muted small none" style={{ padding: "4px" }}>No projects here.</p>}
           </section>
         );
       })}

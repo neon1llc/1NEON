@@ -11,7 +11,7 @@ import { ItemPanel, STATUS_WORDS } from "../components/ItemPanel.tsx";
 import { gate, Stale } from "../components/Reads.tsx";
 import { Link, NavLink, useLocation, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
-import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerName, layerProgress, OnionProgress, Trend, ago, daysSince, useToast } from "../components/ui.tsx";
+import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerName, layerProgress, OnionProgress, Trend, ago, dateLabel, daysSince, layerFromSlug, layerSlug, useToast } from "../components/ui.tsx";
 import { api, HttpError } from "../lib/api.ts";
 import { problem, useMembers, useProject, useProjects, useRefresh, useSubmit } from "../lib/hooks.ts";
 import { aimBetween } from "../lib/motion.ts";
@@ -90,9 +90,9 @@ export function ProjectPage() {
         <OnionProgress progress={prog} size={44} />
         {p.archived && <span className="tag warn">archived</span>}
       </h1>
-      {/* Visible stages, with the current one marked for screen readers */}
+      {/* Visible stages plus the project's own even if hidden; "done" counts by position among all stages */}
       <div className="steps" aria-label="Stage" data-tour="stage">
-        {org.stages.filter((s) => !s.hidden).map((s, i) => (
+        {org.stages.map((s, i) => (!s.hidden || s.id === p.stageId) && (
           <span key={s.id} className={s.id === p.stageId ? "on" : i < stageAt ? "done" : ""} aria-current={s.id === p.stageId ? "step" : undefined}>{s.name}</span>
         ))}
       </div>
@@ -102,12 +102,12 @@ export function ProjectPage() {
       <nav className="tabs" aria-label="Project sections" data-tour="layers">
         <NavLink to={base} end viewTransition onClick={() => aimBetween(at, 0)} className={() => (tab === "overview" ? "active" : "")}>Overview</NavLink>
         {LAYERS.map((l, i) => (
-          <NavLink key={l} to={`${base}/${l}`} viewTransition onClick={() => aimBetween(at, i + 1)}><LayerBadge layer={l} />{layerName(l)} <span className="muted" title="done of total">{prog[l][0]}/{prog[l][1]}</span></NavLink>
+          <NavLink key={l} to={`${base}/${layerSlug(l)}`} viewTransition onClick={() => aimBetween(at, i + 1)}><LayerBadge layer={l} />{layerName(l)} {prog[l][1] > 0 && <span className="muted" aria-label={`${prog[l][0]} of ${prog[l][1]} done`} title={`${prog[l][0]} of ${prog[l][1]} done`}>{prog[l][0]}/{prog[l][1]}</span>}</NavLink>
         ))}
       </nav>
       {/* The section under the tabs pans by tab order */}
       <div className="slide-stage">
-      {tab === "overview" ? <Overview project={p} items={items} /> : LAYERS.includes(tab as Layer) ? <LayerTab layer={tab as Layer} project={p} items={items} docs={detail.data.docs} edits={detail.data.edits} /> : <Empty text="That section doesn't exist." />}
+      {tab === "overview" ? <Overview project={p} items={items} /> : layerFromSlug(tab) ? <LayerTab layer={layerFromSlug(tab)!} project={p} items={items} docs={detail.data.docs} edits={detail.data.edits} /> : <Empty text="That section doesn't exist." />}
       </div>
     </>
   );
@@ -141,7 +141,7 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
     action = { to: `${base}/needs#files`, label: "Upload" };
   } else if (mine.length) {
     text = <>You have {mine.length} open {mine.length === 1 ? "item" : "items"} here.</>;
-    action = { to: `${base}/${KIND_LAYER[mine[0]!.kind]}#item-${mine[0]!.id}`, label: "Open" };
+    action = { to: `${base}/${layerSlug(KIND_LAYER[mine[0]!.kind])}#item-${mine[0]!.id}`, label: "Open" };
   } else if (stage?.exit) {
     text = <>To finish <b>{stage.name}</b>: {stage.exit.charAt(0).toLowerCase() + stage.exit.slice(1)}.</>;
   } else {
@@ -273,7 +273,14 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
               </select>
             ) : <Health value={p.health} />}
           </div>
-          <div className="small"><span className="muted">Target date</span> {p.targetDate ?? "none set"}</div>
+          {/* The target date: editors change it in place; clearing it leaves the project open-ended */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <span className="small muted">Target date</span>
+            {canWrite ? (
+              <input type="date" aria-label="Target date" value={p.targetDate ?? ""} style={{ width: "auto", minHeight: 36, padding: "4px 10px" }}
+                onChange={(e) => void save(p.version, { targetDate: e.target.value || null })} />
+            ) : <span className="small">{p.targetDate ? dateLabel(p.targetDate) : "none set"}</span>}
+          </div>
           {update && <div className="small"><span className="muted">Latest update ({ago(update.updatedAt)})</span><br />{update.title}</div>}
           {canWrite && <button className="btn btn-ghost btn-sm" style={{ justifySelf: "start" }} onClick={() => setPosting(true)}>Post an update</button>}
           {p.flags.length > 0 && <div className="small"><span className="tag warn">sensitive data: {p.flags.join(", ")}</span></div>}
@@ -287,7 +294,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
               <div className="row" key={x.userId} style={{ gridTemplateColumns: "auto 1fr auto" }}>
                 <Avatar id={x.userId} name={names.get(x.userId) ?? "?"} />
                 <span>{names.get(x.userId) ?? (members.data ? "Former member" : "Name not loaded")}</span>
-                <span className="s">{x.role.replace("_", " ")}</span>
+                <span className="s">{ROLE_SHORT[x.role]}</span>
               </div>
             ))}
           </div>
@@ -307,7 +314,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
               <option value="on_track">On track</option><option value="at_risk">At risk</option><option value="off_track">Off track</option><option value="not_started">Not started</option>
             </select>
           </div>
-          <div><label htmlFor="up-t">In a sentence</label><input id="up-t" value={post.title} onChange={(e) => setPost({ ...post, title: e.target.value })} maxLength={160} placeholder="i.e. migration finished; testing starts Monday" /></div>
+          <div><label htmlFor="up-t">In a sentence</label><textarea id="up-t" rows={2} style={{ minHeight: 0 }} value={post.title} onChange={(e) => setPost({ ...post, title: e.target.value })} maxLength={160} placeholder="i.e. migration finished; testing starts Monday" /></div>
           <div className="actions"><button className="btn btn-primary" disabled={!post.title.trim() || sending}>{sending ? "Posting…" : "Post"}</button><button type="button" className="btn btn-ghost" onClick={() => setPosting(false)}>Cancel</button></div>
         </form>
       </Dialog>
@@ -327,6 +334,15 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
 }
 
 
+// Project roles, short, for the People list
+const ROLE_SHORT: Record<Project["people"][number]["role"], string> = {
+  decision_maker: "Decision maker",
+  sponsor: "Sponsor",
+  lead_engineer: "Lead engineer",
+  tech_contact: "Tech contact",
+  stakeholder: "Stakeholder",
+  observer: "Observer",
+};
 // Project roles in plain words
 const ROLE_NAMES: Record<Project["people"][number]["role"], string> = {
   decision_maker: "Decision maker (approves options)",
@@ -414,16 +430,17 @@ function MetricCard({ item, onReading }: { item: Item; onReading?: (value: numbe
     <div className="card metric">
       <div className="small">{item.title}</div>
       <div className="val">{latest ? `${latest.value}${m.unit ? ` ${m.unit}` : ""}` : m.baseline !== undefined ? `${m.baseline}${m.unit ? ` ${m.unit}` : ""}` : "–"}</div>
-      <div className="range">{latest ? `latest, ${latest.at}` : "baseline, no readings yet"}</div>
+      <div className="range">{latest ? `Latest, ${dateLabel(latest.at)}` : "Where it starts; no readings yet"}</div>
       <div className="range">
-        {m.baseline ?? "?"} → {m.target ?? "?"} {m.unit} · {betterWhen(m) === "down" ? "lower is better" : "higher is better"}
+        {latest && <>From {m.baseline ?? "?"} · </>}Target {m.target ?? "?"} {m.unit} · {betterWhen(m) === "down" ? "lower is better" : "higher is better"}
       </div>
-      <Trend baseline={m.baseline} target={m.target} readings={m.readings} unit={m.unit} />
+      {/* The trend once there's something to trend; a lone starting dot says nothing */}
+      {latest && <Trend baseline={m.baseline} target={m.target} readings={m.readings} unit={m.unit} />}
       {pct !== undefined && <div className="progress" role="img" aria-label={`${Math.round(pct * 100)} percent of the way`}><i style={{ width: `${pct * 100}%` }} /></div>}
       {/* Editors log a reading dated today */}
       {onReading && (
         <form style={{ display: "flex", gap: 6, marginTop: 10 }} onSubmit={(e) => { e.preventDefault(); const n = Number(value); if (value.trim() && !Number.isNaN(n)) { onReading(n); setValue(""); } }}>
-          <input aria-label={`New reading for ${item.title}`} inputMode="decimal" placeholder="Today's reading" value={value} onChange={(e) => setValue(e.target.value)} style={{ minHeight: 32, padding: "4px 10px" }} />
+          <input aria-label={`New reading for ${item.title}`} inputMode="decimal" placeholder={`Today's reading${m.unit ? `, in ${m.unit}` : ""}`} value={value} onChange={(e) => setValue(e.target.value)} style={{ minHeight: 32, padding: "4px 10px" }} />
           <button className="btn btn-ghost" style={{ minHeight: 32, padding: "4px 12px" }}>Add</button>
         </form>
       )}
@@ -438,6 +455,7 @@ function MetricCard({ item, onReading }: { item: Item; onReading?: (value: numbe
 /** One layer's items, grouped by kind, with add forms for people who can write */
 function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; project: Project; items: Item[]; docs: DocumentRecord[]; edits: EditMarker[] }) {
   const { org, canWrite } = useOrg();
+  const me = useSession();
   const toast = useToast();
   const refresh = useRefresh(org.id);
   // Every item call goes through this project's API path
@@ -497,7 +515,8 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
                     : undefined} />
               ))}</div>
             )}
-            {(canWrite || kind === "request") && <AddItem kind={kind} path={path} taken={list.map((i) => i.title)} />}
+            {/* Anyone may add a request; options come from neon1; everything else from editors */}
+            {(kind === "request" || (canWrite && (kind !== "option" || me.operator))) && <AddItem kind={kind} path={path} taken={list.map((i) => i.title)} />}
           </section>
         );
       })}
@@ -549,7 +568,13 @@ function ItemRow({ item, path, marker, onToggle, extra }: { item: Item; path: st
       </div>
       {/* Owner, due date, and status at a glance */}
       <span className="item-meta">
-        {item.dueDate && <span className="small muted">{item.dueDate.slice(5)}</span>}
+        {/* Due date, in red once it has passed and the item isn't done */}
+        {item.dueDate && (() => {
+          const late = item.status !== "done" && item.dueDate < new Date().toISOString().slice(0, 10);
+          return <span className={`small ${late ? "late" : "muted"}`} title={late ? "Overdue" : "Due"}>{late && <span className="sr">Overdue, </span>}{dateLabel(item.dueDate)}</span>;
+        })()}
+        {/* A status update says how things stood and when */}
+        {item.kind === "update" && <><Health value={String(item.fields.health ?? "on_track") as Project["health"]} /><span className="small muted">{dateLabel(item.createdAt)}</span></>}
         {item.kind === "requirement" && <span className={`tag prio-${String(item.fields.priority ?? "should")}`}>{PRIORITY_WORDS[String(item.fields.priority ?? "should")]}</span>}
         {item.status !== "open" && item.status !== "done" && <span className="tag">{STATUS_WORDS[item.status] ?? item.status}</span>}
         {owner && <Avatar id={owner.userId} name={owner.name || owner.email} size={22} />}
@@ -776,11 +801,12 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
               <Meter label="Quality" value={f.qualityScore} />
               <Meter label="Effort" value={f.effortScore} />
               {/* The decision maker approves a proposed option; editors move drafts along */}
-              <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <div className="option-acts">
                 {o.status === "proposed" && decider && <button className={`btn ${decided ? "btn-ghost" : "btn-primary"}`} onClick={() => { setConditions(""); setApproving(o); }}>{decided ? "Choose this instead" : "Approve this option"}</button>}
                 {o.status === "proposed" && !decider && !decided && <span className="small muted">Waiting on {deciders.length ? deciders.join(" or ") : "a client admin"}</span>}
-                {canWrite && o.status === "draft" && <button className="btn btn-ghost" onClick={() => void setStatus(o, "proposed")}>Share with client</button>}
-                {canWrite && o.status === "proposed" && <button className="btn btn-ghost" onClick={() => void setStatus(o, "draft")}>Back to draft</button>}
+                {/* Sharing an option and taking it back are neon1's to do; the client approves */}
+                {canWrite && me.operator && o.status === "draft" && <button className="btn btn-ghost" onClick={() => void setStatus(o, "proposed")}>Share with client</button>}
+                {canWrite && me.operator && o.status === "proposed" && <button className="btn btn-ghost" onClick={() => void setStatus(o, "draft")}>Back to draft</button>}
               </div>
             </article>
           );

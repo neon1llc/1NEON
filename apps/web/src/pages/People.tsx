@@ -71,12 +71,12 @@ export function People() {
           <tbody>
             {list.map((m) => (
               <tr key={m.userId} style={m.status === "deactivated" ? { opacity: 0.55 } : undefined}>
-                <td><span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}><Avatar id={m.userId} name={m.name || m.email} /><span>{m.name || "–"}<br /><span className="muted small">{m.title}</span></span></span></td>
+                <td><span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}><Avatar id={m.userId} name={m.name || m.email} /><span>{m.name || <span className="muted">{m.status === "invited" ? "Name comes when they join" : "No name yet"}</span>}<br /><span className="muted small">{m.title}</span></span></span></td>
                 <td className="mono small">{m.email}</td>
                 <td>
                   {/* Admins change others' access; nobody changes their own here */}
                   {canAdmin && m.userId !== me.user.id && m.status !== "deactivated" ? (
-                    <select aria-label={`Access for ${m.email}`} value={m.access} onChange={(e) => void change(m, { access: e.target.value })} style={{ minHeight: 32, padding: "2px 8px", maxWidth: 140 }}>
+                    <select aria-label={`Access for ${m.email}`} value={m.access} onChange={(e) => void change(m, { access: e.target.value })} style={{ minHeight: 32, paddingTop: 2, paddingBottom: 2, paddingLeft: 8, maxWidth: 140 }}>
                       <option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option>
                     </select>
                   ) : <span className="tag">{m.access}</span>}

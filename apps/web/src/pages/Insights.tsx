@@ -1,6 +1,7 @@
 // apps/web/src/pages/Insights.tsx - Insights: charts made by default from the organization's own data.
-// Headline numbers, work finished per week, activity by day, where projects sit across the four
-// layers, and their health. Drawn as plain SVG and CSS, so nothing extra loads.
+// Headline numbers, work finished per week, where projects sit across the four layers, and
+// their health. Recent activity lives on Home and in each project's history, so it isn't charted
+// twice. Drawn as plain SVG and CSS, so nothing extra loads.
 
 
 import { useQuery } from "@tanstack/react-query";
@@ -16,8 +17,6 @@ interface Data {
   byLayer: Record<string, number>;
   byHealth: Record<string, number>;
   weeks: { week: string; done: number }[];
-  activity: Record<string, number>;
-  since: string;
   work: { open: number; overdue: number; onTime: number; late: number };
   decisions: { count: number; avgDays: number | null };
   measures: { count: number; reached: number };
@@ -38,7 +37,7 @@ const HEALTH = [
 export function Insights() {
   const { org } = useOrg();
   useTopBar(<span>{org.name} · Insights</span>, [org.name]);
-  const q = useQuery({ queryKey: ["insights", org.id], queryFn: () => read<Data>(`/t/${org.id}/insights`, { work: "object", decisions: "object", measures: "object", people: "object", weeks: "array", activity: "object", byLayer: "object", byHealth: "object" }) });
+  const q = useQuery({ queryKey: ["insights", org.id], queryFn: () => read<Data>(`/t/${org.id}/insights`, { work: "object", decisions: "object", measures: "object", people: "object", weeks: "array", byLayer: "object", byHealth: "object" }) });
   const d = q.data;
   const onTimeRate = d && d.work.onTime + d.work.late ? Math.round((d.work.onTime / (d.work.onTime + d.work.late)) * 100) : undefined;
   return (
@@ -52,14 +51,13 @@ export function Insights() {
           <div className="kpis" data-tour="kpis">
             <Kpi big={d.projects} label="active projects" />
             <Kpi big={d.work.open} label="open items" sub={d.work.overdue ? `${d.work.overdue} overdue` : "none overdue"} warn={d.work.overdue > 0} />
-            <Kpi big={onTimeRate === undefined ? "–" : `${onTimeRate}%`} label="finished on time" sub={onTimeRate === undefined ? "no due dates yet" : `${d.work.onTime} of ${d.work.onTime + d.work.late}`} />
+            <Kpi big={onTimeRate === undefined ? "–" : `${onTimeRate}%`} label="finished on time" sub={onTimeRate === undefined ? "nothing due has finished yet" : `${d.work.onTime} of ${d.work.onTime + d.work.late}`} />
             <Kpi big={d.decisions.avgDays ?? "–"} label="days to a decision" sub={`${d.decisions.count} decided`} />
             <Kpi big={`${d.measures.reached}/${d.measures.count}`} label="measures at target" />
             <Kpi big={d.people.active} label="people active" sub={d.people.invited ? `${d.people.invited} invited` : undefined} />
           </div>
           <div className="charts">
             <Weekly weeks={d.weeks} />
-            <Heatmap activity={d.activity} since={d.since} />
             <Layers byLayer={d.byLayer} total={d.projects} />
             <HealthBar byHealth={d.byHealth} total={d.projects} />
           </div>
@@ -98,27 +96,6 @@ function Weekly({ weeks }: { weeks: Data["weeks"] }) {
           </div>
         ))}
       </div>
-    </section>
-  );
-}
-
-
-/** Twelve weeks of activity, one square a day, darker for busier days */
-function Heatmap({ activity, since }: { activity: Record<string, number>; since: string }) {
-  const start = new Date(since + "T00:00:00Z");
-  // Begin on a Monday so each column is one week
-  start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
-  const days = Array.from({ length: 84 + 7 }, (_, i) => new Date(start.getTime() + i * 864e5).toISOString().slice(0, 10)).filter((d) => d <= new Date().toISOString().slice(0, 10));
-  const max = Math.max(1, ...Object.values(activity));
-  const level = (n: number) => (n === 0 ? 0 : Math.min(4, Math.ceil((n / max) * 4)));
-  const total = Object.values(activity).reduce((a, b) => a + b, 0);
-  return (
-    <section className="card chart" data-tour="activity-map">
-      <h2 className="section-h">Activity <small>{total} actions in 12 weeks</small></h2>
-      <div className="heat" role="img" aria-label={`${total} actions in the last 12 weeks`}>
-        {days.map((d) => <i key={d} className={`h${level(activity[d] ?? 0)}`} title={`${d}: ${activity[d] ?? 0}`} />)}
-      </div>
-      <p className="legend small muted">Less <i className="h0" /><i className="h1" /><i className="h2" /><i className="h3" /><i className="h4" /> More</p>
     </section>
   );
 }

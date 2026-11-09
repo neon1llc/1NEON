@@ -6,7 +6,7 @@ import { TEMPLATES } from "@1neon/domain";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
-import { useToast } from "../components/ui.tsx";
+import { dateLabel, useToast } from "../components/ui.tsx";
 import { api } from "../lib/api.ts";
 import { problem, useRefresh } from "../lib/hooks.ts";
 import { slide } from "../lib/motion.ts";
@@ -54,6 +54,10 @@ export function NewProject() {
   const t = TEMPLATES.find((x) => x.id === template) ?? TEMPLATES[0]!;
   // Blank or non-numeric measure values are left unset
   const num = (s: string) => (s.trim() === "" || Number.isNaN(Number(s)) ? undefined : Number(s));
+  // Measures with a name are kept; the project starts in the first stage that isn't hidden, as the API does
+  const kept = metrics.filter((m) => m.title.trim());
+  const first = org.stages.find((x) => !x.hidden) ?? org.stages[0];
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
   // Only the Basics step has a required field
   const ready = [true, name.trim().length > 0, true, true];
 
@@ -72,7 +76,7 @@ export function NewProject() {
           outcome,
           example,
           targetDate: targetDate || undefined,
-          metrics: metrics.filter((m) => m.title.trim()).map((m) => ({ title: m.title.trim(), unit: m.unit, baseline: num(m.baseline), target: num(m.target) })),
+          metrics: kept.map((m) => ({ title: m.title.trim(), unit: m.unit, baseline: num(m.baseline), target: num(m.target) })),
         },
       });
       refresh();
@@ -137,11 +141,13 @@ export function NewProject() {
               // Change one field of this measure
               const set = (patch: Partial<MetricDraft>) => setMetrics(metrics.map((x, j) => (j === i ? { ...x, ...patch } : x)));
               return (
-                <div key={i} className="card" style={{ padding: 14, display: "grid", gap: 10, gridTemplateColumns: "2fr 1fr 1fr 1fr" }}>
-                  <div><label htmlFor={`mt${i}`}>Measure</label><input id={`mt${i}`} value={m.title} onChange={(e) => set({ title: e.target.value })} placeholder="i.e. hours a week on scheduling" /></div>
+                <div key={i} className="card metric-draft">
+                  <div className="mt"><label htmlFor={`mt${i}`}>Measure</label><input id={`mt${i}`} value={m.title} onChange={(e) => set({ title: e.target.value })} placeholder="i.e. hours a week on scheduling" /></div>
                   <div><label htmlFor={`mu${i}`}>Unit</label><input id={`mu${i}`} value={m.unit} onChange={(e) => set({ unit: e.target.value })} placeholder="i.e. hours" /></div>
-                  <div><label htmlFor={`mb${i}`}>Now</label><input id={`mb${i}`} inputMode="decimal" value={m.baseline} onChange={(e) => set({ baseline: e.target.value })} /></div>
-                  <div><label htmlFor={`mg${i}`}>Target</label><input id={`mg${i}`} inputMode="decimal" value={m.target} onChange={(e) => set({ target: e.target.value })} /></div>
+                  {/* Numbers only: anything else would be dropped, so it's filtered as typed */}
+                  <div><label htmlFor={`mb${i}`}>Now</label><input id={`mb${i}`} inputMode="decimal" value={m.baseline} onChange={(e) => set({ baseline: e.target.value.replace(/[^\d.-]/g, "") })} /></div>
+                  <div><label htmlFor={`mg${i}`}>Target</label><input id={`mg${i}`} inputMode="decimal" value={m.target} onChange={(e) => set({ target: e.target.value.replace(/[^\d.-]/g, "") })} /></div>
+                  {metrics.length > 1 && <button type="button" className="linkish small rm" onClick={() => setMetrics(metrics.filter((_, j) => j !== i))} aria-label={`Remove measure ${i + 1}`}>Remove</button>}
                 </div>
               );
             })}
@@ -155,7 +161,14 @@ export function NewProject() {
             <h2 style={{ margin: "6px 0 10px" }}>{name}</h2>
             {projectSummary && <p>{projectSummary}</p>}
             {outcome && <p><b>Done when:</b> {outcome}</p>}
-            <p className="muted small">Starts in {org.stages[0]?.name}. Adds {t.items.length} template items and {metrics.filter((m) => m.title.trim()).length} measures.</p>
+            {targetDate && <p><b>Target:</b> {dateLabel(targetDate)}</p>}
+            {/* Each measure as it will be saved, so a dropped number shows before Create */}
+            {kept.length > 0 && (
+              <ul className="small" style={{ paddingLeft: 18 }}>
+                {kept.map((m, i) => <li key={i}>{m.title.trim()}: from {m.baseline || "?"} to {m.target || "?"}{m.unit ? ` ${m.unit}` : ""}</li>)}
+              </ul>
+            )}
+            <p className="muted small">Starts in {first?.name}. Adds {plural(t.items.length, "starter item")}{kept.length ? ` and ${plural(kept.length, "measure")}` : ""}.</p>
           </div>
         )}
         {error && <p className="notice" role="alert">{error}</p>}

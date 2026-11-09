@@ -67,8 +67,10 @@ export function changesFrom(draft: Draft, from: Item): Record<string, unknown> {
  * yours-or-theirs choice instead of silently writing over the other person's change
  */
 export function ItemPanel({ item, label, path, open, onClose }: { item: Item; label: string; path: string; open: boolean; onClose: () => void }) {
-  const { org, canWrite, canAdmin } = useOrg();
+  const { org, canWrite: writer, canAdmin } = useOrg();
   const me = useSession();
+  // Options are neon1's proposals: the client reads, comments on, and approves them, but doesn't edit them
+  const canWrite = writer && (item.kind !== "option" || me.operator);
   const toast = useToast();
   const refresh = useRefresh(org.id);
   const members = useMembers(org.id);

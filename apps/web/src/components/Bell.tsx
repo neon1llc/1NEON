@@ -63,7 +63,7 @@ export function Bell({ tid, slug }: { tid: string; slug: string }) {
       </button>
       {open && (
         <div className="bell-list" role="dialog" aria-label="Notifications">
-          <div className="bell-head"><b>Notifications</b><Link to="/me#notifications" onClick={() => setOpen(false)} className="small">Choose what emails you</Link></div>
+          <div className="bell-head"><b>Notifications</b><Link to="/me#notifications" onClick={() => setOpen(false)} className="small">Choose what reaches you</Link></div>
           {/* "Nothing yet" only when the list really answered empty; a failure says so instead */}
           <Stale reads={[q]} />
           {wait ?? (!q.data?.events.length && <p className="muted small bell-empty">Nothing yet. Changes others make here will show up in this list.</p>)}

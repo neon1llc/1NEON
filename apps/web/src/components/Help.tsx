@@ -108,11 +108,10 @@ export const GUIDES: Record<PageKey, Guide> = {
   insights: {
     title: "Insights",
     purpose: "How work is going, in charts made from your own data.",
-    howto: ["The numbers on top update as work gets done.", "Finished per week shows the pace; Activity shows busy days.", "Projects by layer shows where things sit across N E O N."],
+    howto: ["The numbers on top update as work gets done.", "Finished per week shows the pace.", "Projects by layer shows where things sit across N E O N."],
     tour: [
       { at: "kpis", title: "At a glance", text: "Open work, on-time rate, days to a decision, and measures at target." },
       { at: "weekly", title: "Pace", text: "Items finished each week for the last eight weeks." },
-      { at: "activity-map", title: "Activity", text: "One square a day. Darker means busier." },
       { at: "by-layer", title: "Across the layers", text: "Where projects sit: Needs, Execute, Observe, or Normalize." },
     ],
   },

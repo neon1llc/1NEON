@@ -7,7 +7,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { gate, Stale } from "../components/Reads.tsx";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
-import { daysSince, Empty, Health, LayerBadge, LAYERS, layerName } from "../components/ui.tsx";
+import { dateLabel, daysSince, Empty, Health, LayerBadge, LAYERS, layerName } from "../components/ui.tsx";
 import { useProjects } from "../lib/hooks.ts";
 import { slide } from "../lib/motion.ts";
 
@@ -112,7 +112,7 @@ export function Projects() {
                 <span role="cell"><span className="s">{p.key}</span><span className="t">{p.name}</span></span>
                 <span role="cell" className="small stage-cell">{s && <LayerBadge layer={s.layer} />}{s?.name ?? p.stageId} <span className="muted">{daysSince(p.stageEnteredAt)}d</span></span>
                 <span role="cell"><Health value={p.health} /></span>
-                <span role="cell" className="small muted">{p.targetDate ?? "–"}</span>
+                <span role="cell" className="small muted">{p.targetDate ? dateLabel(p.targetDate) : "–"}</span>
               </Link>
             );
           })}
@@ -160,7 +160,7 @@ function Timeline({ projects, slug, layerOf }: { projects: Project[]; slug: stri
             <span className="tl-name"><span className="s">{p.key}</span> {p.name}</span>
             <span className="tl-track">
               <i className="tl-now" style={{ left: `${pct(today)}%` }} aria-hidden="true" />
-              <span className={`tl-bar l-${layerOf(p)}${open ? " open" : ""}`} style={{ left: `${pct(start)}%`, width: `${Math.max(1.5, pct(end) - pct(start))}%` }} title={`${p.name}: ${new Date(start).toLocaleDateString()} to ${open ? "no target date" : p.targetDate}`} />
+              <span className={`tl-bar l-${layerOf(p)}${open ? " open" : ""}`} style={{ left: `${pct(start)}%`, width: `${Math.max(1.5, pct(end) - pct(start))}%` }} title={`${p.name}: ${dateLabel(new Date(start).toISOString())} to ${open ? "no target date" : dateLabel(p.targetDate)}`} />
             </span>
           </Link>
         ))}

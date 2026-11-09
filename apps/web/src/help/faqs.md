@@ -52,12 +52,12 @@ Choose **New project**, answer a few short questions, and the project starts wit
 This week and the next two as a strip of days. Each mark is something dated: a task's due date, a milestone, or a project's target. Below it, everything dated in the next six weeks is listed by Overdue, This week, Next week, and Later.
 
 ### What is Insights?
-Charts made from your organization's own data: open and overdue work, how often things finish on time, days to a decision, work finished per week, activity by day, and where projects sit across the four layers.
+Charts made from your organization's own data: open and overdue work, how often things finish on time, days to a decision, work finished per week, where projects sit across the four layers, and how healthy they are.
 
 ## Decisions and approvals
 
 ### How do I approve an option?
-Open the project's **Needs** layer, compare the options, and choose **Approve this option**. You can add conditions, such as "only after 6pm". The approval is recorded with your name, the time, and a copy of the option's terms (title, description, cost, and timeline) exactly as you saw them.
+Open the project's **Needs** layer, compare the options, and choose **Approve this option**. You can add conditions, such as "only after 6pm". The approval is recorded with your name, the time, and a copy of the option's terms (title, description, cost, and timeline) exactly as you saw them. Options come from neon1; to ask for a change, comment on the option.
 
 ### Who can approve?
 The person named as the project's decision maker. If nobody is named, an admin of your organization can. Only an admin of your organization can name or change the decision maker, under **People** on the project's overview, after confirming it's them; editors can change everyone else on the project. Each change is recorded with the old and new decision maker, and neon1 can't be named.

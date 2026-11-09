@@ -19,7 +19,7 @@ import { ConfirmDialog } from "./Confirm.tsx";
 import { HelpProvider, useHelp } from "./Help.tsx";
 import { Palette } from "./Palette.tsx";
 import { gate, Stale, type Read } from "./Reads.tsx";
-import { Avatar, Icon, initials, LayerBadge, LAYERS, layerName, Rings } from "./ui.tsx";
+import { Avatar, Icon, initials, LayerBadge, LAYERS, layerName, layerSlug, Rings } from "./ui.tsx";
 
 
 // --- Session -----------------------------------------------------------------
@@ -545,7 +545,7 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
         <div className="org-full"><OrgChooser current={org} all={all} /></div>
         <button className="org-mini" type="button" onClick={() => setOpen(true)} title={all ? "All clients" : org?.name ?? "Choose an organization"}>
           <span className="ico">{all ? "All" : org ? initials(org.name) : "?"}</span>
-          <span className="lbl">{all ? "All clients" : org?.name ?? "Choose"}</span>
+          <span className="lbl">{all ? "All clients" : org?.name ?? "Organizations"}</span>
         </button>
         {/* Organization pages get the main places and the four layers; All clients gets only its board */}
         <ul className="nav">
@@ -559,7 +559,7 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
               <li className="sep" data-tour="nav-layers"><span className="lbl">Layers</span>
                 <ul className="nav">
                   {LAYERS.map((l) => (
-                    <Item key={l} to={`${base}/layer/${l}`} icon={<LayerBadge layer={l} />} label={layerName(l)} />
+                    <Item key={l} to={`${base}/layer/${layerSlug(l)}`} icon={<LayerBadge layer={l} />} label={layerName(l)} />
                   ))}
                 </ul>
               </li>
@@ -668,15 +668,21 @@ function OrgChooser({ current, all }: { current?: OrgSummary; all?: boolean }) {
   };
   // People in one organization see its name, not a chooser
   const many = me.operator || me.orgs.length > 1;
-  const label = all ? "All clients" : current?.name ?? "Choose";
-  const sub = all ? "read only" : current?.clientId ?? "";
+  // Outside an organization (profile, FAQs): one organization reads as a way back to it; several, as a choice
+  const only = !many ? me.orgs[0] : undefined;
+  const label = all ? "All clients" : current?.name ?? only?.name ?? "Choose an organization";
+  const sub = all ? "read only" : current?.clientId ?? (only ? "back to Home" : "");
   const list = me.orgs.filter((o) => (o.name + o.clientId).toLowerCase().includes(q.toLowerCase()));
   return (
     <div ref={ref} style={{ position: "relative" }} onKeyDown={keys} onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && e.relatedTarget && setOpen(false)}>
-      <button ref={toggle} className={`org${all ? " all" : ""}`} onClick={() => many && setOpen(!open)} aria-expanded={many ? open : undefined} aria-controls={many ? "org-list" : undefined} disabled={!many && !current}>
-        <b>{label}{many && <span aria-hidden="true">▾</span>}</b>
-        <small>{sub}</small>
-      </button>
+      {!current && !all && only ? (
+        <Link className="org" to={`/o/${only.slug}/workspace`}><b>{label}</b><small>{sub}</small></Link>
+      ) : (
+        <button ref={toggle} className={`org${all ? " all" : ""}`} onClick={() => many && setOpen(!open)} aria-expanded={many ? open : undefined} aria-controls={many ? "org-list" : undefined} disabled={!many && !current}>
+          <b>{label}{many && <span aria-hidden="true">▾</span>}</b>
+          <small>{sub}</small>
+        </button>
+      )}
       {open && (
         <div className="menu" id="org-list" style={{ top: "calc(100% + 6px)", left: 0, right: 0 }}>
           {me.orgs.length > 6 && <input aria-label="Search organizations" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 6 }} />}

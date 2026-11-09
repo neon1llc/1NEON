@@ -10,7 +10,7 @@ import { ComingUp } from "../components/ComingUp.tsx";
 import { Problem, Stale } from "../components/Reads.tsx";
 import { useHelp } from "../components/Help.tsx";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
-import { ago, Health } from "../components/ui.tsx";
+import { ago, Health, layerSlug } from "../components/ui.tsx";
 import type { Project } from "@1neon/domain";
 type HealthT = Project["health"];
 import { qk } from "../lib/hooks.ts";
@@ -20,7 +20,7 @@ import type { Workspace } from "../lib/types.ts";
 
 // The words and icon for each kind of thing waiting on someone
 const ACTION = {
-  approve: { label: "Review and approve", icon: CircleCheck },
+  choose: { label: "Compare options", icon: CircleCheck },
   upload: { label: "Upload file", icon: FileUp },
   do: { label: "Open", icon: ListTodo },
 } as const;
@@ -43,7 +43,7 @@ export function WorkspacePage() {
     { done: me.user.tour === "done", label: "Take the 1-minute tour", act: <button className="link" onClick={help.welcomeTour}>Start</button> },
     ...(canWrite ? [{ done: (c?.projects ?? 0) > 0, label: "Start your first project", act: <Link to={`${base}/projects/new`}>Start</Link> }] : []),
     ...(canAdmin ? [{ done: (c?.people ?? 0) > 1, label: "Invite your team", act: <Link to={`${base}/people`}>Invite</Link> }] : []),
-    ...(canAdmin ? [{ done: Boolean(me.factors?.any), label: "Add a passkey for admin actions", act: <Link to="/me">Add</Link> }] : []),
+    ...(canAdmin ? [{ done: Boolean(me.factors?.any), label: "Add a second step for admin actions", act: <Link to="/me#security">Add</Link> }] : []),
   ];
   const setupLeft = steps.filter((s) => !s.done).length;
   const n = ws.data?.waiting.length ?? 0;
@@ -65,13 +65,15 @@ export function WorkspacePage() {
           {ws.data && n === 0 && <p className="empty-line"><Check size={18} aria-hidden="true" /> You're all caught up.</p>}
           <ul className="todo">
             {ws.data?.waiting.map((w) => {
-              const a = ACTION[w.action];
+              const a = ACTION[w.action] ?? ACTION.do;
               const layer = KIND_LAYER[w.kind as ItemKind] ?? "needs";
+              // A choice opens the options side by side; anything else opens the item itself
+              const to = w.action === "choose" ? `${base}/projects/${w.projectKey}/needs#options` : `${base}/projects/${w.projectKey}/${layerSlug(layer)}#item-${w.itemId}`;
               return (
                 <li key={w.itemId}>
                   <a.icon size={18} aria-hidden="true" className="todo-ico" />
-                  <span className="todo-t">{w.title}<small>{w.projectKey}</small></span>
-                  <Link className="btn btn-ghost btn-sm" to={`${base}/projects/${w.projectKey}/${layer}#item-${w.itemId}`}>{a.label}</Link>
+                  <span className="todo-t">{w.action === "choose" ? `Choose one of ${w.count} options` : w.title}<small><span className="mono">{w.projectKey}</span> {w.projectName}</small></span>
+                  <Link className="btn btn-ghost btn-sm" to={to}>{a.label}</Link>
                 </li>
               );
             })}
@@ -101,7 +103,7 @@ export function WorkspacePage() {
             <Link to={`${base}/projects`}><b>{c?.projects ?? "–"}</b> projects</Link>
             <Link to={`${base}/workflow`}><b>{c?.deciding ?? "–"}</b> deciding</Link>
             <Link to={`${base}/workflow`}><b>{c?.building ?? "–"}</b> building</Link>
-            <Link to={`${base}/people`}><b>{c?.people ?? "–"}</b> people{c?.invited ? ` (${c.invited} invited)` : ""}</Link>
+            <Link to={`${base}/people`}><b>{c?.people ?? "–"}</b> people{c?.invited ? <small>{c.invited} invited</small> : null}</Link>
             <Link to={`${base}/documents`}><b>{c?.documents ?? "–"}</b> files</Link>
           </nav>
           {/* Each project's latest written update, with its health */}
@@ -125,7 +127,7 @@ export function WorkspacePage() {
             {ws.data && ws.data.activity.length === 0 && <p className="muted small">No activity yet.</p>}
             <ul className="feed">
               {ws.data?.activity.slice(0, 8).map((a) => (
-                <li key={a.id}><span>{a.summary}</span><time dateTime={a.at}>{ago(a.at)}</time></li>
+                <li key={a.id}><span>{a.summary}{a.by && !a.summary.includes(a.by) && <small className="by">{a.by}</small>}</span><time dateTime={a.at}>{ago(a.at)}</time></li>
               ))}
             </ul>
           </section>

@@ -51,7 +51,8 @@ export function Workflow() {
     <>
       <h1 className="page-title">Board</h1>
       <p className="lead">
-        {canWrite ? "Drag a card, or use its Move menu, to change a project's stage." : "Every project and where it stands."}
+        {/* Touch screens can't drag cards, so they hear only about the menu */}
+        {!canWrite ? "Every project and where it stands." : matchMedia("(pointer: fine)").matches ? "Drag a card, or use its Move to menu, to change a project's stage." : "Use a card's Move to menu to change a project's stage."}
       </p>
       <Stale reads={[projects]} />
       {/* Read-only board for viewers: no onMove */}
@@ -73,7 +74,7 @@ export function Workflow() {
           }}
         >
           <label htmlFor="why">Reason</label>
-          <input id="why" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} required autoFocus />
+          <textarea id="why" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} required autoFocus placeholder="i.e. The client chose over the phone; the option will be approved here this week" />
           <div className="actions">
             <button className="btn btn-primary" type="submit">Move anyway</button>
             <button className="btn btn-ghost" type="button" onClick={() => setPending(undefined)}>Cancel</button>

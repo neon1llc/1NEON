@@ -52,6 +52,13 @@ export function Health({ value }: { value: HealthT }) {
 
 // The four layers in order, each with its shade of green
 export const LAYERS: Layer[] = ["needs", "execution", "observation", "next"];
+// Each layer's word in addresses is the name people see (/execute, /normalize); the stored keys
+// (execution, next) still resolve, so older links and emails keep working
+const SLUG: Record<Layer, string> = { needs: "needs", execution: "execute", observation: "observe", next: "normalize" };
+/** The address word for a layer */
+export const layerSlug = (l: Layer) => SLUG[l];
+/** The layer an address word names, by its word or its stored key */
+export const layerFromSlug = (s?: string): Layer | undefined => LAYERS.find((l) => SLUG[l] === s || l === s);
 export const LAYER_COLOR: Record<Layer, string> = { needs: "var(--l1)", execution: "var(--l2)", observation: "var(--l3)", next: "var(--l4)" };
 
 
@@ -153,6 +160,16 @@ export function ago(iso?: string) {
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   const d = Math.floor(s / 86400);
   return d === 1 ? "yesterday" : `${d} days ago`;
+}
+
+
+/** A calendar date for people: "Dec 9", with the year when it isn't this year ("Jan 4, 2027").
+ * Date-only strings are read as UTC, so they never shift a day by time zone */
+export function dateLabel(iso?: string) {
+  if (!iso) return "";
+  const d = new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso);
+  const sameYear = d.getUTCFullYear() === new Date().getUTCFullYear();
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }), timeZone: iso.length === 10 ? "UTC" : undefined });
 }
 
 

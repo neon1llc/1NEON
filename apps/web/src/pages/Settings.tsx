@@ -38,6 +38,8 @@ export function Settings() {
     try {
       const next = await api<Tenant>(`/t/${org.id}/stages`, { method: "PUT", body: { version: org.version, stages } });
       qc.setQueryData(["org", summary.id], { org: next, access });
+      // Take the saved copy back, so what's on screen is exactly what was stored
+      setStages(next.stages);
       toast("Workflow saved");
     } catch (e) {
       setError(problem(e));
@@ -55,7 +57,7 @@ export function Settings() {
         <div><span className="muted small">Your access</span> <span className="tag">{access}</span></div>
       </div>
       <h2 className="section-h">Board stages</h2>
-      <p className="muted small">Each row is a column on the board, in order: its name, its layer, when it's done, and an optional limit on how many projects it holds.</p>
+      <p className="muted small">Each row is a column on the board, in order: its name, its layer, when it's done, and an optional limit on how many projects it holds. A hidden stage still shows on the board while projects are in it.</p>
       {!canAdmin && <p className="muted small">Only admins can change stages.</p>}
       {/* One row per stage: name, layer, exit rule, limit, and order controls; phones stack each stage as a card */}
       <div className="stages" data-tour="stages">
@@ -65,7 +67,7 @@ export function Settings() {
             <select aria-label={`Layer of ${s.name}`} value={s.layer} disabled={!canAdmin} onChange={(e) => set(i, { layer: e.target.value as Layer })}>
               {LAYERS.map((l) => <option key={l} value={l}>{layerName(l)}</option>)}
             </select>
-            <input aria-label={`Done when, for ${s.name}`} placeholder="Done when…" value={s.exit} disabled={!canAdmin} onChange={(e) => set(i, { exit: e.target.value })} maxLength={200} />
+            <textarea rows={1} aria-label={`Done when, for ${s.name}`} placeholder="Done when…" value={s.exit} disabled={!canAdmin} onChange={(e) => set(i, { exit: e.target.value.replace(/\n/g, " ") })} maxLength={200} />
             <input aria-label={`Limit for ${s.name}`} placeholder="Limit" inputMode="numeric" value={s.wipLimit ?? ""} disabled={!canAdmin} onChange={(e) => set(i, { wipLimit: e.target.value ? Math.max(1, Math.min(99, Number(e.target.value) || 1)) : undefined })} />
             <span className="ctl">
               <LayerBadge layer={s.layer} />
@@ -85,7 +87,7 @@ export function Settings() {
         <div className="actions" style={{ marginTop: 14 }}>
           <button className="btn btn-primary" disabled={!dirty || busy} onClick={() => void save()}>{busy ? "Saving…" : "Save workflow"}</button>
           {dirty && <button className="btn btn-ghost" onClick={() => setStages(org.stages)}>Undo changes</button>}
-          <span className="muted small">Saving asks you to confirm it's you with a passkey or authenticator app.</span>
+          <span className="muted small">Saving may ask you to confirm it's you with a passkey, an authenticator app, or a text code.</span>
         </div>
       )}
       {error && <p className="notice" role="alert">{error}</p>}

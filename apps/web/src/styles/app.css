@@ -67,6 +67,12 @@ label.field { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
 label.field > span { font-family: var(--mono); font-size: 12px; }
 input, textarea, select { font: 16px var(--sans); color: var(--text); background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: 9px 12px; min-height: 40px; width: 100%; }
 textarea { min-height: 96px; resize: vertical; }
+/* Dropdowns: as wide as their choices (not the whole row), with a small chevron drawn in the text's
+   own color right after the words, so it suits both themes and never floats far off to the side */
+select { appearance: none; -webkit-appearance: none; width: auto; max-width: 100%; padding-right: 32px; cursor: pointer; text-overflow: ellipsis;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 17px) calc(50% + 1px), calc(100% - 12px) calc(50% + 1px); background-size: 5px 5px; background-repeat: no-repeat; }
+select:disabled { cursor: default; opacity: .7; }
 /* Placeholders at the muted color, which passes contrast in both themes */
 ::placeholder { color: var(--muted); opacity: 1; }
 input:focus, textarea:focus, select:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: transparent; }
@@ -111,6 +117,7 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--focus); out
 /* Organization chooser; amber when it shows All clients */
 .org { width: 100%; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 9px 12px; cursor: pointer; color: var(--text); display: grid; gap: 1px; }
 .org:hover { border-color: var(--line-strong); }
+a.org { text-decoration: none; }
 .org b { font: 600 14px var(--sans); display: flex; justify-content: space-between; gap: 8px; }
 .org small { font: 12px var(--mono); color: var(--muted); }
 .org.all { border-color: var(--amber); }
@@ -185,7 +192,15 @@ a.row:hover { background: var(--accent-soft); }
 
 /* Board */
 /* Columns scroll sideways; drop targets and over-limit counts are highlighted */
-.board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(250px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 12px; align-items: start; }
+.board { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; }
+.board .col { flex: 1 1 210px; min-width: 200px; }
+/* An empty stage folds to a slim strip with its name running down it, so the whole process fits on
+   screen and the columns with work get the room; it still takes a dropped card */
+.board .col.empty { flex: 0 0 48px; min-width: 0; padding: 10px 4px; }
+.col.empty header { flex-direction: column; justify-content: flex-start; padding: 2px 0 0; gap: 10px; }
+.col.empty header h3 { writing-mode: vertical-rl; flex-direction: row; gap: 8px; white-space: nowrap; }
+.col.empty header h3 .badge { writing-mode: horizontal-tb; }
+.col.empty .exit, .col.empty .none { display: none; }
 .col { background: var(--frame); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; min-height: 160px; }
 .col.drop { border-color: var(--accent); background: var(--accent-soft); }
 .col header { display: flex; justify-content: space-between; align-items: center; padding: 2px 4px 10px; gap: 8px; }
@@ -223,7 +238,10 @@ a.row:hover { background: var(--accent-soft); }
 .item input[type="checkbox"] { width: 18px; height: 18px; min-height: 0; margin-top: 3px; accent-color: var(--accent); }
 /* Option cards with their meters, and decision banners */
 .options { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-.option { position: relative; }
+.option { position: relative; display: flex; flex-direction: column; }
+/* The actions sit along the bottom of every card, level across the row whatever each card says */
+.option-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 12px; }
+.item-meta .late { color: var(--red); font-weight: 600; }
 .option.rec { border-color: var(--accent); }
 .option h4 { margin: 8px 0 6px; font: 600 15px var(--sans); }
 .meter { display: grid; grid-template-columns: 64px 1fr; gap: 8px; align-items: center; font: 12px var(--mono); color: var(--muted); margin: 4px 0; }
@@ -337,6 +355,7 @@ html.from-site, html.from-site body { background: var(--void); }
 .stage { display: grid; grid-template-columns: minmax(0, 1.2fr) 150px minmax(0, 2fr) 80px auto; grid-template-areas: "name layer exit limit ctl";
   gap: 10px; align-items: center; padding: 12px 4px; border-bottom: 1px solid var(--line); }
 .stage.off { opacity: .55; }
+.stage textarea { min-height: 40px; resize: none; field-sizing: content; }
 .stage > :nth-child(1) { grid-area: name; } .stage > :nth-child(2) { grid-area: layer; } .stage > :nth-child(3) { grid-area: exit; }
 .stage > :nth-child(4) { grid-area: limit; } .stage .ctl { grid-area: ctl; display: flex; gap: 6px; align-items: center; }
 @media (max-width: 760px) {
@@ -345,8 +364,9 @@ html.from-site, html.from-site body { background: var(--void); }
 }
 
 /* Files: where uploads go, the drop area, layer filters, and file rows */
-.file-target { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-.file-target label { display: grid; gap: 6px; font: 12px var(--mono); color: var(--muted); flex: 1 1 220px; }
+/* Where uploads go, read as a sentence: "File new uploads under [the whole organization] in [Needs]" */
+.file-target { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; color: var(--muted); font-size: 14px; }
+.file-target select { min-height: 36px; padding-top: 6px; padding-bottom: 6px; font-size: 14px; }
 .drop { display: grid; gap: 6px; place-items: center; text-align: center; padding: 28px 16px; border: 1.5px dashed var(--line-strong); border-radius: var(--r); cursor: pointer; margin-bottom: 22px; transition: border-color .2s, background .2s; }
 .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
 .drop b { font: 600 14px var(--mono); color: var(--accent); }
@@ -481,12 +501,15 @@ dialog.palette .dlg { padding: 0; }
 .home-side { display: grid; gap: 16px; }
 @media (max-width: 900px) { .home { grid-template-columns: minmax(0, 1fr); } }
 .card .section-h:first-child { margin-top: 0; }
+/* A linked part of a page (#security, #options) lands clear of the sticky top bar */
+.card[id], section[id], .item[id] { scroll-margin-top: 90px; }
 .todo, .checklist, .feed { list-style: none; margin: 0; padding: 0; }
 .todo li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
 .todo li:first-child { border-top: 0; }
 .todo-ico { color: var(--accent); }
 .todo-t { display: grid; gap: 2px; }
-.todo-t small { font: 12px var(--mono); color: var(--muted); }
+.todo-t small { font-size: 12.5px; color: var(--muted); }
+.todo-t small .mono { font: 12px var(--mono); margin-right: 4px; }
 @media (max-width: 520px) { .todo li { grid-template-columns: auto minmax(0, 1fr); } .todo li .btn { grid-column: 2; justify-self: start; } }
 .empty-line { display: flex; gap: 8px; align-items: center; color: var(--ok); margin: 4px 0; }
 .btn.btn-sm { min-height: 32px; padding: 4px 12px; font-size: 13px; }
@@ -495,13 +518,18 @@ button.link { border: 0; background: none; padding: 0; color: var(--accent); tex
 .checklist .tick { width: 20px; height: 20px; border-radius: 99px; border: 1.5px solid var(--line-strong); display: grid; place-items: center; color: var(--accent-ink); }
 .checklist li.done .tick { background: var(--accent); border-color: var(--accent); }
 .checklist li.done > span:nth-child(2) { color: var(--muted); }
-.stats { display: flex; flex-wrap: wrap; gap: 8px; }
-.stats a { padding: 8px 12px; border: 1px solid var(--line); border-radius: 99px; background: var(--panel); color: var(--muted); text-decoration: none; font-size: 13px; }
-.stats a b { color: var(--accent); font-family: var(--mono); margin-right: 2px; }
-.stats a:hover { border-color: var(--accent); }
+/* The headline numbers: one row of equal cells, the number above its word, so none wraps alone */
+.stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); overflow: hidden; }
+.stats a { display: grid; justify-items: center; gap: 2px; padding: 10px 4px; color: var(--muted); text-decoration: none; font-size: 12.5px; text-align: center; border-left: 1px solid var(--line); }
+.stats a:first-child { border-left: 0; }
+.stats a b { color: var(--accent); font: 600 18px var(--mono); }
+.stats a small { font-size: 11px; color: var(--muted); }
+.stats a:hover, .stats a:focus-visible { background: var(--accent-soft); color: var(--text); }
 .feed li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
 .feed li:first-child { border-top: 0; }
 .feed time { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
+/* Who did it, under what they did */
+.feed .by { display: block; margin-top: 2px; font-size: 12.5px; color: var(--muted); }
 
 /* --- Project: next step, score words, deep-link flash, people editor --- */
 .next-step { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; align-items: center; margin: 4px 0 8px; padding: 14px 18px; border: 1px solid var(--accent); border-radius: var(--r); background: var(--accent-soft); }
@@ -526,10 +554,10 @@ button.link { border: 0; background: none; padding: 0; color: var(--accent); tex
 .pcard { position: relative; }
 .pcard .name::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
 .pcard .move { position: relative; z-index: 1; display: inline-block; margin-top: 8px; }
-.pcard .move select { min-height: 28px; padding: 2px 10px; font: 12px var(--mono); border-radius: 99px; width: auto; color: var(--muted); background: transparent; }
+.pcard .move select { min-height: 28px; padding: 2px 26px 2px 10px; font: 12px var(--mono); border-radius: 99px; color: var(--muted); background-color: transparent; background-position: calc(100% - 15px) calc(50% + 1px), calc(100% - 10px) calc(50% + 1px); }
 @media (max-width: 640px) {
   .board { scroll-snap-type: x mandatory; }
-  .board .col { scroll-snap-align: start; min-width: 82vw; }
+  .board .col { scroll-snap-align: start; flex-basis: 82vw; }
 }
 
 /* --- FAQs --- */
@@ -687,10 +715,6 @@ details.history summary { cursor: pointer; font: 12px var(--mono); color: var(--
 .cols .bar.now { background: var(--accent); }
 .cols .v { font: 11px var(--mono); color: var(--muted); }
 .cols .x { font: 10px var(--mono); color: var(--muted); white-space: nowrap; }
-.heat { display: grid; grid-template-rows: repeat(7, 12px); grid-auto-flow: column; grid-auto-columns: 12px; gap: 3px; overflow-x: auto; padding-bottom: 4px; }
-.heat i, .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
-.h0 { background: var(--line); } .h1 { background: var(--l4); opacity: .55; } .h2 { background: var(--l3); } .h3 { background: var(--l2); } .h4 { background: var(--l1); }
-.legend { display: flex; gap: 4px; align-items: center; margin: 8px 0 0; }
 .split { display: flex; height: 18px; border-radius: 99px; overflow: hidden; gap: 2px; background: var(--line); }
 .split .empty-bar { flex: 1; }
 .keys { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; font-size: 13px; }
@@ -828,3 +852,8 @@ body:has(.demo-bar) .top { top: var(--demo-h); }
 /* The yes to texts: a checkbox with the carrier wording beside it */
 .notify .sms-consent { display: grid; font: 13px/1.5 var(--sans, inherit); color: var(--text); letter-spacing: 0; text-transform: none; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg); font-size: 13px; line-height: 1.5; }
 .notify .sms-consent input { width: 18px; height: 18px; min-height: 0; margin-top: 2px; accent-color: var(--accent); }
+
+/* New project: one measure per card; four across on wide screens, name on its own row on phones */
+.metric-draft { padding: 14px; display: grid; gap: 10px; grid-template-columns: 2fr 1fr 1fr 1fr; align-items: end; }
+.metric-draft .rm { grid-column: 1 / -1; justify-self: end; }
+@media (max-width: 640px) { .metric-draft { grid-template-columns: 1fr 1fr 1fr; } .metric-draft .mt { grid-column: 1 / -1; } }
