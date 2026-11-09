@@ -82,7 +82,10 @@ Every file is checked for viruses before anyone can download it, and stays priva
 Viewers read and comment. Editors also add and change work. Admins also invite people and change settings.
 
 ### How do I invite someone?
-Admins go to **People** and choose **Invite people**. The person gets an email with a link.
+Admins go to **People** and choose **Invite people**. The person gets an email with a link. People shows whether each invitation email went out; if one didn't, or it got lost, choose **Resend**.
+
+### Can 1NEON text me?
+Once texts are switched on, yes. Add your mobile number on your profile, agree to texts, save, then type the code 1NEON texts you. Texts only say that something new is waiting, with a link; they never name your organization, projects, or files. Reply STOP to any text to turn them off.
 
 ### Why does it ask me to confirm it's me?
 Inviting people and changing settings need a second check, so a stolen email account isn't enough to make changes. Add a passkey or an authenticator app on your profile, then confirm with it when asked.
