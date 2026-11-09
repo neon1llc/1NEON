@@ -62,6 +62,18 @@ export function smsAfterSave(u: User, phone: string | undefined, consent: boolea
 }
 
 
+/** Text codes count as a second step only while turned on and the verified number can get texts */
+export function smsFactorOn(u: User) {
+  return Boolean(u.smsFactorAt) && smsReady(u);
+}
+
+
+/** The text that confirms it's you for admin actions */
+export function confirmText(code: string) {
+  return `1NEON code to confirm it's you: ${code}. It expires in 10 minutes. If you didn't ask for it, change your sign-in methods at neon1.tech/1NEON/me. Reply STOP to opt out.`;
+}
+
+
 /** The only notice text: no client, project, or file names; the portal shows the detail after sign-in */
 export function textNotice(publicUrl: string) {
   return `1NEON: there's something new for you. See it at ${publicUrl.replace(/^https?:\/\//, "")}/1NEON after you sign in. Reply STOP to opt out, HELP for help.`;

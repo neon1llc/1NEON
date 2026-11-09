@@ -107,6 +107,9 @@ export const User = z.object({
   smsVerifiedAt: isoDate.optional(),
   // Set when the carrier reports a STOP from this number; agreeing again clears it
   smsOptedOutAt: isoDate.optional(),
+  // When text-message codes were turned on as a way to confirm it's you. They count only while the
+  // verified number above is ready for texts (sms.ts smsFactorOn), so a new number switches them off
+  smsFactorAt: isoDate.optional(),
   ...versioned,
 });
 export type User = z.infer<typeof User>;

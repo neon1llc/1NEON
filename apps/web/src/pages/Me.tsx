@@ -89,6 +89,17 @@ export function MePage() {
       toast(e instanceof DOMException ? "The passkey wasn't made. Try again when you're ready." : problem(e));
     }
   };
+  // Text codes: on once the number is proved; off needs a confirmed session (the API asks)
+  const textFactor = async (on: boolean) => {
+    if (!on && !confirm("Stop using text codes to confirm it's you?")) return;
+    try {
+      await api("/me/text-factor", { method: on ? "POST" : "DELETE", body: on ? {} : undefined });
+      toast(on ? "Text codes are on. Use one whenever 1NEON asks you to confirm it's you." : "Text codes are off.");
+      qc.invalidateQueries({ queryKey: ["me"] });
+    } catch (e) {
+      toast(problem(e));
+    }
+  };
   // Remove the authenticator app (the API asks to confirm first when needed)
   const removeTotp = async () => {
     if (!confirm("Remove the authenticator app from your account?")) return;
@@ -193,10 +204,10 @@ export function MePage() {
             </tbody>
           </table>
         </div>
-        {/* Strong sign-in status: admins need it for people and settings */}
-        <div className="card small security" data-tour="passkey">
-          <b>Sign-in security</b>
-          <span className="muted">Inviting people and changing settings need a second check: a passkey or an authenticator app. Set up both if you like.</span>
+        {/* Two-step verification: any one of these confirms it's you before admin actions */}
+        <div className="card small security" data-tour="passkey" id="security">
+          <b>Two-step verification</b>
+          <span className="muted">Inviting people, changing access, and changing settings ask you to confirm it's you. Any one of these works; a second is a backup if you lose the first.</span>
           <ul className="factors">
             <li>
               <span><b>Passkey</b><br /><span className="muted">Your face, fingerprint, or device PIN. Works on iPhone, Android, Mac, and Windows.</span></span>
@@ -209,6 +220,18 @@ export function MePage() {
               {me.factors?.totp
                 ? <button className="btn btn-ghost btn-sm" type="button" onClick={() => void removeTotp()}>Remove</button>
                 : <button className="btn btn-ghost btn-sm" type="button" onClick={() => setTotpOpen(true)}>Set up</button>}
+            </li>
+            {/* Text codes go only to the number proved under Notifications, and only once texting is live */}
+            <li>
+              <span><b>Text message</b><br /><span className="muted">
+                {sms === "unavailable" ? "A 6-digit code by text. Available once 1NEON texting is switched on."
+                  : me.factors?.sms || sms === "ready" ? <>A 6-digit code texted to {me.user.phone}.</>
+                  : <>A 6-digit code by text. First <a href="#notifications">confirm your number</a> under Notifications.</>}
+              </span></span>
+              {me.factors?.sms ? <span className="tag client">on</span> : null}
+              {me.factors?.sms
+                ? <button className="btn btn-ghost btn-sm" type="button" onClick={() => void textFactor(false)}>Turn off</button>
+                : <button className="btn btn-ghost btn-sm" type="button" disabled={sms !== "ready"} onClick={() => void textFactor(true)}>Turn on</button>}
             </li>
           </ul>
           <span className="muted">

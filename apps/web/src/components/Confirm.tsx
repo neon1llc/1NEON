@@ -1,5 +1,5 @@
-// apps/web/src/components/Confirm.tsx - "Confirm it's you": a passkey or an authenticator code turns
-// this session into one that can use admin actions. Opens by itself when the API asks for it, and
+// apps/web/src/components/Confirm.tsx - "Confirm it's you": a passkey, an authenticator code, or a
+// texted code turns this session into one that can use admin actions. Opens by itself when the API asks for it, and
 // holds the authenticator app setup used on the profile.
 
 
@@ -35,6 +35,8 @@ export function ConfirmDialog({ me }: { me: Me }) {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  // A texted code: asked for, then typed (its own field, so it never mixes with the app's code)
+  const [texted, setTexted] = useState<string | undefined>(undefined);
   // The API's "needs a confirmed session" answer opens it
   useEffect(() => {
     const show = () => setOpen(true);
@@ -46,6 +48,7 @@ export function ConfirmDialog({ me }: { me: Me }) {
   const finish = () => {
     setOpen(false);
     setCode("");
+    setTexted(undefined);
     qc.invalidateQueries({ queryKey: ["me"] });
     toast("Confirmed. Try that again.");
   };
@@ -69,13 +72,35 @@ export function ConfirmDialog({ me }: { me: Me }) {
     }
     setBusy(false);
   };
+  // Text a code to the verified number
+  const sendText = async () => {
+    setBusy(true);
+    try {
+      await api("/me/confirm/text", { method: "POST", body: {} });
+      setTexted("");
+      toast("Code sent. It's good for 10 minutes.");
+    } catch (e) {
+      toast(problem(e));
+    }
+    setBusy(false);
+  };
+  const byText = async () => {
+    setBusy(true);
+    try {
+      await api("/me/confirm", { method: "POST", body: { code: texted, via: "text" } });
+      finish();
+    } catch (e) {
+      toast(problem(e));
+    }
+    setBusy(false);
+  };
   return (
     <Dialog open={open} onClose={() => setOpen(false)} label="Confirm it's you">
       <p className="eyebrow">One more step</p>
       <h2>Confirm it's you</h2>
-      <p className="muted">Inviting people and changing settings need a second check.</p>
-      {!f?.passkey && !f?.totp && (
-        <p>Add a passkey or an authenticator app on <Link to="/me" onClick={() => setOpen(false)}>your profile</Link> first. It takes a minute.</p>
+      <p className="muted">Inviting people, changing access, and changing settings need a second check.</p>
+      {!f?.passkey && !f?.totp && !f?.sms && (
+        <p>Add a passkey, an authenticator app, or text codes on <Link to="/me" onClick={() => setOpen(false)}>your profile</Link> first. It takes a minute.</p>
       )}
       <div className="form" style={{ gap: 12 }}>
         {f?.passkey && <button className="btn btn-primary" disabled={busy} onClick={() => void byPasskey()}>Use my passkey</button>}
@@ -85,6 +110,15 @@ export function ConfirmDialog({ me }: { me: Me }) {
             <button className="btn btn-ghost" disabled={busy || code.length < 6}>Confirm</button>
           </form>
         )}
+        {f?.sms && (texted === undefined
+          ? <button className="btn btn-ghost" disabled={busy} onClick={() => void sendText()}>Text me a code</button>
+          : (
+            <form className="actions" onSubmit={(e) => { e.preventDefault(); void byText(); }}>
+              <input aria-label="Code from the text" inputMode="numeric" autoComplete="one-time-code" placeholder="Code from the text" value={texted} onChange={(e) => setTexted(cleanCode(e.target.value))} style={{ maxWidth: 180 }} autoFocus />
+              <button className="btn btn-ghost" disabled={busy || texted.length < 6}>Confirm</button>
+              <button className="linkish small" type="button" disabled={busy} onClick={() => void sendText()}>Send another</button>
+            </form>
+          ))}
       </div>
     </Dialog>
   );

@@ -21,7 +21,7 @@ export interface Me {
   // This session signed in with a passkey, so admin actions are open
   strongSession?: boolean;
   // Second steps set up: an authenticator app, a passkey added here, or any (including older ones)
-  factors?: { totp: boolean; passkey: boolean; any: boolean };
+  factors?: { totp: boolean; sms?: boolean; passkey: boolean; any: boolean };
   // Where texts stand, so the profile can say what's next
   sms?: { state: SmsState };
   orgs: OrgSummary[];

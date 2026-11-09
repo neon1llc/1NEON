@@ -124,9 +124,9 @@ export const GUIDES: Record<PageKey, Guide> = {
   },
   me: {
     title: "Your profile",
-    purpose: "Your name, look, passkey, and the tutorial.",
-    howto: ["Add a passkey or an authenticator app, so you can confirm it's you for admin actions.", "Replay the tutorial whenever you like."],
-    tour: [{ at: "passkey", title: "Sign-in security", text: "Add a passkey or an authenticator app. Admins need one to manage people and settings." }],
+    purpose: "Your name, look, notifications, two-step verification, and the tutorial.",
+    howto: ["Choose what reaches you by email or text under Notifications.", "Add a passkey, an authenticator app, or text codes, so you can confirm it's you for admin actions.", "Replay the tutorial whenever you like."],
+    tour: [{ at: "passkey", title: "Two-step verification", text: "Add a passkey, an authenticator app, or text codes. Admins need one to manage people and settings." }],
   },
   all: {
     title: "All clients",

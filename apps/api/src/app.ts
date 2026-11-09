@@ -60,7 +60,7 @@ import { keys, PENDING_TOTP_MS, PENDING_TOTP_TRIES, Repo } from "./store/repo.ts
 import { ConflictError, StoreBusyError, type Row, type WriteOp } from "./store/types.ts";
 import { drainOutbox, outboxForAudit, outboxOp, withTimeout } from "./outbox.ts";
 import { settleFile, unwatchOp, watchOp } from "./files.ts";
-import { accountAllows, isOptOut, CODE_MS, CODE_TRIES, CODES_PER_HOUR, codeText, e164, hashCode, newCode, smsAfterSave, smsState } from "./sms.ts";
+import { accountAllows, isOptOut, CODE_MS, CODE_TRIES, CODES_PER_HOUR, codeText, confirmText, e164, hashCode, newCode, smsAfterSave, smsFactorOn, smsReady, smsState } from "./sms.ts";
 
 
 /** Everything the app needs from outside; tests and local dev pass in-memory versions */
@@ -117,7 +117,7 @@ async function body<S extends z.ZodType>(c: Context, schema: S): Promise<z.infer
 const REASONS = {
   not_member: [404, "not_found", "That organization doesn't exist, or you don't have access to it."],
   forbidden: [403, "forbidden", "Your access level doesn't allow that."],
-  strong_auth_required: [403, "strong_auth_required", "Confirm it's you with your passkey or authenticator app (or set one up on your profile), then try again."],
+  strong_auth_required: [403, "strong_auth_required", "Confirm it's you with your passkey, authenticator app, or a texted code (or set one up on your profile), then try again."],
   read_only_view: [403, "read_only", "All clients is read only. Open the organization to make changes."],
   not_decider: [403, "not_decider", "Only this project's decision maker can approve. An admin can name one on the project."],
   decider_admin_only: [403, "decider_admin_only", "Only an admin of this organization can name or change the decision maker."],
@@ -273,9 +273,11 @@ export function createApp(d: Deps) {
     const { user, jti } = found;
     // The operator role comes from configuration, never from the database, so no data edit can grant it
     const operator = cfg.operatorEmails.includes(user.email);
-    // Strong means this session proved a passkey or authenticator within the step-up window; a failed
-    // lookup throws and fails the request rather than granting anything. Locally the seeded flag stands in
-    const strongSession = cfg.devAuth ? user.strongAuth || operator : await repo.sessionStrong(jti, user.id);
+    // Strong means this session proved a passkey, authenticator, or texted code within the step-up
+    // window; a failed lookup throws and fails the request rather than granting anything. Locally the
+    // seeded flag stands in, unless the caller names a dev session (the browser demo does, to show
+    // "Confirm it's you" for real)
+    const strongSession = cfg.devAuth && !jti ? user.strongAuth || operator : await repo.sessionStrong(jti, user.id);
     c.set("who", { user, actor: { userId: user.id, operator, strongSession }, jti });
     await next();
   });
@@ -287,7 +289,8 @@ export function createApp(d: Deps) {
       if (!email) return undefined;
       const uid = await repo.userIdForEmail(email);
       const user = uid ? await repo.getUser(uid) : undefined;
-      return user && { user };
+      // A dev session ID is optional; without one, session strength comes from the seeded flag
+      return user && { user, jti: c.req.header("x-dev-session") || undefined };
     }
     const ident = d.auth ? await d.auth.identify(c) : undefined;
     if (!ident) return undefined;
@@ -325,11 +328,11 @@ export function createApp(d: Deps) {
     return c.json({
       user,
       operator: actor.operator,
-      // Whether this session is confirmed with a passkey or authenticator, which admin actions need
+      // Whether this session is confirmed with a passkey, authenticator, or texted code, which admin actions need
       strongSession: actor.strongSession,
-      // Which second steps the person has set up: the app's own authenticator is read live, and
-      // passkeys come from the profile's hint (refreshed at each sign-in)
-      factors: { totp, passkey: Boolean(user.passkey), any: totp || Boolean(user.passkey) || user.strongAuth },
+      // Which second steps the person has set up: the app's own authenticator is read live, text codes
+      // from the profile, and passkeys from the profile's hint (refreshed at each sign-in)
+      factors: { totp, sms: smsFactorOn(user), passkey: Boolean(user.passkey), any: totp || smsFactorOn(user) || Boolean(user.passkey) || user.strongAuth },
       // Where texts stand: unavailable (no sending number yet), no number, not agreed, opted out, unverified, or ready
       sms: { state: smsState(user, Boolean(d.texter)) },
       orgs: tenants
@@ -341,9 +344,13 @@ export function createApp(d: Deps) {
 
   // People edit only their own profile; operator and strong sign-in can't be set here
   app.patch("/me", async (c) => {
-    const { user } = who(c);
+    const { user, actor } = who(c);
     const input = await body(c, UpdateMeInput);
     const { version, smsConsent, ...patch } = input;
+    // With text codes on, a new number or a no to texts would switch off a second step; like any
+    // factor change, that needs a confirmed session, so an email-only session can't swap in its own
+    const offNumber = patch.phone !== undefined && e164(patch.phone) !== e164(user.phone);
+    if (smsFactorOn(user) && (offNumber || smsConsent === false) && !actor.strongSession) fail(403, "strong_auth_required", "Text codes are on for this number. Confirm it's you before changing it or turning texts off.");
     // Agreeing to texts is recorded with its time and wording version, as carriers expect. A new
     // number clears consent and verification, so nothing goes to it until its holder proves it
     const sms = smsAfterSave(user, patch.phone, smsConsent);
@@ -363,7 +370,18 @@ export function createApp(d: Deps) {
     const to = e164(user.phone);
     if (!to) fail(400, "no_number", "Add a mobile number to your profile first.");
     if (!user.smsConsentAt) fail(400, "not_agreed", "Agree to texts on your profile first.");
-    const k = { PK: `USER#${user.id}`, SK: "SMSVERIFY" };
+    await textCode(user, "SMSVERIFY", to, codeText);
+    return c.json({ ok: true });
+  });
+
+  /**
+   * Text one code to a number and keep only its hash under this person's key, with the hourly limit
+   * per person and the account's daily budget. Shared by number checks and confirming it's you
+   */
+  async function textCode(user: User, sk: string, to: string, words: (code: string) => string) {
+    const texter = d.texter;
+    if (!texter) fail(503, "texts_unavailable", "Texts aren't available yet. Email notices still work.");
+    const k = { PK: `USER#${user.id}`, SK: sk };
     const prev = await repo.table.get(k.PK, k.SK);
     const recent = ((prev?.sentAt as string[] | undefined) ?? []).filter((t) => Date.now() - Date.parse(t) < 3600_000);
     if (recent.length >= CODES_PER_HOUR) fail(429, "too_many_codes", "Too many codes this hour. Try again later.");
@@ -374,13 +392,12 @@ export function createApp(d: Deps) {
     await repo.table.write([{ put: { ...k, hash, phone: to, expiresAt: new Date(Date.now() + CODE_MS).toISOString(), attempts: 0, sentAt: [...recent, at], version, ttl: Math.floor(Date.now() / 1000) + 3600 }, guard: prev ? { version: Number(prev.version) } : { create: true } }]);
     // The person waits for this one, so it gets the same time limit as queued sends
     try {
-      await withTimeout(d.texter.send(to, codeText(code)), 5_000);
+      await withTimeout(texter.send(to, words(code)), 5_000);
     } catch (e) {
       if (isOptOut(e)) fail(409, "carrier_opted_out", "This number replied STOP earlier. Text START to the number 1NEON texts come from, then ask for a code again.");
       throw e;
     }
-    return c.json({ ok: true });
-  });
+  }
 
   // Check the code; a match at the same number marks it verified
   app.post("/me/phone/confirm", async (c) => {
@@ -416,7 +433,7 @@ export function createApp(d: Deps) {
   }
 
   // --- Sign-in methods ------------------------------------------------------
-  // Rule for every add, replace, or remove: an account that already has a passkey or authenticator
+  // Rule for every add, replace, or remove: an account that already has a passkey, authenticator, or text codes
   // (or whose methods we can't check right now) needs this session to have proved one recently.
   // Only a genuinely unenrolled account, such as a new invitee, may add its first from an email session
 
@@ -428,7 +445,7 @@ export function createApp(d: Deps) {
     const { user, actor } = who(c);
     const inv = await factorInventory(repo, d.directory, user, tokenOf(c));
     if (inv.any === "unknown" && !actor.strongSession) fail(503, "factors_unknown", "We couldn't check your sign-in methods just now. Confirm it's you, or try again in a minute.");
-    if (inv.any === true && !actor.strongSession) fail(403, "strong_auth_required", "Confirm it's you with a passkey or authenticator you already have, then try again.");
+    if (inv.any === true && !actor.strongSession) fail(403, "strong_auth_required", "Confirm it's you with a passkey, authenticator app, or text code you already have, then try again.");
     return inv;
   }
 
@@ -523,7 +540,7 @@ export function createApp(d: Deps) {
         if (jti) await repo.saveSession(jti, user.id, true);
         if (replaced) await factorChanged(c, "totp.replaced", "The authenticator app was replaced");
         else await repo.securityEvent(user.id, "totp.added", "An authenticator app was added");
-        await refreshEnrolled(user, { totp: true, passkey: user.passkey ?? "unknown", cognitoTotp: "unknown", any: true }).catch(() => undefined);
+        await refreshEnrolled(user, { totp: true, sms: smsFactorOn(user), passkey: user.passkey ?? "unknown", cognitoTotp: "unknown", any: true }).catch(() => undefined);
         await notice(user, replaced ? factorRemovedEmail({ url: `${cfg.publicUrl}/1NEON/me`, what: "Your authenticator app", how: "replaced" }) : passkeyEmail({ url: `${cfg.publicUrl}/1NEON/me`, what: "An authenticator app" }));
         return c.json({ ok: true });
       } catch (e) {
@@ -535,11 +552,58 @@ export function createApp(d: Deps) {
     fail(429, "busy", "Too many tries at once. Wait a moment and try again.");
   });
 
-  // Confirm it's you with an authenticator code: this session can then use admin actions.
-  // Five wrong codes lock it for 15 minutes, and a code can't be used twice
+  // Text-message codes: a code texted to the verified number confirms it's you, with the same standing
+  // as a passkey or authenticator app. Turning them on follows the rule above; the number must
+  // already be proved with a texted code, so nobody can point them at a number they don't hold
+  app.post("/me/text-factor", async (c) => {
+    const { user } = who(c);
+    if (!d.texter) fail(503, "texts_unavailable", "Texts aren't available yet. Email notices still work.");
+    if (!smsReady(user)) fail(409, "number_unverified", "Confirm your number with a texted code first, under Notifications.");
+    if (smsFactorOn(user)) return c.json({ ok: true });
+    await mayChangeFactors(c);
+    const fresh = (await repo.getUser(user.id))!;
+    await repo.saveUser({ ...fresh, smsFactorAt: now(), strongAuth: true, version: fresh.version + 1, updatedAt: now(), updatedBy: user.id }, fresh.version);
+    await repo.securityEvent(user.id, "sms.added", "Text-message codes were turned on");
+    await notice(user, passkeyEmail({ url: `${cfg.publicUrl}/1NEON/me`, what: "Text-message confirmation" }));
+    return c.json({ ok: true });
+  });
+
+  // Turn text codes off; needs a confirmed session, and other sessions lose their confirmation
+  app.delete("/me/text-factor", async (c) => {
+    const { user, actor } = who(c);
+    if (!actor.strongSession) fail(403, "strong_auth_required", "Confirm it's you first.");
+    const fresh = (await repo.getUser(user.id))!;
+    await repo.saveUser({ ...fresh, smsFactorAt: undefined, version: fresh.version + 1, updatedAt: now(), updatedBy: user.id }, fresh.version);
+    await factorChanged(c, "sms.removed", "Text-message codes were turned off");
+    const after = (await repo.getUser(user.id))!;
+    await refreshEnrolled(after, await factorInventory(repo, d.directory, after, tokenOf(c))).catch(() => undefined);
+    await notice(user, factorRemovedEmail({ url: `${cfg.publicUrl}/1NEON/me`, what: "Text-message confirmation", how: "removed" }));
+    return c.json({ ok: true });
+  });
+
+  // Text a code to confirm it's you
+  app.post("/me/confirm/text", async (c) => {
+    const { user } = who(c);
+    if (!smsFactorOn(user)) fail(409, "no_text_factor", "Turn on text codes on your profile first.");
+    await textCode(user, "SMSCONFIRM", user.smsPhone!, confirmText);
+    return c.json({ ok: true });
+  });
+
+  // Confirm it's you with an authenticator code, or with a texted code (via: "text"): this session
+  // can then use admin actions. Five wrong app codes lock it for 15 minutes, and a code can't be used
+  // twice; a texted code has five tries and ten minutes, and is used up by a match
   app.post("/me/confirm", async (c) => {
     const { user, jti } = who(c);
-    const { code } = await body(c, z.object({ code: z.string().min(6).max(12) }));
+    const { code, via } = await body(c, z.object({ code: z.string().min(6).max(12), via: z.enum(["app", "text"]).default("app") }));
+    if (via === "text") {
+      if (!smsFactorOn(user)) fail(409, "no_text_factor", "Turn on text codes on your profile first.");
+      const k = { PK: `USER#${user.id}`, SK: "SMSCONFIRM" };
+      const row = await countPhoneTry(k);
+      if (row.hash !== (await hashCode(user.id, code)) || row.phone !== user.smsPhone) fail(400, "wrong_code", "That code didn't match. Check the newest text.");
+      await repo.table.write([{ delete: k }]);
+      if (jti) await repo.saveSession(jti, user.id, true);
+      return c.json({ ok: true });
+    }
     const verdict = await useTotpCode(user.id, code);
     if (verdict === "none") fail(409, "no_totp", "Set up an authenticator app on your profile first.");
     if (verdict === "locked") fail(429, "locked", "Too many wrong codes. Try again in 15 minutes.");

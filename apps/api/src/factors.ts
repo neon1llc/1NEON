@@ -1,9 +1,10 @@
 // apps/api/src/factors.ts - Which strong sign-in methods an account has enrolled. This answers "does
-// this person have a passkey or authenticator?", never "did this session prove one?" (that is the
+// this person have a passkey, authenticator, or text codes?", never "did this session prove one?" (that is the
 // session's own assurance, in repo.sessionStrong).
 
 
 import type { User } from "@1neon/domain";
+import { smsFactorOn } from "./sms.ts";
 import type { Directory } from "./services.ts";
 import type { Repo } from "./store/repo.ts";
 
@@ -16,6 +17,8 @@ export type Known = boolean | "unknown";
 export interface FactorInventory {
   // The authenticator app that 1NEON itself checks (its seed lives in our table)
   totp: boolean;
+  // Codes texted to the verified number, when turned on
+  sms: boolean;
   // Passkeys and Cognito's own authenticator setting
   passkey: Known;
   cognitoTotp: Known;
@@ -31,9 +34,10 @@ export interface FactorInventory {
  */
 export async function factorInventory(repo: Repo, directory: Directory, user: User, accessToken: string): Promise<FactorInventory> {
   const totp = Boolean((await repo.getTotp(user.id))?.confirmed);
+  const sms = smsFactorOn(user);
   const cognito = await directory.factors(accessToken).catch(() => undefined);
   const passkey: Known = cognito ? cognito.passkeys > 0 : user.passkey ? true : "unknown";
   const cognitoTotp: Known = cognito ? cognito.totp : "unknown";
-  const any: Known = totp || passkey === true || cognitoTotp === true ? true : passkey === "unknown" || cognitoTotp === "unknown" ? "unknown" : false;
-  return { totp, passkey, cognitoTotp, any };
+  const any: Known = totp || sms || passkey === true || cognitoTotp === true ? true : passkey === "unknown" || cognitoTotp === "unknown" ? "unknown" : false;
+  return { totp, sms, passkey, cognitoTotp, any };
 }

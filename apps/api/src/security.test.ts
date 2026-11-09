@@ -24,6 +24,7 @@ let repo: Repo;
 let table: MemoryTable;
 let directory: MemoryDirectory;
 let mailer: MemoryMailer;
+let texter: MemoryTexter;
 let app: ReturnType<typeof createApp>;
 let s: Awaited<ReturnType<typeof seed>>;
 
@@ -42,6 +43,7 @@ beforeEach(async () => {
   s = await seed(repo, OP);
   directory = new MemoryDirectory();
   mailer = new MemoryMailer();
+  texter = new MemoryTexter();
   const auth = {
     identify: async (c: { req: { header(n: string): string | undefined } }) => {
       const session = c.req.header("x-test-session");
@@ -59,7 +61,7 @@ beforeEach(async () => {
     repo,
     directory,
     mailer,
-    texter: new MemoryTexter(),
+    texter,
     storage: new MemoryStorage(),
     auth: auth as never,
   });
@@ -272,5 +274,59 @@ describe("sign-in method lifecycle", () => {
     expect((await call(b, "GET", "/me")).json.strongSession).toBe(false);
     await call(a, "POST", "/auth/logout", {});
     expect(await repo.sessionStrong("j-a", s.raj.id)).toBe(false);
+  });
+});
+
+
+// Text-message codes as a second step, with the same standing as a passkey or authenticator app
+describe("text codes to confirm it's you", () => {
+  /** The six-digit code in the latest text */
+  const lastCode = () => /(\d{6})/.exec(texter.sent.at(-1)!.body)![1]!;
+  /** Agree to texts and prove the number, as the profile does */
+  async function verifyNumber(sess: { email: string; jti: string }) {
+    const me = await call(sess, "GET", "/me");
+    const saved = await call(sess, "PATCH", "/me", { version: me.json.user.version, phone: "(555) 010-2030", smsConsent: true });
+    expect(saved.status).toBe(200);
+    expect((await call(sess, "POST", "/me/phone/verify", {})).status).toBe(200);
+    expect((await call(sess, "POST", "/me/phone/confirm", { code: lastCode() })).status).toBe(200);
+  }
+
+  it("turns on for a proved number, confirms a session, and needs a confirmed session to turn off", async () => {
+    const dana = await signIn(s.dana.email, "j-dana");
+    // Not before the number is proved
+    expect((await call(dana, "POST", "/me/text-factor", {})).status).toBe(409);
+    await verifyNumber(dana);
+    // A first second step may come from an email session, like a new invitee's first passkey
+    expect((await call(dana, "POST", "/me/text-factor", {})).status).toBe(200);
+    expect((await call(dana, "GET", "/me")).json.factors.sms).toBe(true);
+    expect(mailer.sent.at(-1)!.subject).toMatch(/Text-message confirmation was added/);
+    // With text codes on, an email session can't change the number or say no to texts
+    const me = (await call(dana, "GET", "/me")).json.user;
+    expect((await call(dana, "PATCH", "/me", { version: me.version, phone: "(555) 010-9999" })).status).toBe(403);
+    expect((await call(dana, "PATCH", "/me", { version: me.version, smsConsent: false })).status).toBe(403);
+    // A wrong texted code doesn't confirm; the right one does, once
+    expect((await call(dana, "POST", "/me/confirm/text", {})).status).toBe(200);
+    const code = lastCode();
+    expect(texter.sent.at(-1)!.body).toMatch(/confirm it's you/);
+    expect((await call(dana, "POST", "/me/confirm", { via: "text", code: code === "000000" ? "111111" : "000000" })).status).toBe(400);
+    expect(await repo.sessionStrong("j-dana", s.dana.id)).toBe(false);
+    expect((await call(dana, "POST", "/me/confirm", { via: "text", code })).status).toBe(200);
+    expect(await repo.sessionStrong("j-dana", s.dana.id)).toBe(true);
+    expect((await call(dana, "POST", "/me/confirm", { via: "text", code })).status).toBe(409);
+    // Another, unconfirmed session can't turn them off; the confirmed one can, and mail says so
+    const other = await signIn(s.dana.email, "j-dana-2");
+    expect((await call(other, "DELETE", "/me/text-factor")).status).toBe(403);
+    expect((await call(dana, "DELETE", "/me/text-factor")).status).toBe(200);
+    expect((await call(dana, "GET", "/me")).json.factors.sms).toBe(false);
+    expect(mailer.sent.at(-1)!.subject).toMatch(/Text-message confirmation was removed/);
+  });
+
+  it("won't add text codes from an email session when another second step exists", async () => {
+    await enrollTotp(s.raj.id);
+    const weak = await signIn(s.raj.email, "j-raj-weak");
+    await verifyNumber(weak);
+    expect((await call(weak, "POST", "/me/text-factor", {})).status).toBe(403);
+    expect((await call(weak, "POST", "/me/confirm", { code: codeFor(SEED, 1) })).status).toBe(200);
+    expect((await call(weak, "POST", "/me/text-factor", {})).status).toBe(200);
   });
 });
