@@ -3,13 +3,18 @@
    windows the short demos use. Dark and green like the site, so it never reads as part of the portal. */
 
 
-/* --- Tokens for the live layer ------------------------------------------------- */
+/* --- Tokens for the live layer -------------------------------------------------
+   Its z-indexes sit at the very top of the range, above the portal's tour (driver.js), so the
+   cursor, thoughts, and controls are never dimmed under anything the story opens */
 :root { --live-bg: #0d0208; --live-ink: #d8f5e1; --live-hi: #9AFF9A; --live-glow: #6cffa8; --live-dim: #a3c2aa; --live-line: rgba(108, 255, 168, .35); --demo-h: 76px; }
 
 
 /* --- The bar: content centered as one group, top to bottom --------------------- */
-.live-bar { position: fixed; inset: 0 0 auto 0; z-index: 60; height: var(--demo-h); box-sizing: border-box; display: flex; align-items: center; background: var(--live-bg); color: var(--live-ink); border-bottom: 1px solid rgba(0, 255, 65, .3); font: 12px var(--mono); }
+.live-bar { position: fixed; inset: 0 0 auto 0; z-index: 2147483640; height: var(--demo-h); box-sizing: border-box; display: flex; align-items: center; background: var(--live-bg); color: var(--live-ink); border-bottom: 1px solid rgba(0, 255, 65, .3); font: 12px var(--mono); }
 .live-inner { position: static; width: 100%; max-width: 1100px; margin: 0 auto; padding: 0 16px; box-sizing: border-box; }
+
+/* The tour turns off pointers everywhere but its own popover; the controls stay usable during it */
+.driver-active .live-bar, .driver-active .live-bar *, .driver-active .live-list, .driver-active .live-list *, .driver-active .live-shield { pointer-events: auto; }
 
 /* Where the story is: one segment per section */
 .live-line { display: flex; gap: 3px; height: 3px; margin-bottom: 9px; background: none; border-radius: 0; overflow: visible; }
@@ -83,12 +88,12 @@ body:has(.live-bar) .top { top: var(--demo-h); }
 body:has(.live-bar) .signin { padding-top: var(--demo-h); }
 body:has(.live-bar) #root { cursor: default; }
 /* While playing, the portal takes no clicks; no hint follows the mouse around */
-.live-shield { position: fixed; inset: var(--demo-h) 0 0 0; z-index: 59; cursor: default; }
+.live-shield { position: fixed; inset: var(--demo-h) 0 0 0; z-index: 2147483639; cursor: default; }
 
 
 /* --- The cursor: under the bar and its menus, over the portal (the layers below share 54 to 58) */
 /* --- The cursor ---------------------------------------------------------------- */
-.live-cursor { position: fixed; left: 0; top: 0; z-index: 58; width: 26px; height: 26px; pointer-events: none; transition: opacity .3s; will-change: transform; }
+.live-cursor { position: fixed; left: 0; top: 0; z-index: 2147483638; width: 26px; height: 26px; pointer-events: none; transition: opacity .3s; will-change: transform; }
 .live-cursor svg { position: absolute; left: -3px; top: -2px; width: 26px; height: 26px; display: none; fill: #fff; stroke: var(--live-bg); stroke-width: 1.4; stroke-linejoin: round; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); }
 .live-cursor .c-hand, .live-cursor .c-grab { left: -9px; top: -3px; }
 .live-cursor .c-beam { left: -12px; top: -12px; fill: none; stroke: var(--live-bg); stroke-width: 1.6; filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff); }
@@ -100,7 +105,7 @@ body:has(.live-bar) #root { cursor: default; }
 
 
 /* --- Maria's thoughts: a bubble below and right of the cursor, two small circles leading back to it */
-.live-think { position: fixed; left: 0; top: 0; z-index: 57; max-width: min(270px, calc(100vw - 20px)); box-sizing: border-box; padding: 8px 12px 9px; border-radius: 14px; background: rgba(13, 2, 8, .94); color: #eafff0; border: 1px solid var(--live-line); box-shadow: 0 10px 28px rgba(0, 0, 0, .28), 0 0 0 1px rgba(0, 0, 0, .2); font: 13.5px/1.4 var(--sans, system-ui); pointer-events: none; opacity: 0; transition: opacity .25s ease; will-change: transform; }
+.live-think { position: fixed; left: 0; top: 0; z-index: 2147483637; max-width: min(270px, calc(100vw - 20px)); box-sizing: border-box; padding: 8px 12px 9px; border-radius: 14px; background: rgba(13, 2, 8, .94); color: #eafff0; border: 1px solid var(--live-line); box-shadow: 0 10px 28px rgba(0, 0, 0, .28), 0 0 0 1px rgba(0, 0, 0, .2); font: 13.5px/1.4 var(--sans, system-ui); pointer-events: none; opacity: 0; transition: opacity .25s ease; will-change: transform; }
 .live-think.on { opacity: 1; }
 .live-think.gone { opacity: 0; }
 .live-think .who { display: block; margin-bottom: 1px; color: var(--live-hi); font: 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
@@ -127,21 +132,116 @@ body:has(.live-bar) #root { cursor: default; }
 
 /* --- Dragging ------------------------------------------------------------------ */
 .live-lifted { opacity: .35; }
-.live-ghost { position: fixed; z-index: 55; pointer-events: none; margin: 0; box-shadow: 0 18px 40px rgba(0, 0, 0, .25); }
+.live-ghost { position: fixed; z-index: 2147483635; pointer-events: none; margin: 0; box-shadow: 0 18px 40px rgba(0, 0, 0, .25); }
 .live-target { outline: 2px dashed var(--accent); outline-offset: 2px; background: var(--accent-soft); }
-.live-desk-file { position: fixed; left: 18px; bottom: 90px; z-index: 54; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line-strong); box-shadow: 0 10px 24px rgba(0, 0, 0, .18); font: 13px var(--mono); animation: rise .3s ease both; }
+.live-desk-file { position: fixed; left: 18px; bottom: 90px; z-index: 2147483634; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line-strong); box-shadow: 0 10px 24px rgba(0, 0, 0, .18); font: 13px var(--mono); animation: rise .3s ease both; }
 .live-desk-file::before { content: ""; width: 18px; height: 22px; border-radius: 3px; background: linear-gradient(135deg, var(--accent) 0 30%, var(--accent-soft) 30%); }
 
 
 /* --- A note from the other side (Pradeep, in his own browser), by the bell ------------ */
-.live-pop { position: fixed; right: 20px; top: calc(var(--demo-h) + 70px); z-index: 56; max-width: min(320px, calc(100vw - 40px)); padding: 10px 14px; border-radius: 10px; background: var(--live-bg); border: 1px solid var(--live-line); box-shadow: 0 12px 28px rgba(0, 0, 0, .25); font: 13px var(--mono); color: var(--live-ink); animation: pop-in 3.6s ease both; }
+.live-pop { position: fixed; right: 20px; top: calc(var(--demo-h) + 70px); z-index: 2147483636; max-width: min(320px, calc(100vw - 40px)); padding: 10px 14px; border-radius: 10px; background: var(--live-bg); border: 1px solid var(--live-line); box-shadow: 0 12px 28px rgba(0, 0, 0, .25); font: 13px var(--mono); color: var(--live-ink); animation: pop-in 3.6s ease both; }
 .live-pop::before { content: "● "; color: var(--live-glow); }
 @keyframes pop-in { 0% { opacity: 0; transform: translateY(-6px); } 8%, 88% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+
+
+/* --- Dialogs, as plain dialogs drawn like modals (player.ts), under the live layer ------------
+   :where() keeps the placement below the portal's own dialog rules, so the help sheet and the
+   palette keep their shapes; a wide shadow stands in for the backdrop */
+:where(dialog.live-modal) { position: fixed; inset-block: var(--demo-h) 0; z-index: 2147483630; max-height: calc(100% - var(--demo-h) - 2em); overflow: auto; }
+dialog.live-modal { box-shadow: 0 24px 64px rgba(0, 0, 0, .25), 0 0 0 100vmax rgba(13, 2, 8, .45); }
+@media (min-width: 641px) { dialog.sheet.live-modal { height: auto; max-height: none; } }
+
+/* --- The short demos' pretend world: Maria's mail, her phone, and the passkey prompt ------
+   Neutral and light, like the apps they stand for, so they never read as part of 1NEON. Above
+   the portal, below the cursor and her thoughts; each slides in with .on */
+.live-prop { --p-ink: #1f2328; --p-dim: #59636e; --p-line: #d1d9e0; --p-soft: #f6f8fa; --p-hi: #0969da; color: var(--p-ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; opacity: 0; transition: opacity .25s ease, transform .3s ease; }
+.live-prop.on { opacity: 1; transform: none; }
+.live-prop button { font: inherit; cursor: pointer; }
+
+/* Mail: the list on the left, the open message on the right */
+.live-mail { position: fixed; z-index: 2147483632; top: calc(var(--demo-h) + 18px); bottom: 18px; left: 50%; width: min(980px, calc(100vw - 36px)); translate: -50% 0; transform: translateY(14px); display: flex; flex-direction: column; background: #fff; border: 1px solid var(--p-line); border-radius: 12px; box-shadow: 0 24px 60px rgba(0, 0, 0, .28); overflow: hidden; }
+.mail-top { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--p-soft); border-bottom: 1px solid var(--p-line); }
+.mail-dots { display: inline-flex; gap: 6px; }
+.mail-dots i { width: 11px; height: 11px; border-radius: 50%; background: #ff5f57; }
+.mail-dots i:nth-child(2) { background: #febc2e; }
+.mail-dots i:nth-child(3) { background: #28c840; }
+.mail-me { margin-left: auto; color: var(--p-dim); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-cols { flex: 1; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr); }
+.live-mail aside { border-right: 1px solid var(--p-line); overflow: auto; }
+.mail-h { margin: 0; padding: 12px 14px 8px; font-weight: 700; font-size: 13px; color: var(--p-dim); }
+.live-mail ul { list-style: none; margin: 0; padding: 0; }
+.mail-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 8px; padding: 10px 14px; border-bottom: 1px solid #eaeef2; cursor: pointer; }
+.mail-row:hover { background: var(--p-soft); }
+.mail-row.on { background: #ddf4ff; }
+.mail-from { font-weight: 600; }
+.mail-when { color: var(--p-dim); font-size: 12px; }
+.mail-subj, .mail-prev { grid-column: 1 / -1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-prev { color: var(--p-dim); font-size: 13px; }
+.mail-row.unread .mail-subj { font-weight: 700; }
+.mail-row.unread .mail-from::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--p-hi); vertical-align: 1px; }
+.mail-read { overflow: auto; background: #fff; }
+.mail-empty { display: grid; place-items: center; height: 100%; color: var(--p-dim); }
+.mail-head { padding: 16px 22px 10px; border-bottom: 1px solid #eaeef2; }
+.mail-head h3 { margin: 0 0 8px; font-size: 18px; }
+.mail-head p { margin: 0; font-size: 13px; color: var(--p-dim); }
+.mail-head b { color: var(--p-ink); }
+.mail-body { padding: 8px 0 24px; }
+
+/* The phone: at the side of the screen */
+.live-phone { position: fixed; z-index: 2147483632; right: 28px; bottom: 22px; width: 250px; height: min(500px, calc(100vh - var(--demo-h) - 44px)); box-sizing: border-box; padding: 12px; border-radius: 38px; background: #16181d; box-shadow: 0 24px 60px rgba(0, 0, 0, .35), inset 0 0 0 2px #2c3038; transform: translateY(30px); }
+.ph-notch { position: absolute; left: 50%; top: 18px; width: 70px; height: 18px; translate: -50% 0; border-radius: 99px; background: #000; z-index: 1; }
+.ph-screen { height: 100%; border-radius: 28px; background: #fff; overflow: hidden; }
+.ph-app { height: 100%; display: flex; flex-direction: column; padding: 46px 14px 14px; box-sizing: border-box; }
+.ph-title { margin: 0 0 12px; font-size: 20px; font-weight: 700; }
+.ph-title.ph-thread { font-size: 14px; text-align: center; color: var(--p-dim); font-weight: 600; padding-bottom: 10px; border-bottom: 1px solid #eaeef2; }
+.ph-empty { flex: 1; display: grid; place-content: center; gap: 14px; text-align: center; color: var(--p-dim); }
+.ph-btn { padding: 10px 16px; border: 0; border-radius: 99px; background: var(--p-hi); color: #fff; font-weight: 600; }
+.ph-acct { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 12px 0; border-bottom: 1px solid #eaeef2; }
+.ph-iss { font-weight: 700; }
+.ph-lbl { grid-column: 1; color: var(--p-dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ph-code { grid-column: 1; font: 600 30px/1.2 ui-monospace, Menlo, monospace; letter-spacing: .04em; color: var(--p-hi); }
+/* The ring that empties as the code's 30 seconds run out */
+.ph-ring { grid-column: 2; grid-row: 1 / span 3; width: 22px; height: 22px; border-radius: 50%; background: conic-gradient(var(--p-hi) calc(var(--left, 1) * 360deg), #eaeef2 0); }
+.ph-msgs { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; overflow: hidden; }
+.ph-msg { align-self: flex-start; max-width: 88%; margin: 0; padding: 8px 11px; border-radius: 16px 16px 16px 4px; background: #e9e9eb; font-size: 13px; line-height: 1.35; animation: rise .3s ease both; }
+.ph-cam { height: 100%; display: grid; place-content: center; gap: 16px; background: #0b0b0d; color: #fff; text-align: center; font-size: 13px; }
+.ph-frame { position: relative; width: 150px; height: 150px; margin: 0 auto; }
+.ph-frame i { position: absolute; width: 26px; height: 26px; border: 3px solid #ffd60a; }
+.ph-frame i:nth-child(1) { left: 0; top: 0; border-right: 0; border-bottom: 0; border-radius: 8px 0 0 0; }
+.ph-frame i:nth-child(2) { right: 0; top: 0; border-left: 0; border-bottom: 0; border-radius: 0 8px 0 0; }
+.ph-frame i:nth-child(3) { left: 0; bottom: 0; border-right: 0; border-top: 0; border-radius: 0 0 0 8px; }
+.ph-frame i:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; border-radius: 0 0 8px 0; }
+
+/* The browser's passkey prompt: a small sheet at the top, as browsers draw it */
+.live-sheet { position: fixed; inset: var(--demo-h) 0 0 0; z-index: 2147483633; display: grid; justify-items: center; align-items: start; padding-top: 18px; background: rgba(0, 0, 0, .18); }
+.sh-card { width: min(360px, calc(100vw - 32px)); box-sizing: border-box; padding: 20px 20px 16px; border-radius: 14px; background: #fff; box-shadow: 0 24px 60px rgba(0, 0, 0, .3); text-align: center; transform: translateY(-10px); transition: transform .25s ease; }
+.live-sheet.on .sh-card { transform: none; }
+.sh-key { width: 40px; height: 40px; fill: none; stroke: var(--p-hi); stroke-width: 1.6; stroke-linecap: round; }
+.sh-h { margin: 8px 0 2px; font-weight: 700; font-size: 16px; }
+.sh-who { margin: 0 0 8px; color: var(--p-dim); font-size: 13px; }
+.sh-note { margin: 0 0 16px; font-size: 13px; }
+.sh-acts { display: flex; justify-content: flex-end; gap: 8px; }
+.sh-acts button { padding: 8px 16px; border-radius: 8px; border: 1px solid var(--p-line); background: #fff; color: var(--p-ink); }
+.sh-acts .sh-yes { border-color: var(--p-hi); background: var(--p-hi); color: #fff; font-weight: 600; }
+
+/* Phones: the mail app shows the list or the message, and the phone is a shorter card at the bottom */
+@media (max-width: 640px) {
+  .live-mail { top: calc(var(--demo-h) + 8px); bottom: 8px; width: calc(100vw - 16px); border-radius: 10px; }
+  .mail-cols { grid-template-columns: minmax(0, 1fr); }
+  .live-mail.reading aside, .live-mail:not(.reading) .mail-read { display: none; }
+  .mail-me { display: none; }
+  .mail-head { padding: 12px 14px 8px; }
+  .mail-head h3 { font-size: 16px; }
+  .live-phone { right: 50%; translate: 50% 0; bottom: 10px; width: min(250px, calc(100vw - 40px)); height: min(330px, 46vh); border-radius: 30px; padding: 9px; }
+  .ph-screen { border-radius: 22px; }
+  .ph-app { padding-top: 38px; }
+}
 
 
 /* --- Reduced motion: no unrolling, sliding, or fading ------------------------------ */
 @media (prefers-reduced-motion: reduce) {
   .live-list, .live-list.open { transition: none; }
   .live-line i, .live-caret, .live-think, .live-cursor { transition: none; }
-  .live-think.fresh .txt, .live-pop, .live-desk-file, .live-speed-pop { animation: none; }
+  .live-think.fresh .txt, .live-pop, .live-desk-file, .live-speed-pop, .ph-msg { animation: none; }
+  .live-prop, .sh-card { transition: none; transform: none; }
 }

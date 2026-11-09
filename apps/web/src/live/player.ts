@@ -84,6 +84,35 @@ export function find(t: Target): HTMLElement | undefined {
 }
 
 
+// --- Dialogs, drawn under the playback's own layer ------------------------------------
+// A native modal dialog sits in the browser's top layer, above anything a z-index can lift, and makes
+// the rest of the page inert, the controls included. Here a dialog opens as a plain one drawn like a
+// modal (live.css .live-modal), so the cursor, Maria's thoughts, her phone, the passkey prompt, and
+// the controls stay above it and usable. Escape and a tap outside still close it.
+HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+  this.classList.add("live-modal");
+  this.addEventListener("close", () => this.classList.remove("live-modal"), { once: true });
+  this.show();
+};
+// The open dialog on top, if any, and closing it the way Escape or the backdrop would
+const topDialog = () => [...document.querySelectorAll<HTMLDialogElement>("dialog.live-modal[open]")].at(-1);
+const dismiss = (d: HTMLDialogElement) => { if (d.dispatchEvent(new Event("cancel", { cancelable: true }))) d.close(); };
+document.addEventListener("keydown", (e) => {
+  const d = topDialog();
+  if (e.key !== "Escape" || !d) return;
+  e.preventDefault();
+  dismiss(d);
+});
+// A tap outside the dialog closes it rather than reaching the page behind (the live layer excepted)
+document.addEventListener("click", (e) => {
+  const d = topDialog();
+  const el = e.target as Element;
+  if (!d || !e.isTrusted || d.contains(el) || el.closest(".live-bar, .live-list, .live-prop, .live-shield")) return;
+  e.preventDefault();
+  e.stopPropagation();
+  dismiss(d);
+}, true);
+
 // --- Maria's thoughts ------------------------------------------------------------
 
 
@@ -646,6 +675,12 @@ export class Player {
           navigate(path);
         }
         await pause(800);
+      },
+      /** Arrive at an address directly, as following a link from outside the portal would */
+      open: async (path: string, after = 600) => {
+        await tick();
+        navigate(path);
+        await pause(after);
       },
       /** Someone else does something in their own browser; everything on screen refreshes, and a
        * small note by the bell says who, so the other side of the work is easy to follow */

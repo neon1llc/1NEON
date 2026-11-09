@@ -9,6 +9,7 @@ import { seed } from "../../../api/src/seed.ts";
 import { MemoryTable } from "../../../api/src/store/memory.ts";
 import { Repo } from "../../../api/src/store/repo.ts";
 import type { Row } from "../../../api/src/store/types.ts";
+import type { LiveSession } from "../live/signin.ts";
 
 
 // One IndexedDB record holds the whole demo: every row and every uploaded file
@@ -16,6 +17,11 @@ const DB = "1neon-demo";
 const STORE = "state";
 const KEY = "v1";
 export interface Saved { rows: Row[]; files: [string, { type: string; bytes: Uint8Array }][] }
+// The live playback's snapshots also hold the pretend inbox, texts, and who holds a session
+interface LiveSaved extends Saved { mail: Mail[]; texts: Text[]; session?: LiveSession }
+/** One email or text the in-browser API sent, with when */
+export type Mail = { to: string; subject: string; text: string; html: string; at: number };
+export type Text = { to: string; body: string; at: number };
 
 
 // Open (or create) the demo's database; a blocked or missing IndexedDB means no saving, not no demo
@@ -58,10 +64,18 @@ const live = location.pathname.startsWith("/1NEON/live");
 // Built once per page: restore what this device saved, or start from the demo organizations
 const table = new MemoryTable();
 const storage = new MemoryStorage();
+// Mail and texts are kept (with their send time) so the short demos can show Maria's inbox and phone
+const mailer = new MemoryMailer();
+const texter = new MemoryTexter();
+const stamp = <T extends object>(list: T[]) => { const push = list.push.bind(list); list.push = (...xs: T[]) => push(...xs.map((x) => ({ at: Date.now(), ...x }))); };
+stamp(mailer.sent);
+stamp(texter.sent);
+// The live playback's signed-in session, when a short demo signs in for real (none in the whole project)
+let session: LiveSession | undefined;
 const ready = (async () => {
   const saved = live ? undefined : await load();
   if (live) {
-    await (await import("../live/seed.ts")).liveSeed(new Repo(table));
+    session = await (await import("../live/seed.ts")).liveSeed(new Repo(table), mailer);
   } else if (saved?.rows.length) {
     table.restore(saved.rows);
     for (const [k, f] of saved.files) storage.files.set(k, f);
@@ -73,8 +87,8 @@ const ready = (async () => {
     cfg: { env: "local", publicUrl: location.origin, operatorEmails: ["pradeep@neon1.tech"], devAuth: true },
     repo: new Repo(table),
     directory: new MemoryDirectory(),
-    mailer: new MemoryMailer(),
-    texter: new MemoryTexter(),
+    mailer,
+    texter,
     storage,
   });
 })();
@@ -92,7 +106,20 @@ function save() {
 /** Answer one request the way the real API would. Changes are saved on this device */
 export async function demoFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const app = await ready;
-  const res = await app.fetch(new Request(new URL(url, location.origin), init));
+  const req = new Request(new URL(url, location.origin), init);
+  if (live) {
+    // Short demos sign in for real: /auth/step is answered here, as Cognito would
+    if (req.method === "POST" && new URL(req.url).pathname === "/1NEON/api/auth/step") {
+      const { liveStep } = await import("../live/signin.ts");
+      return liveStep(req, new Repo(table), mailer, (s) => {
+        session = s;
+        try { localStorage.setItem("1neon.liveUser", s.email); } catch { /* storage blocked */ }
+      });
+    }
+    // The session rides along for its own person only, never for someone acting as another
+    if (session && req.headers.get("x-dev-user")?.toLowerCase() === session.email) req.headers.set("x-dev-session", session.id);
+  }
+  const res = await app.fetch(req);
   if ((init.method ?? "GET") !== "GET") save();
   return res;
 }
@@ -110,15 +137,40 @@ export const whenReady = () => ready.then(() => undefined);
 
 
 /** Everything right now, so the playback can come back to the start of a section */
-export function snapshot(): Saved {
-  return { rows: table.snapshot(), files: [...storage.files] };
+export function snapshot(): LiveSaved {
+  return { rows: table.snapshot(), files: [...storage.files], mail: [...mailer.sent] as Mail[], texts: [...texter.sent] as Text[], session };
 }
 
 /** Put everything back as it was in a snapshot */
-export function restore(s: Saved) {
+export function restore(s: LiveSaved) {
   table.restore(s.rows);
   storage.files.clear();
   for (const [k, f] of s.files) storage.files.set(k, f);
+  mailer.sent.length = 0;
+  mailer.sent.push(...s.mail);
+  texter.sent.length = 0;
+  texter.sent.push(...s.texts);
+  session = s.session;
+}
+
+/** Every email the in-browser API sent, oldest first */
+export const outbox = () => [...mailer.sent] as Mail[];
+/** Every text it sent, oldest first */
+export const textsSent = () => [...texter.sent] as Text[];
+
+/**
+ * A day later, for the live playback: the signed-in session's "confirmed it's you" has run out, and
+ * the authenticator code used yesterday is long past (the phone shows today's real code, so the
+ * record of the last one used steps back a minute rather than the clock moving forward a day)
+ */
+export async function nextDay() {
+  if (!session) return;
+  const repo = new Repo(table);
+  const row = await repo.getSession(session.id);
+  if (!row) return;
+  await repo.saveSession(session.id, row.userId, false);
+  const t = await repo.getTotp(row.userId);
+  if (t?.confirmed) await repo.saveTotp(row.userId, { ...t, lastCounter: t.lastCounter - 2, version: t.version + 1 }, { version: t.version });
 }
 
 /** Call the API as someone else, the way their own browser would: for the other side of the story */

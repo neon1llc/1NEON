@@ -5,6 +5,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useParams } from "react-router";
+import { PLAY, PROJECT } from "../live/where.ts";
 import { api, DEMO as IN_DEMO, LIVE as IN_LIVE, devUser, HttpError, pickPerson, resetDemo } from "../lib/api.ts";
 import { failureOf, read } from "../lib/reads.ts";
 import { passkeyAssertion } from "../lib/passkey.ts";
@@ -119,6 +120,9 @@ const PEOPLE = [
   ["dana@acmedental.example", "Dana Kim", "Acme Dental's office manager: adds requests, answers, and files"],
   ["pradeep@neon1.tech", "Pradeep", "neon1's lead engineer: every client, proposals, and the work"],
 ] as const;
+// The demo signs in by picking a person; the live playback's short demos show the real sign-in
+// instead, answered in the browser, since signing in is what they're about
+const PICKER = IN_DEMO && !(IN_LIVE && PLAY.show !== PROJECT);
 // The live playback's two people: the bakery's owner, and neon1
 const LIVE_PEOPLE = [
   ["maria@maplestreetbakery.example", "Maria Lopez", "Maple Street Bakery's owner"],
@@ -181,6 +185,12 @@ function SignIn() {
   const [saved] = useState(() => loadStep(session()));
   // Invite links carry the email, so it's filled in already
   const [email, setEmail] = useState(() => saved?.email ?? new URLSearchParams(location.search).get("email") ?? "");
+  // ...including a link followed while this page is already open
+  const { search } = useLocation();
+  useEffect(() => {
+    const e = new URLSearchParams(search).get("email");
+    if (e) setEmail(e);
+  }, [search]);
   const [code, setCode] = useState("");
   // Remember me: keep the sign-in for 30 days; unchecked, it ends when the browser closes
   const [remember, setRemember] = useState(true);
@@ -250,7 +260,7 @@ function SignIn() {
         {problem === "not_invited" && <p className="notice" role="alert">That email hasn't been invited yet. Ask your organization's admin, or neon1.</p>}
         {problem === "failed" && <p className="notice" role="alert">{fromLink ? "That link only works in the browser where you asked for the code. Type the code there instead, or start again here." : "Sign-in didn't finish. Please try again."}</p>}
         {/* The demo: no accounts, just pick who to be */}
-        {IN_DEMO && (
+        {PICKER && (
           <div className="dev demo-pick" aria-label="Demo people">
             <p className="fine">A working copy of 1NEON with made-up clients. Everything you do stays in this browser.</p>
             <p className="eyebrow">Try it as</p>
@@ -261,7 +271,7 @@ function SignIn() {
           </div>
         )}
         {/* Step 1: the email */}
-        {!IN_DEMO && (at.step === "email" || at.step === "failed" || at.step === "not_invited") && (
+        {!PICKER && (at.step === "email" || at.step === "failed" || at.step === "not_invited") && (
           <form className="stack" onSubmit={(e) => { e.preventDefault(); void send({ op: "start", email: email.trim(), remember }); }}>
             <label className="sr" htmlFor="email">Your email</label>
             {/* Remember me opens under the email once it looks like a real address */}
@@ -294,7 +304,7 @@ function SignIn() {
           </form>
         )}
         {at.step !== "email" && <p className="fine"><button className="linkish" onClick={restart}>Use a different email</button></p>}
-        {!IN_DEMO && <p className="fine">Sign in with a code sent to your email, or a passkey. 1NEON uses only the cookies it needs to keep you signed in.</p>}
+        {!PICKER && <p className="fine">Sign in with a code sent to your email, or a passkey. 1NEON uses only the cookies it needs to keep you signed in.</p>}
         {/* The three policies on one line of their own */}
         <p className="fine legal-links">
           <Link to="/faqs">FAQs</Link> · <Link to="/cookies">Cookies</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>

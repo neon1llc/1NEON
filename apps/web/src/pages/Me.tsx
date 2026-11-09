@@ -5,10 +5,10 @@ import type { User } from "@1neon/domain";
 import type { SmsState } from "../lib/types.ts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { applyTheme, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, useToast } from "../components/ui.tsx";
-import { api, BASE_PATH, devUser, pickPerson } from "../lib/api.ts";
+import { api, BASE_PATH, devUser, LIVE, pickPerson } from "../lib/api.ts";
 import { NOTIFY_GROUPS } from "@1neon/domain";
 import { problem } from "../lib/hooks.ts";
 import { passkeyCreation } from "../lib/passkey.ts";
@@ -31,6 +31,7 @@ const SMS_NOTE: Record<SmsState, string> = {
 export function MePage() {
   const me = useSession();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const toast = useToast();
   const help = useHelp();
   const [totpOpen, setTotpOpen] = useState(false);
@@ -113,6 +114,13 @@ export function MePage() {
   };
   // Dev and demo: forget who you picked. Production: the API revokes tokens and returns Cognito's logout URL
   const signOut = async () => {
+    // The live playback's story lives in this page, so signing out stays in it, at the sign-in
+    if (LIVE) {
+      devUser.set("");
+      qc.clear();
+      navigate("/");
+      return;
+    }
     if (pickPerson) {
       devUser.set("");
       location.href = `${BASE_PATH}/`;

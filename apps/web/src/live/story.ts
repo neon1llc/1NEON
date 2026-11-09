@@ -187,9 +187,9 @@ export const STORY: Section[] = [
       await s.type(`${one} input[aria-label="Who or what it's for"]`, "the nightly order list");
       await s.type(`${one} input[aria-label="What happens now"]`, "we retype about 40 orders from email each night");
       await s.think("It happens every day.");
-      await s.click({ sel: `${one} [role=radio]`, text: "daily" }, 300);
+      await s.click({ sel: `${one} .pick label`, text: "daily" }, 300);
       await s.think("And I'd like it in about a month.");
-      await s.click({ sel: `${one} [role=radio]`, text: "on a date" }, 400);
+      await s.click({ sel: `${one} .pick label`, text: "on a date" }, 400);
       const d = (n: number) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
       await s.choose(`${one} input[aria-label="Due date, or start of a range"]`, d(30));
       await s.choose(`${one} input[aria-label="End of the range (optional)"]`, d(40));
@@ -203,7 +203,7 @@ export const STORY: Section[] = [
       await s.type(`${two} input[aria-label="Your own action"]`, "train Sam");
       await s.click({ sel: `${two} input[aria-label="Who or what it's for"]` }, 200);
       await s.type(`${two} input[aria-label="Who or what it's for"]`, "the holiday rush");
-      await s.click({ sel: `${two} [role=radio]`, text: "this quarter" }, 400);
+      await s.click({ sel: `${two} .pick label`, text: "this quarter" }, 400);
       await s.think("Both read well. Send.");
       await s.click({ sel: "button", text: "Send 2 requests" }, 1200);
       await s.say("Discovery questions take a short answer right where they're asked");
@@ -214,7 +214,7 @@ export const STORY: Section[] = [
       await s.think("One must-have: I do everything from my phone.");
       await s.click({ sel: "button", text: "+ Add requirement" }, 500);
       await s.click({ sel: ".starters .chip", text: "Works on a phone" }, 300);
-      await s.click({ sel: "[role=radio]", text: "must have" }, 300);
+      await s.click({ sel: ".pick label", text: "must have" }, 300);
       await s.click({ sel: "form.add-form button", text: /^Add$/ }, 900);
       await s.think("That's everything for now.");
     },
@@ -377,7 +377,7 @@ export const STORY: Section[] = [
       await s.think("A runbook! So we can handle things ourselves.");
       await s.go(`${base}/projects`, "Projects");
       // The page remembers List or Timeline; the project row is in List
-      await s.click({ sel: "[role=tab]", text: "List" }, 500);
+      await s.click({ sel: ".switch button", text: "List" }, 500);
       await s.click({ sel: ".ptr", text: "Orders without retyping" }, 1000);
       await s.think("Normalize is where it becomes ours for good.");
       await s.click({ sel: "nav.tabs a", text: "Normalize" }, 1000);
@@ -407,7 +407,7 @@ export const STORY: Section[] = [
       await s.say("The whole project, on a timeline");
       await s.think("I'd love to see the whole thing at once.");
       await s.go(`${base}/projects`, "Projects");
-      await s.click({ sel: "[role=tab]", text: "Timeline" }, 1600);
+      await s.click({ sel: ".switch button", text: "Timeline" }, 1600);
       await s.say("Every file in one place");
       await s.think("And every file we traded, in one spot.");
       await s.go(`${base}/documents`, "Files");

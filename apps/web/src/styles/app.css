@@ -742,8 +742,9 @@ html[data-slide="back"]::view-transition-new(stage) { animation: .42s cubic-bezi
 @keyframes slide-from-right { from { transform: translateX(60%); opacity: 0; } 35% { opacity: 0; } }
 @keyframes slide-to-right { 65% { opacity: 0; } to { transform: translateX(60%); opacity: 0; } }
 @keyframes slide-from-left { from { transform: translateX(-60%); opacity: 0; } 35% { opacity: 0; } }
-/* Arrivals: pages, opened forms, new needs, and new rows rise into place */
-.page-in, .add-form, .sentence, .need + .need, .answer, .chip-input { animation: rise .32s cubic-bezier(.3, .7, .2, 1) both; }
+/* Arrivals: pages, opened forms, new needs, and new rows rise into place. Backwards fill only, so a
+   finished rise leaves no transform behind (one would trap fixed children, like dialogs, inside it) */
+.page-in, .add-form, .sentence, .need + .need, .answer, .chip-input { animation: rise .32s cubic-bezier(.3, .7, .2, 1) backwards; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) {
   .page-in, .add-form, .sentence, .need + .need, .answer, .chip-input { animation: none; }
@@ -824,81 +825,6 @@ body:has(.demo-bar) .top { top: var(--demo-h); }
 .notify-table tbody th .tag { margin-left: 6px; }
 .notify-table input { width: 18px; height: 18px; min-height: 0; accent-color: var(--accent); }
 
-/* --- /1NEON/live: the controls above the portal, the cursor, and the pretend hover --- */
-/* The bar is its own thing: deep void, a neon line for time, mono labels; the portal moves down under it */
-.live-bar { position: fixed; inset: 0 0 auto 0; z-index: 60; height: 76px; box-sizing: border-box; background: #0d0208; color: #d8f5e1; border-bottom: 1px solid rgba(0, 255, 65, .3); font: 12px var(--mono); }
-.live-inner { position: relative; max-width: 1100px; margin: 0 auto; padding: 10px 16px 10px; }
-.live-line { height: 3px; border-radius: 99px; background: rgba(108, 255, 168, .14); overflow: hidden; margin-bottom: 8px; }
-.live-line span { display: block; height: 100%; background: linear-gradient(90deg, #00e676, #6cffa8); box-shadow: 0 0 10px rgba(108, 255, 168, .7); transform-origin: left center; transition: transform .5s ease; }
-.live-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr); gap: 10px; align-items: center; }
-.live-step { display: inline-flex; align-items: center; gap: 4px; min-height: 34px; padding: 0 12px; border-radius: 99px; border: 1px solid rgba(108, 255, 168, .35); background: transparent; color: #9AFF9A; font: inherit; cursor: pointer; max-width: 100%; }
-.live-step span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.live-step.back { justify-self: start; }
-.live-step.fwd { justify-self: end; }
-.live-step:hover:not(:disabled) { background: rgba(108, 255, 168, .12); }
-.live-step:disabled { opacity: .35; cursor: default; }
-.live-mid { display: flex; align-items: center; gap: 8px; min-width: 0; justify-content: center; }
-.live-play { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 99px; border: 0; background: #6cffa8; color: #0d0208; cursor: pointer; }
-.live-now { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; text-align: left; min-width: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; padding: 2px 6px; border-radius: 8px; }
-.live-now:hover { background: rgba(108, 255, 168, .08); }
-.live-title { color: #9AFF9A; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.live-cap { grid-column: 1; color: #a3c2aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--sans, inherit); font-size: 12px; }
-.live-caret { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: #2e7d32; filter: drop-shadow(0 0 4px rgba(108, 255, 168, .5)); }
-.live-list { position: absolute; left: 50%; top: calc(100% + 6px); transform: translateX(-50%); width: min(420px, calc(100vw - 24px)); max-height: 70vh; overflow: auto; margin: 0; padding: 6px; list-style: none; background: #0d0208; border: 1px solid rgba(108, 255, 168, .35); border-radius: 12px; box-shadow: 0 18px 48px rgba(0, 0, 0, .45); animation: rise .2s ease both; }
-.live-list button { display: flex; gap: 10px; align-items: center; width: 100%; padding: 9px 10px; border: 0; border-radius: 8px; background: none; color: #d8f5e1; font: 13px var(--mono); text-align: left; cursor: pointer; }
-.live-list button:hover { background: rgba(108, 255, 168, .1); }
-.live-list button.past { color: #8fae97; }
-.live-list button.on { background: rgba(108, 255, 168, .18); color: #9AFF9A; }
-.live-list .n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 99px; border: 1px solid rgba(108, 255, 168, .4); font-size: 11px; }
-.live-list button.on .n { background: #6cffa8; color: #0d0208; }
-body:has(.live-bar) { --demo-h: 76px; padding-top: var(--demo-h); }
-body:has(.live-bar) .side { top: var(--demo-h); }
-body:has(.live-bar) .top { top: var(--demo-h); }
-body:has(.live-bar) .signin { padding-top: var(--demo-h); }
-@media (max-width: 640px) {
-  .live-row { grid-template-columns: auto minmax(0, 1fr) auto; }
-  .live-step span { display: none; }
-  .live-step { padding: 0 8px; }
-}
-/* The cursor: drawn above everything, never in the way of the page */
-.live-cursor { position: fixed; left: 0; top: 0; z-index: 70; width: 26px; height: 26px; pointer-events: none; transition: opacity .3s; will-change: transform; }
-.live-cursor svg { position: absolute; left: -3px; top: -2px; width: 26px; height: 26px; display: none; fill: #fff; stroke: #0d0208; stroke-width: 1.4; stroke-linejoin: round; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); }
-.live-cursor .c-hand, .live-cursor .c-grab { left: -9px; top: -3px; }
-.live-cursor .c-beam { left: -12px; top: -12px; fill: none; stroke: #0d0208; stroke-width: 1.6; filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff); }
-.live-cursor:not([data-shape]) .c-arrow, .live-cursor[data-shape="arrow"] .c-arrow, .live-cursor[data-shape="hand"] .c-hand, .live-cursor[data-shape="beam"] .c-beam, .live-cursor[data-shape="grab"] .c-grab { display: block; }
-.live-cursor .c-ring { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; border-radius: 99px; border: 2px solid var(--accent, #00b84f); opacity: 0; }
-.live-cursor.pressing .c-ring { animation: press-ring .45s ease-out; }
-@keyframes press-ring { from { transform: scale(.3); opacity: .9; } to { transform: scale(1.4); opacity: 0; } }
-.live-cursor.gone { opacity: 0; }
-/* While the playback runs, real pointers don't fight it */
-body:has(.live-bar) #root { cursor: default; }
-/* The pretend hover: the same looks the portal gives a real hover */
-.btn.vhover:not(:disabled) { filter: brightness(.95); box-shadow: 0 0 0 3px var(--accent-soft); }
-.chip.vhover, .search-btn.vhover, .icon-btn.vhover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
-.side a.vhover, .tabbar a.vhover, .tabs a.vhover { color: var(--accent); background: var(--accent-soft); }
-.item.vhover, .ptr.vhover, .pcard.vhover, .options article.vhover { background: color-mix(in srgb, var(--accent-soft) 60%, transparent); }
-.linkish.vhover, a.vhover { color: var(--accent); }
-/* A drag in progress: the card lifts, a ghost follows the cursor, the column under it lights */
-.live-lifted { opacity: .35; }
-.live-ghost { position: fixed; z-index: 65; pointer-events: none; margin: 0; box-shadow: 0 18px 40px rgba(0, 0, 0, .25); }
-.live-target { outline: 2px dashed var(--accent); outline-offset: 2px; background: var(--accent-soft); }
-/* A file on the "desktop", waiting to be dragged in */
-.live-desk-file { position: fixed; left: 18px; bottom: 90px; z-index: 64; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line-strong); box-shadow: 0 10px 24px rgba(0, 0, 0, .18); font: 13px var(--mono); animation: rise .3s ease both; }
-.live-desk-file::before { content: ""; width: 18px; height: 22px; border-radius: 3px; background: linear-gradient(135deg, var(--accent) 0 30%, var(--accent-soft) 30%); }
-/* A note under the bell when the other side acts: who did what, then it fades */
-.live-pop { position: fixed; right: 20px; top: calc(var(--demo-h, 76px) + 70px); z-index: 62; max-width: min(320px, calc(100vw - 40px)); padding: 10px 14px; border-radius: var(--r-sm, 10px); background: var(--panel); border: 1px solid var(--accent); box-shadow: 0 12px 28px rgba(0, 0, 0, .18); font: 13px var(--mono); color: var(--text); animation: pop-in 3.2s ease both; }
-.live-pop::before { content: "● "; color: var(--accent); }
-@keyframes pop-in { 0% { opacity: 0; transform: translateY(-6px); } 10%, 85% { opacity: 1; transform: none; } 100% { opacity: 0; } }
 /* The yes to texts: a checkbox with the carrier wording beside it */
 .notify .sms-consent { display: grid; font: 13px/1.5 var(--sans, inherit); color: var(--text); letter-spacing: 0; text-transform: none; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg); font-size: 13px; line-height: 1.5; }
 .notify .sms-consent input { width: 18px; height: 18px; min-height: 0; margin-top: 2px; accent-color: var(--accent); }
-/* Speed: a small gauge chip beside play, opening a slider */
-.live-speed-wrap { position: relative; flex: none; }
-.live-speed { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 9px; border-radius: 99px; border: 1px solid rgba(108, 255, 168, .35); background: transparent; color: #9AFF9A; font: 12px var(--mono); cursor: pointer; }
-.live-speed:hover { background: rgba(108, 255, 168, .12); }
-.live-speed-pop { position: absolute; left: 50%; top: calc(100% + 8px); transform: translateX(-50%); z-index: 2; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: #0d0208; border: 1px solid rgba(108, 255, 168, .35); box-shadow: 0 12px 30px rgba(0, 0, 0, .45); color: #a3c2aa; white-space: nowrap; animation: rise .2s ease both; }
-.live-speed-pop input { width: 150px; min-height: 0; padding: 0; border: 0; background: none; accent-color: #6cffa8; }
-/* While playing, a clear layer over the portal: a click pauses instead of changing the page under the cursor */
-.live-shield { position: fixed; inset: var(--demo-h, 76px) 0 0 0; z-index: 59; cursor: default; }
-.live-speed-now { color: #9AFF9A; min-width: 36px; text-align: right; }
-@media (max-width: 640px) { .live-speed span { display: none; } .live-speed { padding: 0 8px; } .live-speed-pop { left: -60px; transform: none; } .live-speed-pop input { width: 120px; } }
