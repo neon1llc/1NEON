@@ -1,12 +1,20 @@
-// apps/web/src/live/LiveBar.tsx - The live playback's controls, above the portal: a line that grows
-// across the section as it plays, the last section on the left, the next on the right, and between
-// them what's happening now. A tap in the middle pauses and lists every section.
+// apps/web/src/live/LiveBar.tsx - The live playback's controls, above the portal: one segment per
+// section showing where the story is, the last section on the left, the next on the right, and
+// between them play, speed, and what's happening now. The middle opens every section, plus the
+// short demos. Space plays or pauses; the arrow keys step between sections.
 
 
-import { ChevronDown, ChevronLeft, ChevronRight, Gauge, Pause, Play } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Gauge, Pause, Play, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Player, View } from "./player.ts";
+import { SHORTS } from "./shorts.ts";
+import { PROJECT } from "./where.ts";
+import "./live.css";
+
+
+// Typing in a field, or a focused control that already answers Space, keeps its own keys
+const ownsKeys = (t: EventTarget | null) => t instanceof Element && Boolean(t.closest("input, textarea, select, button, a, [contenteditable=true], dialog"));
 
 
 /** The bar, bound to one player */
@@ -19,6 +27,7 @@ export function LiveBar({ player }: { player: Player }) {
   useEffect(() => player.subscribe(setV), [player]);
   const prev = player.sections[v.index - 1];
   const next = player.sections[v.index + 1];
+  const short = player.show.id !== PROJECT;
 
   // The middle opens the list and pauses, so nothing moves while choosing
   const openList = () => {
@@ -35,23 +44,41 @@ export function LiveBar({ player }: { player: Player }) {
     return () => { removeEventListener("pointerdown", away); removeEventListener("keydown", esc); };
   }, [list, speedOpen]);
   const jump = (i: number) => { setList(false); void player.goTo(i); };
+  // Keyboard: Space plays and pauses, the arrows step back and on, wherever focus isn't already busy
+  useEffect(() => {
+    const keys = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || ownsKeys(e.target)) return;
+      if (e.key === " ") { e.preventDefault(); player.toggle(); }
+      else if (e.key === "ArrowRight" && v.index < player.sections.length - 1) void player.goTo(v.index + 1);
+      else if (e.key === "ArrowLeft" && v.index > 0) void player.goTo(v.index - 1);
+    };
+    addEventListener("keydown", keys);
+    return () => removeEventListener("keydown", keys);
+  }, [player, v.index]);
 
   return (
     <div className="live-bar" ref={box} role="region" aria-label="Live demo controls">
       <div className="live-inner">
-        {/* The section's time, from the left edge of Back to the right edge of Next */}
-        <div className="live-line" aria-hidden="true"><span style={{ transform: `scaleX(${v.progress})` }} /></div>
+        {/* One segment per section: done ones full, the current one filling, the rest empty */}
+        <div className="live-line" aria-hidden="true">
+          {player.sections.map((s, i) => (
+            <span key={s.id} className={i === v.index ? "now" : undefined}>
+              <i style={{ transform: `scaleX(${i < v.index ? 1 : i === v.index ? v.progress : 0})` }} />
+            </span>
+          ))}
+        </div>
         <div className="live-row">
-          <button className="live-step back" onClick={() => jump(v.index - 1)} disabled={!prev} title={prev ? `Back to ${prev.title}` : undefined}>
-            <ChevronLeft size={16} aria-hidden="true" /><span>{prev?.title ?? "Start"}</span>
+          {/* Back and on name the neighbouring sections; at either end the button steps aside */}
+          <button className={`live-step back${prev ? "" : " none"}`} onClick={() => jump(v.index - 1)} disabled={!prev} aria-label={prev ? `Back to ${prev.title}` : undefined}>
+            <ChevronLeft size={16} aria-hidden="true" /><span>{prev?.title}</span>
           </button>
           <div className="live-mid">
-            <button className="live-play" onClick={() => player.toggle()} aria-label={v.paused ? "Play" : "Pause"}>
-              {v.paused ? <Play size={15} aria-hidden="true" /> : <Pause size={15} aria-hidden="true" />}
+            <button className="live-play" onClick={() => player.toggle()} aria-label={v.done ? "Watch again" : v.paused ? "Play" : "Pause"} title={v.done ? "Watch again" : undefined}>
+              {v.done ? <RotateCcw size={15} aria-hidden="true" /> : v.paused ? <Play size={15} aria-hidden="true" /> : <Pause size={15} aria-hidden="true" />}
             </button>
             {/* Speed: a slider from half to twice the calm default, remembered on this device */}
             <span className="live-speed-wrap">
-              <button className="live-speed" onClick={() => setSpeedOpen(!speedOpen)} aria-expanded={speedOpen} aria-label={`Speed ${speed}x`} title="Speed">
+              <button className="live-speed" onClick={() => setSpeedOpen(!speedOpen)} aria-expanded={speedOpen} aria-label={`Speed ${speed}x`}>
                 <Gauge size={14} aria-hidden="true" /><span>{speed}x</span>
               </button>
               {speedOpen && (
@@ -64,30 +91,40 @@ export function LiveBar({ player }: { player: Player }) {
                 </span>
               )}
             </span>
-            <button className="live-now" onClick={openList} aria-expanded={list} aria-haspopup="listbox">
-              <span className="live-title">{v.index + 1}. {v.title}</span>
-              <span className="live-cap">{v.skipping ? "Catching up…" : v.caption}</span>
+            <button className="live-now" onClick={openList} aria-expanded={list} aria-controls="live-list">
+              <span className="live-title">{v.index + 1}/{player.sections.length} · {v.title}</span>
+              <span className="live-cap">{v.skipping ? "Catching up…" : v.caption || " "}</span>
               <ChevronDown className="live-caret" size={14} aria-hidden="true" />
             </button>
           </div>
-          <button className="live-step fwd" onClick={() => jump(v.index + 1)} disabled={!next} title={next ? `On to ${next.title}` : undefined}>
-            <span>{next?.title ?? "The end"}</span><ChevronRight size={16} aria-hidden="true" />
+          <button className={`live-step fwd${next ? "" : " none"}`} onClick={() => jump(v.index + 1)} disabled={!next} aria-label={next ? `On to ${next.title}` : undefined}>
+            <span>{next?.title}</span><ChevronRight size={16} aria-hidden="true" />
           </button>
         </div>
-        {/* While it plays, the portal underneath doesn't take clicks; a click pauses, so the page can be explored */}
-        {!v.paused && !v.done && createPortal(<div className="live-shield" onPointerDown={() => player.pause()} title="Click to pause" />, document.body)}
-        {/* Every section in order, the current one marked */}
-        {list && (
-          <ol className="live-list" role="listbox" aria-label="Sections">
-            {player.sections.map((s, i) => (
-              <li key={s.id}>
-                <button role="option" aria-selected={i === v.index} className={i === v.index ? "on" : i < v.index ? "past" : ""} onClick={() => jump(i)}>
-                  <span className="n">{i + 1}</span>{s.title}
-                </button>
-              </li>
-            ))}
-          </ol>
-        )}
+      </div>
+      {/* While it plays, the portal underneath doesn't take clicks, so a stray click can't knock the
+          story off course. Pause to explore; resuming plays the section again from its start */}
+      {!v.paused && !v.done && createPortal(<div className="live-shield" aria-hidden="true" />, document.body)}
+      {/* Every section in order, the current one marked; it unrolls downward from the bar. Below, the
+          short demos (a different show loads fresh) */}
+      <div id="live-list" className={`live-list${list ? " open" : ""}`} inert={!list}>
+        <p className="live-list-h">{player.show.title}</p>
+        <ol>
+          {player.sections.map((s, i) => (
+            <li key={s.id}>
+              <button aria-current={i === v.index ? "step" : undefined} className={i === v.index ? "on" : i < v.index ? "past" : ""} onClick={() => jump(i)}>
+                <span className="n">{i + 1}</span>{s.title}
+              </button>
+            </li>
+          ))}
+        </ol>
+        {(short || SHORTS.length > 0) && <p className="live-list-h">{short ? "Other demos" : "Short demos"}</p>}
+        <ul>
+          {short && <li><a href="/1NEON/live"><span className="n">▸</span><span>A whole project<small>From a first sign-in to ongoing care</small></span></a></li>}
+          {SHORTS.filter((s) => s.id !== player.show.id).map((s) => (
+            <li key={s.id}><a href={`/1NEON/live?play=${s.id}`}><span className="n">▸</span><span>{s.title}<small>{s.blurb}</small></span></a></li>
+          ))}
+        </ul>
       </div>
     </div>
   );

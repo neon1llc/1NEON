@@ -105,6 +105,10 @@ export async function resetDemo() {
 }
 
 
+/** Resolves once the seed (or this device's saved demo) is loaded */
+export const whenReady = () => ready.then(() => undefined);
+
+
 /** Everything right now, so the playback can come back to the start of a section */
 export function snapshot(): Saved {
   return { rows: table.snapshot(), files: [...storage.files] };

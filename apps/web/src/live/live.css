@@ -1,0 +1,147 @@
+/* apps/web/src/live/live.css - /1NEON/live's own layer over the portal: the controls bar, the
+   section menu, the cursor and Maria's thoughts, the notes from the other side, and the pretend
+   windows the short demos use. Dark and green like the site, so it never reads as part of the portal. */
+
+
+/* --- Tokens for the live layer ------------------------------------------------- */
+:root { --live-bg: #0d0208; --live-ink: #d8f5e1; --live-hi: #9AFF9A; --live-glow: #6cffa8; --live-dim: #a3c2aa; --live-line: rgba(108, 255, 168, .35); --demo-h: 76px; }
+
+
+/* --- The bar: content centered as one group, top to bottom --------------------- */
+.live-bar { position: fixed; inset: 0 0 auto 0; z-index: 60; height: var(--demo-h); box-sizing: border-box; display: flex; align-items: center; background: var(--live-bg); color: var(--live-ink); border-bottom: 1px solid rgba(0, 255, 65, .3); font: 12px var(--mono); }
+.live-inner { position: static; width: 100%; max-width: 1100px; margin: 0 auto; padding: 0 16px; box-sizing: border-box; }
+
+/* Where the story is: one segment per section */
+.live-line { display: flex; gap: 3px; height: 3px; margin-bottom: 9px; background: none; border-radius: 0; overflow: visible; }
+.live-line span { flex: 1; display: block; height: 100%; border-radius: 99px; background: rgba(108, 255, 168, .14); overflow: hidden; box-shadow: none; transform: none; transition: none; }
+.live-line i { display: block; height: 100%; background: linear-gradient(90deg, #00e676, var(--live-glow)); transform-origin: left center; transition: transform .5s ease; }
+.live-line span.now i { box-shadow: 0 0 10px rgba(108, 255, 168, .7); }
+
+/* Back, the middle, and on */
+.live-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr); gap: 10px; align-items: center; }
+.live-step { display: inline-flex; align-items: center; gap: 4px; min-height: 34px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--live-line); background: transparent; color: var(--live-hi); font: inherit; cursor: pointer; max-width: 100%; }
+.live-step span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-step.back { justify-self: start; }
+.live-step.fwd { justify-self: end; }
+.live-step:hover:not(:disabled) { background: rgba(108, 255, 168, .12); }
+/* At either end there's nowhere to go, so the button steps aside rather than saying so */
+.live-step.none { visibility: hidden; }
+.live-step:focus-visible, .live-play:focus-visible, .live-speed:focus-visible, .live-now:focus-visible, .live-list a:focus-visible, .live-list button:focus-visible { outline: 2px solid var(--live-glow); outline-offset: 2px; }
+.live-mid { display: flex; align-items: center; gap: 8px; min-width: 0; justify-content: center; }
+.live-play { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 99px; border: 0; background: var(--live-glow); color: var(--live-bg); cursor: pointer; }
+.live-now { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; text-align: left; min-width: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; padding: 3px 8px; border-radius: 8px; }
+.live-now:hover, .live-now[aria-expanded="true"] { background: rgba(108, 255, 168, .08); }
+.live-title { color: var(--live-hi); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.live-cap { grid-column: 1; color: var(--live-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--sans, inherit); font-size: 12px; }
+.live-caret { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: #2e7d32; filter: drop-shadow(0 0 4px rgba(108, 255, 168, .5)); transition: transform .25s ease; }
+.live-now[aria-expanded="true"] .live-caret { transform: rotate(180deg); }
+
+/* Speed */
+.live-speed-wrap { position: relative; flex: none; }
+.live-speed { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 9px; border-radius: 99px; border: 1px solid var(--live-line); background: transparent; color: var(--live-hi); font: 12px var(--mono); cursor: pointer; }
+.live-speed:hover { background: rgba(108, 255, 168, .12); }
+.live-speed-pop { position: absolute; left: 50%; top: calc(100% + 8px); transform: translateX(-50%); z-index: 2; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--live-bg); border: 1px solid var(--live-line); box-shadow: 0 12px 30px rgba(0, 0, 0, .45); color: var(--live-dim); white-space: nowrap; animation: rise .2s ease both; }
+.live-speed-pop input { width: 150px; min-height: 0; padding: 0; border: 0; background: none; accent-color: var(--live-glow); }
+.live-speed-now { color: var(--live-hi); min-width: 36px; text-align: right; }
+
+/* Phones: the arrows alone, and the speed as its icon */
+@media (max-width: 640px) {
+  .live-inner { padding: 0 10px; }
+  .live-row { grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; }
+  .live-step span { display: none; }
+  .live-step { padding: 0 8px; }
+  .live-speed span { display: none; }
+  .live-speed { padding: 0 8px; }
+  .live-speed-pop { left: -60px; transform: none; }
+  .live-speed-pop input { width: 120px; }
+  /* Room for the caption to wrap to a second line rather than cut off mid-word */
+  .live-cap { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; line-height: 1.3; }
+}
+
+
+/* --- The section menu: it unrolls from the bar down to its full height, and rolls back up ---- */
+.live-list { position: absolute; left: 50%; top: calc(100% + 6px); transform: translateX(-50%); width: min(440px, calc(100vw - 24px)); max-height: min(72vh, 640px); overflow: auto; margin: 0; padding: 6px; box-sizing: border-box; background: var(--live-bg); border: 1px solid var(--live-line); border-radius: 12px; box-shadow: 0 18px 48px rgba(0, 0, 0, .45); animation: none;
+  clip-path: inset(0 0 100% 0 round 12px); visibility: hidden; transition: clip-path .32s cubic-bezier(.3, .7, .2, 1), visibility 0s linear .32s; }
+.live-list.open { clip-path: inset(0 0 0 0 round 12px); visibility: visible; transition: clip-path .36s cubic-bezier(.3, .7, .2, 1), visibility 0s; }
+.live-list ol, .live-list ul { margin: 0; padding: 0; list-style: none; }
+.live-list-h { margin: 6px 10px 4px; color: #6f8f77; font: 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.live-list ul { border-top: 1px solid rgba(108, 255, 168, .14); margin-top: 6px; padding-top: 2px; }
+.live-list button, .live-list a { display: flex; gap: 10px; align-items: center; width: 100%; box-sizing: border-box; padding: 9px 10px; border: 0; border-radius: 8px; background: none; color: var(--live-ink); font: 13px var(--mono); text-align: left; text-decoration: none; cursor: pointer; }
+.live-list a > span:last-child { display: grid; }
+.live-list small { color: #8fae97; font: 12px var(--sans, inherit); }
+.live-list button:hover, .live-list a:hover { background: rgba(108, 255, 168, .1); }
+.live-list button.past { color: #8fae97; }
+.live-list button.on { background: rgba(108, 255, 168, .18); color: var(--live-hi); }
+.live-list .n { flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 99px; border: 1px solid rgba(108, 255, 168, .4); font-size: 11px; color: var(--live-hi); }
+.live-list button.on .n { background: var(--live-glow); color: var(--live-bg); }
+
+
+/* --- Room for the bar above the portal ---------------------------------------- */
+body:has(.live-bar) { padding-top: var(--demo-h); }
+body:has(.live-bar) .side { top: var(--demo-h); }
+body:has(.live-bar) .top { top: var(--demo-h); }
+body:has(.live-bar) .signin { padding-top: var(--demo-h); }
+body:has(.live-bar) #root { cursor: default; }
+/* While playing, the portal takes no clicks; no hint follows the mouse around */
+.live-shield { position: fixed; inset: var(--demo-h) 0 0 0; z-index: 59; cursor: default; }
+
+
+/* --- The cursor: under the bar and its menus, over the portal (the layers below share 54 to 58) */
+/* --- The cursor ---------------------------------------------------------------- */
+.live-cursor { position: fixed; left: 0; top: 0; z-index: 58; width: 26px; height: 26px; pointer-events: none; transition: opacity .3s; will-change: transform; }
+.live-cursor svg { position: absolute; left: -3px; top: -2px; width: 26px; height: 26px; display: none; fill: #fff; stroke: var(--live-bg); stroke-width: 1.4; stroke-linejoin: round; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); }
+.live-cursor .c-hand, .live-cursor .c-grab { left: -9px; top: -3px; }
+.live-cursor .c-beam { left: -12px; top: -12px; fill: none; stroke: var(--live-bg); stroke-width: 1.6; filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff); }
+.live-cursor:not([data-shape]) .c-arrow, .live-cursor[data-shape="arrow"] .c-arrow, .live-cursor[data-shape="hand"] .c-hand, .live-cursor[data-shape="beam"] .c-beam, .live-cursor[data-shape="grab"] .c-grab { display: block; }
+.live-cursor .c-ring { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; border-radius: 99px; border: 2px solid var(--accent, #00b84f); opacity: 0; }
+.live-cursor.pressing .c-ring { animation: press-ring .45s ease-out; }
+@keyframes press-ring { from { transform: scale(.3); opacity: .9; } to { transform: scale(1.4); opacity: 0; } }
+.live-cursor.gone { opacity: 0; }
+
+
+/* --- Maria's thoughts: a bubble below and right of the cursor, two small circles leading back to it */
+.live-think { position: fixed; left: 0; top: 0; z-index: 57; max-width: min(270px, calc(100vw - 20px)); box-sizing: border-box; padding: 8px 12px 9px; border-radius: 14px; background: rgba(13, 2, 8, .94); color: #eafff0; border: 1px solid var(--live-line); box-shadow: 0 10px 28px rgba(0, 0, 0, .28), 0 0 0 1px rgba(0, 0, 0, .2); font: 13.5px/1.4 var(--sans, system-ui); pointer-events: none; opacity: 0; transition: opacity .25s ease; will-change: transform; }
+.live-think.on { opacity: 1; }
+.live-think.gone { opacity: 0; }
+.live-think .who { display: block; margin-bottom: 1px; color: var(--live-hi); font: 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+.live-think .txt { display: block; }
+.live-think.fresh .txt { animation: think-in .32s ease both; }
+@keyframes think-in { from { opacity: 0; transform: translateY(3px); } }
+.live-think .dot { position: absolute; left: var(--tail, 16px); border-radius: 99px; background: rgba(13, 2, 8, .94); border: 1px solid var(--live-line); }
+.live-think .d1 { width: 8px; height: 8px; margin-left: -4px; }
+.live-think .d2 { width: 5px; height: 5px; margin-left: -9px; }
+.live-think[data-side="below"] .d1 { top: -11px; }
+.live-think[data-side="below"] .d2 { top: -19px; }
+.live-think[data-side="above"] .d1 { bottom: -11px; }
+.live-think[data-side="above"] .d2 { bottom: -19px; }
+@media (max-width: 640px) { .live-think { font-size: 13px; padding: 7px 10px 8px; } }
+
+
+/* --- The pretend hover, mirrored from the portal's own hover styles ---------------- */
+.btn.vhover:not(:disabled) { filter: brightness(.95); box-shadow: 0 0 0 3px var(--accent-soft); }
+.chip.vhover, .search-btn.vhover, .icon-btn.vhover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.side a.vhover, .tabbar a.vhover, .tabs a.vhover { color: var(--accent); background: var(--accent-soft); }
+.item.vhover, .ptr.vhover, .pcard.vhover, .options article.vhover { background: color-mix(in srgb, var(--accent-soft) 60%, transparent); }
+.linkish.vhover, a.vhover { color: var(--accent); }
+
+
+/* --- Dragging ------------------------------------------------------------------ */
+.live-lifted { opacity: .35; }
+.live-ghost { position: fixed; z-index: 55; pointer-events: none; margin: 0; box-shadow: 0 18px 40px rgba(0, 0, 0, .25); }
+.live-target { outline: 2px dashed var(--accent); outline-offset: 2px; background: var(--accent-soft); }
+.live-desk-file { position: fixed; left: 18px; bottom: 90px; z-index: 54; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line-strong); box-shadow: 0 10px 24px rgba(0, 0, 0, .18); font: 13px var(--mono); animation: rise .3s ease both; }
+.live-desk-file::before { content: ""; width: 18px; height: 22px; border-radius: 3px; background: linear-gradient(135deg, var(--accent) 0 30%, var(--accent-soft) 30%); }
+
+
+/* --- A note from the other side (Pradeep, in his own browser), by the bell ------------ */
+.live-pop { position: fixed; right: 20px; top: calc(var(--demo-h) + 70px); z-index: 56; max-width: min(320px, calc(100vw - 40px)); padding: 10px 14px; border-radius: 10px; background: var(--live-bg); border: 1px solid var(--live-line); box-shadow: 0 12px 28px rgba(0, 0, 0, .25); font: 13px var(--mono); color: var(--live-ink); animation: pop-in 3.6s ease both; }
+.live-pop::before { content: "● "; color: var(--live-glow); }
+@keyframes pop-in { 0% { opacity: 0; transform: translateY(-6px); } 8%, 88% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+
+
+/* --- Reduced motion: no unrolling, sliding, or fading ------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  .live-list, .live-list.open { transition: none; }
+  .live-line i, .live-caret, .live-think, .live-cursor { transition: none; }
+  .live-think.fresh .txt, .live-pop, .live-desk-file, .live-speed-pop { animation: none; }
+}
