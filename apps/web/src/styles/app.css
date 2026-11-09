@@ -207,11 +207,11 @@ a.row:hover { background: var(--accent-soft); }
 /* An empty stage folds to a slim strip with its name running down it, so the whole process fits on
    screen and the columns with work get the room; it still takes a dropped card */
 .board .col.empty { flex: 0 0 48px; min-width: 0; padding: 10px 4px; }
-/* The name reads top to bottom with upright letters, set close and centered in the strip (every screen size) */
+/* The name reads bottom to top (turned like a book spine), centered in the strip, on every screen size */
 .col.empty header { flex-direction: column; justify-content: flex-start; align-items: center; padding: 2px 0 0; gap: 10px; }
 .col.empty header h3 { writing-mode: vertical-rl; flex-direction: row; align-items: center; gap: 8px; white-space: nowrap; }
 .col.empty header h3 .badge { writing-mode: horizontal-tb; }
-.col.empty header h3 .nm { text-orientation: upright; letter-spacing: -.24em; word-spacing: -.5em; line-height: 1; font-size: 13px; }
+.col.empty header h3 .nm { display: inline-block; transform: rotate(180deg); line-height: 1; }
 .col.empty .exit, .col.empty .none { display: none; }
 .col { background: var(--frame); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; min-height: 160px; }
 .col.drop { border-color: var(--accent); background: var(--accent-soft); }
@@ -563,8 +563,6 @@ button.link { border: 0; background: none; padding: 0; color: var(--accent); tex
 @media (max-width: 640px) {
   .board { scroll-snap-type: x mandatory; }
   .board .col { scroll-snap-align: start; flex-basis: 82vw; }
-  /* Phones: the upright strip name a size smaller */
-  .col.empty header h3 .nm { font-size: 12px; }
 }
 
 /* --- FAQs --- */
