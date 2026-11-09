@@ -151,7 +151,8 @@ export class CognitoDirectory implements Directory {
           MessageAction: "SUPPRESS", // 1NEON sends its own invite email
           UserAttributes: [
             { Name: "email", Value: email },
-            // The invite proves the address belongs to the person we invited
+            // Marked verified so Cognito will send sign-in codes there. The invite itself proves
+            // nothing; the address is proved when its holder signs in with a code sent to it
             { Name: "email_verified", Value: "true" },
           ],
         }),

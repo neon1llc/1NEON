@@ -109,15 +109,6 @@ export const UpdateItemInput = z.object({
 export const ApproveInput = z.object({ version: z.number().int(), conditions: z.string().max(2000).default("") });
 
 
-// Documents: the API answers with a presigned upload URL
-export const UploadInput = z.object({
-  name: z.string().trim().min(1).max(200),
-  contentType: z.string().max(120),
-  size: z.number().int().positive().max(250 * 1024 * 1024),
-  layer: z.enum(["needs", "execution", "observation", "next"]),
-});
-
-
 // The signed-in person's own profile
 export const UpdateMeInput = z.object({
   version: z.number().int(),

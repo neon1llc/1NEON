@@ -75,5 +75,6 @@ export interface AllProjects {
 
 
 /** GET /t/:tid/members */
-// Membership plus the contact number admins see in People
-export type MemberRow = Member & { phone: string };
+// Membership with the person's current name and title. Phone numbers stay on each person's own
+// profile, so the list never carries one
+export type MemberRow = Member;
