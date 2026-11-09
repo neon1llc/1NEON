@@ -748,25 +748,29 @@ export function createApp(d: Deps) {
   app.get("/t/:tid/workspace", async (c) => {
     need(c, "read");
     const t = c.get("tenant");
-    const [projects, members, activity] = await Promise.all([repo.listProjects(t.id), repo.listMembers(t.id), repo.listAudit(t.id, 12)]);
+    const [projects, members, activity] = await Promise.all([repo.listProjects(t.id), repo.listMembers(t.id), repo.listAudit(t.id, 16)]);
+    // Members by id, to name who did what
+    const names = new Map(members.map((m) => [m.userId, m.name || m.email]));
     const live = projects.filter((p) => !p.archived);
     const me = actorId(c);
     const { actor } = who(c);
-    // Needs you: options you may approve, files the client is asked for, and your open work
-    const waiting: { projectId: string; projectKey: string; itemId: string; title: string; kind: string; action: "approve" | "upload" | "do" }[] = [];
+    // Needs you: a choice between options you may approve, files the client is asked for, and your
+    // open work. A project's proposed options are one decision, so they wait as one entry
+    const waiting: { projectId: string; projectKey: string; projectName: string; itemId: string; title: string; kind: string; action: "choose" | "upload" | "do"; count?: number }[] = [];
     for (const p of live) {
       const items = await repo.listItems(t.id, p.id);
       // A project with an approved option no longer asks anyone to approve the others
       const decider = canApprove(actor, c.get("access"), p.people).ok && !items.some((i) => i.kind === "option" && i.status === "approved");
+      const options = decider ? items.filter((i) => i.kind === "option" && i.status === "proposed").sort((a, b) => a.title.localeCompare(b.title)) : [];
+      if (options.length) waiting.push({ projectId: p.id, projectKey: p.key, projectName: p.name, itemId: options[0]!.id, title: "Choose an option", kind: "option", action: "choose", count: options.length });
       for (const i of items) {
-        const action = i.kind === "option" && i.status === "proposed" && decider ? "approve"
-          : i.kind === "file_request" && i.status !== "done" && !actor.operator ? "upload"
-          : i.assigneeId === me && i.status !== "done" ? "do" : undefined;
-        if (action) waiting.push({ projectId: p.id, projectKey: p.key, itemId: i.id, title: i.title, kind: i.kind, action });
+        const action = i.kind === "file_request" && i.status !== "done" && !actor.operator ? "upload"
+          : i.kind !== "option" && i.assigneeId === me && i.status !== "done" ? "do" : undefined;
+        if (action) waiting.push({ projectId: p.id, projectKey: p.key, projectName: p.name, itemId: i.id, title: i.title, kind: i.kind, action });
       }
     }
-    // Approvals first, then files to send, then work
-    const order = { approve: 0, upload: 1, do: 2 };
+    // Choices first, then files to send, then work
+    const order = { choose: 0, upload: 1, do: 2 };
     waiting.sort((a, b) => order[a.action] - order[b.action]);
     // The latest written update on each live project, newest first
     const updates: { projectKey: string; projectName: string; title: string; body: string; health: string; at: string; by: string }[] = [];
@@ -787,7 +791,9 @@ export function createApp(d: Deps) {
       },
       waiting: waiting.slice(0, 10),
       updates: updates.slice(0, 5),
-      activity,
+      // What people did: sign-ins aren't doing anything, so the feed leaves them out (the
+      // notification for them still goes to whoever asked for it). Each row names who did it
+      activity: activity.filter((a) => a.action !== "member.signedin").map((a) => ({ ...a, by: names.get(a.actorId) ?? (a.actorId === "system" ? "" : "neon1") })),
     });
   });
 
@@ -818,7 +824,7 @@ export function createApp(d: Deps) {
     need(c, "read");
     const t = c.get("tenant");
     const projects = (await repo.listProjects(t.id)).filter((p) => !p.archived);
-    const [audit, members] = await Promise.all([repo.listAudit(t.id, 2000), repo.listMembers(t.id)]);
+    const members = await repo.listMembers(t.id);
     const layerOf = new Map(t.stages.map((s) => [s.id, s.layer]));
     const byLayer = { needs: 0, execution: 0, observation: 0, next: 0 } as Record<string, number>;
     const byHealth = { on_track: 0, at_risk: 0, off_track: 0, not_started: 0 } as Record<string, number>;
@@ -862,17 +868,11 @@ export function createApp(d: Deps) {
       const wk = week(new Date(Date.now() - k * 7 * 864e5).toISOString());
       weeks.push({ week: wk, done: doneByWeek.get(wk) ?? 0 });
     }
-    // Activity per day for the last twelve weeks, for the heatmap
-    const since = new Date(Date.now() - 84 * 864e5).toISOString().slice(0, 10);
-    const activity: Record<string, number> = {};
-    for (const e of audit) if (e.at.slice(0, 10) >= since) activity[e.at.slice(0, 10)] = (activity[e.at.slice(0, 10)] ?? 0) + 1;
     return c.json({
       projects: projects.length,
       byLayer,
       byHealth,
       weeks,
-      activity,
-      since,
       work: { open, overdue, onTime, late },
       decisions: { count: decisionDays.length, avgDays: decisionDays.length ? Math.round((decisionDays.reduce((a, b) => a + b, 0) / decisionDays.length) * 10) / 10 : null },
       measures: { count: measures, reached },
@@ -1174,6 +1174,8 @@ export function createApp(d: Deps) {
     // Anyone who can read may submit a request (intake); everything else needs write
     need(c, input.kind === "request" ? "comment" : "write");
     if (input.kind === "decision") fail(400, "invalid", "Decisions are recorded by approving an option.");
+    // Options are neon1's proposals: neon1 writes, shares, and withdraws them; the client approves one
+    if (input.kind === "option" && !who(c).actor.operator) fail(403, "neon1_only", "Options are proposed by neon1. Add a request instead, and they'll come back as options.");
     if (input.status !== undefined && !settableStatus(input.kind, input.status)) fail(400, "invalid_status", `"${input.status}" isn't a status for this kind of item.`);
     if (input.assigneeId) await activeMembers(p.tenantId, [input.assigneeId]);
     const fields = validateFields(input.kind, input.fields);
@@ -1206,6 +1208,7 @@ export function createApp(d: Deps) {
     const item = await repo.getItem(p.tenantId, p.id, c.req.param("iid"));
     if (!item) fail(404, "not_found", "That item no longer exists.");
     if (item.kind === "decision") fail(400, "immutable", "Decisions can't be edited. Approve a new option to change the decision.");
+    if (item.kind === "option" && !who(c).actor.operator) fail(403, "neon1_only", "Options are proposed by neon1. Comment on the option to ask for a change.");
     const input = await body(c, UpdateItemInput);
     // An approved option is part of a decision's record: its terms and status don't change. A revised
     // proposal is a new option, approved on its own
@@ -1234,6 +1237,7 @@ export function createApp(d: Deps) {
     if (!item) fail(404, "not_found", "That item no longer exists.");
     if (item.kind === "decision") fail(400, "immutable", "Decisions are kept as a permanent record.");
     if (item.status === "approved") fail(400, "immutable", "An approved option is part of a decision's record and stays.");
+    if (item.kind === "option" && !who(c).actor.operator) fail(403, "neon1_only", "Options are proposed by neon1. Comment on the option to ask for a change.");
     const version = Number(c.req.query("version"));
     if (!Number.isInteger(version)) fail(400, "invalid", "Send the version you last saw.");
     await repo.table.write([

@@ -44,6 +44,15 @@ async function flowOption() {
 
 // PORT-03: what was approved stays exactly as approved
 describe("approved terms", () => {
+  it("lets only neon1 add, change, share, withdraw, or remove an option; the client approves", async () => {
+    const { option, path } = await flowOption();
+    expect((await call(s.dana.email, "POST", `${path}/items`, { kind: "option", title: "Our own plan" })).status).toBe(403);
+    expect((await call(s.raj.email, "PATCH", `${path}/items/${option.id}`, { version: option.version, status: "draft" })).status).toBe(403);
+    expect((await call(s.raj.email, "PATCH", `${path}/items/${option.id}`, { version: option.version, fields: { cost: "$1" } })).status).toBe(403);
+    expect((await call(s.raj.email, "DELETE", `${path}/items/${option.id}?version=${option.version}`)).status).toBe(403);
+    expect((await call(OP, "PATCH", `${path}/items/${option.id}`, { version: option.version, status: "draft" })).status).toBe(200);
+  });
+
   it("copies the terms into the decision and keeps the approved option from changing or disappearing", async () => {
     const { option, path, p } = await flowOption();
     const approved = await call(s.raj.email, "POST", `${path}/items/${option.id}/approve`, { version: option.version });
@@ -53,9 +62,9 @@ describe("approved terms", () => {
     expect(terms.cost).toBe(String(option.fields.cost ?? ""));
     expect(approved.json.decision.fields.approverEmail).toBe(s.raj.email);
     const v = approved.json.option.version;
-    expect((await call(s.dana.email, "PATCH", `${path}/items/${option.id}`, { version: v, body: "Different scope", fields: { cost: "$999999" } })).status).toBe(400);
-    expect((await call(s.dana.email, "PATCH", `${path}/items/${option.id}`, { version: v, title: "Renamed" })).status).toBe(400);
-    expect((await call(s.dana.email, "DELETE", `${path}/items/${option.id}?version=${v}`)).status).toBe(400);
+    expect((await call(OP, "PATCH", `${path}/items/${option.id}`, { version: v, body: "Different scope", fields: { cost: "$999999" } })).status).toBe(400);
+    expect((await call(OP, "PATCH", `${path}/items/${option.id}`, { version: v, title: "Renamed" })).status).toBe(400);
+    expect((await call(OP, "DELETE", `${path}/items/${option.id}?version=${v}`)).status).toBe(400);
     expect(await repo.getItem(p.tenantId, p.id, option.id)).toBeDefined();
     const decision = await repo.getItem(p.tenantId, p.id, approved.json.decision.id);
     expect(decision!.fields.terms).toEqual(terms);
@@ -64,7 +73,7 @@ describe("approved terms", () => {
   it("approves a new option as a new decision that marks the earlier one replaced, which keeps its terms", async () => {
     const { option, path, p } = await flowOption();
     const first = await call(s.raj.email, "POST", `${path}/items/${option.id}/approve`, { version: option.version });
-    const next = await call(s.dana.email, "POST", `${path}/items`, { kind: "option", title: "Revised plan", status: "proposed", fields: { cost: "$2,000" } });
+    const next = await call(OP, "POST", `${path}/items`, { kind: "option", title: "Revised plan", status: "proposed", fields: { cost: "$2,000" } });
     expect(next.status).toBe(201);
     const second = await call(s.raj.email, "POST", `${path}/items/${next.json.id}/approve`, { version: next.json.version });
     expect(second.status).toBe(201);
@@ -75,7 +84,7 @@ describe("approved terms", () => {
   it("gives one consistent result when an edit and an approval race", async () => {
     const { option, path, p } = await flowOption();
     const [edit, approve] = await Promise.all([
-      call(s.dana.email, "PATCH", `${path}/items/${option.id}`, { version: option.version, fields: { cost: "$1" } }),
+      call(OP, "PATCH", `${path}/items/${option.id}`, { version: option.version, fields: { cost: "$1" } }),
       call(s.raj.email, "POST", `${path}/items/${option.id}/approve`, { version: option.version }),
     ]);
     const stored = (await repo.getItem(p.tenantId, p.id, option.id))!;

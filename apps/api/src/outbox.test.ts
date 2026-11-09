@@ -56,8 +56,8 @@ function appWith(outbox: "inline" | "worker") {
 }
 
 /** Call the API as a seeded person */
-async function call(app: ReturnType<typeof createApp>, method: string, path: string, body?: unknown) {
-  const r = await app.request(`/1NEON/api${path}`, { method, headers: { "content-type": "application/json", "x-1neon": "1", "x-dev-user": s.raj.email }, body: body === undefined ? undefined : JSON.stringify(body) });
+async function call(app: ReturnType<typeof createApp>, method: string, path: string, body?: unknown, as = s.raj.email) {
+  const r = await app.request(`/1NEON/api${path}`, { method, headers: { "content-type": "application/json", "x-1neon": "1", "x-dev-user": as }, body: body === undefined ? undefined : JSON.stringify(body) });
   const text = await r.text();
   return { status: r.status, json: text ? JSON.parse(text) : undefined };
 }
@@ -154,7 +154,7 @@ describe("event notices", () => {
     const app = appWith("worker");
     const { p } = await flow();
     const before = mailer.sent.length;
-    const r = await call(app, "POST", `/t/${p.tenantId}/projects/${p.id}/items`, { kind: "option", title: "Replay check" });
+    const r = await call(app, "POST", `/t/${p.tenantId}/projects/${p.id}/items`, { kind: "option", title: "Replay check" }, OP);
     expect(r.status).toBe(201);
     const rows = (await repo.table.query("OUTBOX")).filter((x) => String(x.SK).startsWith("E#"));
     expect(rows).toHaveLength(1);
