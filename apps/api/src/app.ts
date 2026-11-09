@@ -50,12 +50,14 @@ import { z } from "zod";
 import { CognitoAuth, type Verified } from "./auth.ts";
 import type { Config } from "./config.ts";
 import type { Directory, Mailer, Storage, Texter } from "./services.ts";
-import { factorRemovedEmail, inviteEmail, noticeEmail, passkeyEmail } from "./emails.ts";
+import { factorRemovedEmail, passkeyEmail } from "./emails.ts";
 import { factorInventory, type FactorInventory } from "./factors.ts";
 import { MemoryStorage } from "./local.ts";
 import { checkTotp, newTotp } from "./totp.ts";
 import { keys, PENDING_TOTP_MS, PENDING_TOTP_TRIES, Repo } from "./store/repo.ts";
-import { ConflictError, StoreBusyError, type Row } from "./store/types.ts";
+import { ConflictError, StoreBusyError, type Row, type WriteOp } from "./store/types.ts";
+import { drainOutbox, outboxForAudit, outboxOp, withTimeout } from "./outbox.ts";
+import { accountAllows, isOptOut, CODE_MS, CODE_TRIES, CODES_PER_HOUR, codeText, e164, hashCode, newCode, smsAfterSave, smsState } from "./sms.ts";
 
 
 /** Everything the app needs from outside; tests and local dev pass in-memory versions */
@@ -68,6 +70,9 @@ export interface Deps {
   // Optional: without it, nobody gets texts
   texter?: Texter;
   auth?: CognitoAuth;
+  // "worker": a scheduled worker sends queued messages (production). "inline" (the default): sent
+  // right after the change, for local runs, tests, and the browser demo
+  outbox?: "inline" | "worker";
 }
 
 
@@ -115,39 +120,31 @@ const REASONS = {
 } as const;
 
 
+// Each table's own write, before any app wrapped it
+const rawWrites = new WeakMap<object, (ops: WriteOp[]) => Promise<void>>();
+
+
 /** Build the API. Order matters: errors, CSRF, public routes, identity, then tenant routes */
 export function createApp(d: Deps) {
   const { repo, cfg } = d;
   const app = new Hono<Env>().basePath("/1NEON/api");
 
-  // Notifications ride on the audit trail: after any write that records events, email the people
-  // who want that kind of event. A mail failure never undoes or fails the change itself
-  const write = repo.table.write.bind(repo.table);
+  // Notifications ride on the audit trail: every write that records audit events also writes their
+  // outbox rows in the same transaction, so a committed change always has its messages queued. The
+  // worker sends them outside the request; locally, in tests, and in the demo they're sent right after
+  // The raw write is kept once per table, so a second app built on the same table (tests, the demo)
+  // replaces the wrapper instead of stacking on it with the first app's stale services
+  const write = rawWrites.get(repo.table) ?? repo.table.write.bind(repo.table);
+  rawWrites.set(repo.table, write);
   repo.table.write = async (ops) => {
-    await write(ops);
-    const events = ops.flatMap((o) => ("put" in o && o.put.type === "audit" ? [o.put as unknown as AuditEvent] : []));
-    if (events.length) await notifyOut(events).catch((e) => console.error(JSON.stringify({ level: "error", message: `notify: ${String(e)}` })));
+    const queued = outboxForAudit(ops);
+    await write([...ops, ...queued]);
+    if (queued.length && (d.outbox ?? "inline") === "inline") await drainNow(queued);
   };
-  async function notifyOut(events: AuditEvent[]) {
-    for (const e of events) {
-      const [members, tenant, actor] = await Promise.all([repo.listMembers(e.tenantId), repo.getTenant(e.tenantId), repo.getUser(e.actorId)]);
-      const by = actor?.name || actor?.email || "Someone";
-      for (const m of members) {
-        if (m.status !== "joined" || m.userId === e.actorId) continue;
-        const u = await repo.getUser(m.userId);
-        if (!u) continue;
-        if (wants(u.notify, e.action, "email")) {
-          const mail = noticeEmail({ orgName: tenant?.name ?? "1NEON", by, summary: e.summary, url: `${cfg.publicUrl}/1NEON/o/${tenant?.slug ?? ""}/workspace`, important: groupOf(e.action).level === "critical" });
-          await d.mailer.send(u.email, mail.subject, mail.text, mail.html).catch((err) => console.error(JSON.stringify({ level: "error", message: `notify email: ${String(err)}` })));
-        }
-        // Texts go only to people who agreed to them, at a number that reads as a real US mobile
-        const to = e164(u.phone);
-        if (d.texter && u.smsConsentAt && to && wants(u.notify, e.action, "sms")) {
-          // One person's failed text (an unregistered number, a carrier refusal) never stops the rest
-          await d.texter.send(to, `1NEON · ${tenant?.name ?? "neon1"}: ${e.summary} (${by}). Reply STOP to opt out.`.slice(0, 300)).catch((err) => console.error(JSON.stringify({ level: "error", message: `notify text: ${String(err)}` })));
-        }
-      }
-    }
+  /** Inline mode: send the rows just written; a failure stays queued and is logged, never thrown */
+  async function drainNow(queued: WriteOp[]) {
+    const ids = queued.flatMap((o) => ("put" in o ? [o.put.SK] : []));
+    await drainOutbox({ repo, mailer: d.mailer, texter: d.texter, cfg }, { ids }).catch((e) => console.error(JSON.stringify({ level: "error", message: `outbox: ${(e as Error).name}` })));
   }
 
   // Known errors keep their status. A version conflict returns the newer record only when the public
@@ -319,6 +316,8 @@ export function createApp(d: Deps) {
       // Which second steps the person has set up: the app's own authenticator is read live, and
       // passkeys come from the profile's hint (refreshed at each sign-in)
       factors: { totp, passkey: Boolean(user.passkey), any: totp || Boolean(user.passkey) || user.strongAuth },
+      // Where texts stand: unavailable (no sending number yet), no number, not agreed, opted out, unverified, or ready
+      sms: { state: smsState(user, Boolean(d.texter)) },
       orgs: tenants
         .filter((t) => t.status === "active")
         .map((t) => ({ id: t.id, slug: t.slug, name: t.name, clientId: t.clientId, access: actor.operator ? "admin" : accessBy.get(t.id) }))
@@ -331,12 +330,76 @@ export function createApp(d: Deps) {
     const { user } = who(c);
     const input = await body(c, UpdateMeInput);
     const { version, smsConsent, ...patch } = input;
-    // Agreeing to texts is recorded with its time, as carriers expect; turning them off clears it
-    const consent = smsConsent === undefined ? {} : { smsConsentAt: smsConsent ? user.smsConsentAt ?? now() : undefined };
-    const next: User = { ...user, ...defined(patch), ...consent, version: user.version + 1, updatedAt: now(), updatedBy: user.id };
+    // Agreeing to texts is recorded with its time and wording version, as carriers expect. A new
+    // number clears consent and verification, so nothing goes to it until its holder proves it
+    const sms = smsAfterSave(user, patch.phone, smsConsent);
+    const next: User = { ...user, ...defined(patch), ...sms, version: user.version + 1, updatedAt: now(), updatedBy: user.id };
     await repo.saveUser(next, version);
     return c.json(next);
   });
+
+  // --- Text verification ---------------------------------------------------
+  // Agreeing to texts isn't enough: a code sent to the number proves its holder is the person, and
+  // only then do notices go there. Codes are hashed, short-lived, limited in tries, and rate limited
+
+  // Send a code to the profile's number
+  app.post("/me/phone/verify", async (c) => {
+    const { user } = who(c);
+    if (!d.texter) fail(503, "texts_unavailable", "Texts aren't available yet. Email notices still work.");
+    const to = e164(user.phone);
+    if (!to) fail(400, "no_number", "Add a mobile number to your profile first.");
+    if (!user.smsConsentAt) fail(400, "not_agreed", "Agree to texts on your profile first.");
+    const k = { PK: `USER#${user.id}`, SK: "SMSVERIFY" };
+    const prev = await repo.table.get(k.PK, k.SK);
+    const recent = ((prev?.sentAt as string[] | undefined) ?? []).filter((t) => Date.now() - Date.parse(t) < 3600_000);
+    if (recent.length >= CODES_PER_HOUR) fail(429, "too_many_codes", "Too many codes this hour. Try again later.");
+    if (!(await accountAllows(repo))) fail(429, "texts_busy", "Texts are paused for today. Try again tomorrow.");
+    const { code, hash } = await newCode(user.id);
+    const at = now();
+    const version = Number(prev?.version ?? 0) + 1;
+    await repo.table.write([{ put: { ...k, hash, phone: to, expiresAt: new Date(Date.now() + CODE_MS).toISOString(), attempts: 0, sentAt: [...recent, at], version, ttl: Math.floor(Date.now() / 1000) + 3600 }, guard: prev ? { version: Number(prev.version) } : { create: true } }]);
+    // The person waits for this one, so it gets the same time limit as queued sends
+    try {
+      await withTimeout(d.texter.send(to, codeText(code)), 5_000);
+    } catch (e) {
+      if (isOptOut(e)) fail(409, "carrier_opted_out", "This number replied STOP earlier. Text START to the number 1NEON texts come from, then ask for a code again.");
+      throw e;
+    }
+    return c.json({ ok: true });
+  });
+
+  // Check the code; a match at the same number marks it verified
+  app.post("/me/phone/confirm", async (c) => {
+    const { user } = who(c);
+    const { code } = await body(c, z.object({ code: z.string().min(6).max(12) }));
+    const k = { PK: `USER#${user.id}`, SK: "SMSVERIFY" };
+    const row = await countPhoneTry(k);
+    if (row.hash !== (await hashCode(user.id, code)) || row.phone !== e164(user.phone)) fail(400, "wrong_code", "That code didn't match. Check the newest text.");
+    const fresh = (await repo.getUser(user.id))!;
+    await repo.saveUser({ ...fresh, smsPhone: String(row.phone), smsVerifiedAt: now(), version: fresh.version + 1, updatedAt: now(), updatedBy: user.id }, fresh.version);
+    await repo.table.write([{ delete: k }]);
+    return c.json({ ok: true });
+  });
+
+  /**
+   * Count one try at the phone code before any verdict. A write that loses a race is read again and
+   * counted afresh, so parallel guesses can't slip past the limit; still contended after five reads
+   * is answered as busy rather than judged uncounted
+   */
+  async function countPhoneTry(k: { PK: string; SK: string }): Promise<Row> {
+    for (let tries = 0; tries < 5; tries++) {
+      const row = await repo.table.get(k.PK, k.SK);
+      if (!row?.hash || Date.parse(String(row.expiresAt)) < Date.now()) fail(409, "no_code", "Ask for a new code.");
+      if (Number(row.attempts) >= CODE_TRIES) fail(429, "locked", "Too many wrong codes. Ask for a new one.");
+      try {
+        await repo.table.write([{ put: { ...row, attempts: Number(row.attempts) + 1, version: Number(row.version) + 1 }, guard: { version: Number(row.version) } }]);
+        return row;
+      } catch (e) {
+        if (!(e instanceof ConflictError)) throw e;
+      }
+    }
+    fail(429, "busy", "Too many tries at once. Wait a moment and try again.");
+  }
 
   // --- Sign-in methods ------------------------------------------------------
   // Rule for every add, replace, or remove: an account that already has a passkey or authenticator
@@ -819,12 +882,35 @@ export function createApp(d: Deps) {
       // The Cognito user exists before the email goes out, so the link works on first click
       await d.directory.ensureUser(p.email);
       const rev = await repo.membershipRev(t.id);
-      await repo.table.write([repo.memberOp(m, existing ? { version: existing.version } : { create: true }), repo.membershipRevOp(t.id, rev), repo.auditOp({ tenantId: t.id, actorId: inviter.id, action: "member.invited", target: uid, summary: `Invited ${p.email} as ${p.access}` })]);
-      const mail = inviteEmail({ orgName: t.name, inviter: inviter.name || "neon1", url: `${cfg.publicUrl}/1NEON/?email=${encodeURIComponent(p.email)}` });
-      await d.mailer.send(p.email, mail.subject, mail.text, mail.html);
-      out.push(m);
+      // The membership and its invitation email are queued together; the email's state shows on People
+      const invite = inviteOutbox(t, m, inviter);
+      m.invite = { state: "queued", queuedAt: invite.at };
+      await repo.table.write([repo.memberOp(m, existing ? { version: existing.version } : { create: true }), repo.membershipRevOp(t.id, rev), invite.op, repo.auditOp({ tenantId: t.id, actorId: inviter.id, action: "member.invited", target: uid, summary: `Invited ${p.email} as ${p.access}` })]);
+      if ((d.outbox ?? "inline") === "inline") await drainNow([invite.op]);
+      out.push((await repo.getMember(t.id, uid)) ?? m);
     }
     return c.json(out, 201);
+  });
+
+  /** An invitation email's outbox row; its createdAt doubles as the membership's invite.queuedAt */
+  function inviteOutbox(t: Tenant, m: Member, inviter: User) {
+    const op = outboxOp(`I#${newId()}`, { kind: "invite", tenantId: t.id, userId: m.userId, email: m.email, orgName: t.name, inviter: inviter.name || "neon1", url: `${cfg.publicUrl}/1NEON/?email=${encodeURIComponent(m.email)}` });
+    return { op, at: String(("put" in op && op.put.createdAt) || now()) };
+  }
+
+  // Send the invitation again, for someone who hasn't joined. At most once every ten minutes per person,
+  // unless the last one has already given up
+  app.post("/t/:tid/members/:uid/resend", async (c) => {
+    need(c, "manage_people");
+    const t = c.get("tenant");
+    const m = await repo.getMember(t.id, c.req.param("uid"));
+    if (!m || m.status !== "invited") fail(400, "not_invited", "Only someone who hasn't joined yet can get the invitation again.");
+    if (m.invite && m.invite.state !== "failed" && Date.now() - Date.parse(m.invite.queuedAt) < 10 * 60 * 1000) fail(429, "resend_soon", "The invitation was sent in the last ten minutes. Give it a little longer.");
+    const invite = inviteOutbox(t, m, who(c).user);
+    const next: Member = { ...m, invite: { state: "queued", queuedAt: invite.at }, version: m.version + 1, updatedAt: now(), updatedBy: actorId(c) };
+    await repo.table.write([repo.memberOp(next, { version: m.version }), invite.op]);
+    if ((d.outbox ?? "inline") === "inline") await drainNow([invite.op]);
+    return c.json((await repo.getMember(t.id, m.userId)) ?? next);
   });
 
   // Change access or deactivate. An organization always keeps at least one active admin: the check
@@ -1277,15 +1363,8 @@ export function createApp(d: Deps) {
 }
 
 
-/** A phone number as E.164 (+15551234567), or undefined if it doesn't read as a US or full international number */
-export function e164(phone: string | undefined) {
-  const raw = (phone ?? "").trim();
-  const digits = raw.replace(/\D/g, "");
-  if (raw.startsWith("+") && digits.length >= 10 && digits.length <= 15) return `+${digits}`;
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  return undefined;
-}
+// Phone numbers are read as E.164 by the text rules; re-exported for existing importers
+export { e164 };
 
 
 /** Turn a permission refusal into the matching HTTP error */

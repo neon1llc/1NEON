@@ -98,8 +98,15 @@ export const User = z.object({
   passkey: z.boolean().optional(),
   // Which notifications reach this person by email or text; missing groups use their defaults
   notify: z.record(z.string().max(24), z.object({ email: z.boolean(), sms: z.boolean() })).optional(),
-  // When this person agreed to texts at their number; texts are never sent without it
+  // When this person agreed to texts, and under which version of the wording; texts are never sent without it
   smsConsentAt: isoDate.optional(),
+  smsPolicy: z.string().max(20).optional(),
+  // The number a text code proved this person holds (E.164), and when. Texts go only there, and only
+  // while it is still the profile's number; changing the number clears all three of these fields
+  smsPhone: z.string().max(16).optional(),
+  smsVerifiedAt: isoDate.optional(),
+  // Set when the carrier reports a STOP from this number; agreeing again clears it
+  smsOptedOutAt: isoDate.optional(),
   ...versioned,
 });
 export type User = z.infer<typeof User>;
@@ -107,6 +114,8 @@ export type User = z.infer<typeof User>;
 
 /** A person's membership in one organization; access lives here, not on the user */
 export const MemberStatus = z.enum(["invited", "joined", "deactivated"]);
+// Where an invitation email stands: waiting in the outbox, handed to the mail service, or given up on
+export const InviteDelivery = z.enum(["queued", "sent", "failed"]);
 export const Member = z.object({
   tenantId: id,
   userId: id,
@@ -121,6 +130,8 @@ export const Member = z.object({
   lastSeenAt: isoDate.optional(),
   // When this person last opened their notifications here; newer events count as new
   seenAt: isoDate.optional(),
+  // The latest invitation email: its state and when it was queued (resends are rate limited by it)
+  invite: z.object({ state: InviteDelivery, queuedAt: isoDate, sentAt: isoDate.optional() }).optional(),
   ...versioned,
 });
 export type Member = z.infer<typeof Member>;

@@ -7,6 +7,7 @@ import { createApp } from "../app.ts";
 import { CognitoAuth } from "../auth.ts";
 import { loadConfig } from "../config.ts";
 import { AwsTexter, CognitoDirectory, S3Storage, SesMailer } from "../services.ts";
+import { drainOutbox } from "../outbox.ts";
 import { DynamoTable } from "../store/dynamo.ts";
 import { Repo } from "../store/repo.ts";
 
@@ -20,17 +21,55 @@ if (!cfg.table || !cfg.userPoolId || !cfg.clientId || !cfg.authDomain || !cfg.ma
 
 
 // Production wiring: DynamoDB, Cognito, SES, and S3 behind the same interfaces tests use
+const repo = new Repo(new DynamoTable(cfg.table));
+const mailer = new SesMailer(cfg.mailFrom);
+// Texts only once the toll-free number is set up
+const texter = cfg.smsFrom ? new AwsTexter(cfg.smsFrom) : undefined;
 const app = createApp({
   cfg,
-  repo: new Repo(new DynamoTable(cfg.table)),
+  repo,
   directory: new CognitoDirectory(cfg.userPoolId),
-  mailer: new SesMailer(cfg.mailFrom),
+  mailer,
   storage: new S3Storage(cfg.docsBucket),
-  // Texts only once the toll-free number is set up
-  texter: cfg.smsFrom ? new AwsTexter(cfg.smsFrom) : undefined,
+  texter,
   auth: new CognitoAuth({ userPoolId: cfg.userPoolId, clientId: cfg.clientId, authDomain: cfg.authDomain, publicUrl: cfg.publicUrl }),
+  // Messages wait in the outbox for the scheduled worker below, never inside a request
+  outbox: "worker",
 });
 
 
 // API Gateway HTTP API (payload 2.0) events in, responses out
-export const handler = handle(app);
+const http = handle(app);
+
+
+/**
+ * One function, two callers: API Gateway requests, and the EventBridge schedule that runs the outbox
+ * worker once a minute. A schedule event has source "aws.events"; nothing from the internet reaches
+ * this function except through API Gateway, so that shape can't be forged by a visitor
+ */
+export const handler = async (event: Parameters<typeof http>[0] | { source?: string }, context: Parameters<typeof http>[1]) => {
+  if ((event as { source?: string }).source === "aws.events") {
+    const result = await drainOutbox({ repo, mailer, texter, cfg }, { budgetMs: 9_000 });
+    // One line per pass in CloudWatch's embedded metric format: counts and queue age only, never
+    // addresses or bodies. Written to stdout directly, because the JSON log wrapper would hide the
+    // metric directive inside its message field
+    process.stdout.write(`${JSON.stringify(outboxMetrics(result))}\n`);
+    return result;
+  }
+  return http(event as Parameters<typeof http>[0], context);
+};
+
+
+/** A pass's counts as embedded metrics: the oldest message's age and how many gave up this pass */
+function outboxMetrics(r: Awaited<ReturnType<typeof drainOutbox>>) {
+  return {
+    _aws: { Timestamp: Date.now(), CloudWatchMetrics: [{ Namespace: "1NEON", Dimensions: [[]], Metrics: [{ Name: "OutboxOldestAgeSec", Unit: "Seconds" }, { Name: "OutboxFailed", Unit: "Count" }] }] },
+    message: "outbox",
+    OutboxOldestAgeSec: r.oldestAgeSec,
+    OutboxFailed: r.failed,
+    processed: r.processed,
+    sent: r.sent,
+    retrying: r.retrying,
+    pending: r.pending,
+  };
+}

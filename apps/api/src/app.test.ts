@@ -512,24 +512,124 @@ describe("notifications", () => {
 
 // Texts: only with consent, only for the kinds chosen, and only to a number that reads as real
 describe("texts", () => {
-  it("texts a stage move to someone who agreed and chose texts for workflow", async () => {
+  const dana = "dana@acmedental.example";
+  /** Move FLOW-1 one stage as Raj, which Dana chose to hear about by text */
+  const move = async (stageId: string) => {
+    const p = (await call("raj@acmedental.example", "GET", `/t/${s.acme.id}/projects`)).json.find((x: { key: string }) => x.key === "FLOW-1");
+    const r = await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/projects/${p.id}/move`, { version: p.version, stageId, reason: "Testing" });
+    expect(r.status, JSON.stringify(r.json)).toBeLessThan(300);
+  };
+  /** The six-digit code in the latest verification text */
+  const lastCode = (texter: MemoryTexter) => /code: (\d{6})/.exec(texter.sent.at(-1)!.body)![1]!;
+
+  it("texts only a verified number the person still has, with no project detail", async () => {
     const texter = new MemoryTexter();
     app = createApp({ cfg: { env: "local", publicUrl: "https://neon1.tech", operatorEmails: [OP], devAuth: true }, repo, directory: new MemoryDirectory(), mailer, storage: new MemoryStorage(), texter });
-    const me = await call("dana@acmedental.example", "GET", "/me");
+    const me = await call(dana, "GET", "/me");
     // Without consent nothing goes out, even with texts chosen
-    const u1 = await call("dana@acmedental.example", "PATCH", "/me", { version: me.json.user.version, phone: "(555) 010-2030", notify: { workflow: { email: false, sms: true } } });
-    const list = await call("raj@acmedental.example", "GET", `/t/${s.acme.id}/projects`);
-    let p = list.json.find((x: { key: string }) => x.key === "FLOW-1");
-    await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/projects/${p.id}/move`, { version: p.version, stageId: "build", reason: "Early start" });
-    expect(texter.sent.length).toBe(0);
-    // With consent, the next move is texted to her number in E.164
-    const u2 = await call("dana@acmedental.example", "PATCH", "/me", { version: u1.json.version, smsConsent: true });
+    const u1 = await call(dana, "PATCH", "/me", { version: me.json.user.version, phone: "(555) 010-2030", notify: { workflow: { email: false, sms: true } } });
+    await move("build");
+    expect(texter.sent).toHaveLength(0);
+    // Consent alone isn't proof of the number: still nothing
+    const u2 = await call(dana, "PATCH", "/me", { version: u1.json.version, smsConsent: true });
     expect(u2.json.smsConsentAt).toBeTruthy();
-    p = (await call("raj@acmedental.example", "GET", `/t/${s.acme.id}/projects`)).json.find((x: { key: string }) => x.key === "FLOW-1");
-    const mv = await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/projects/${p.id}/move`, { version: p.version, stageId: "verify", reason: "Testing" });
-    expect(mv.status, JSON.stringify(mv.json)).toBeLessThan(300);
-    expect(texter.sent).toHaveLength(1);
+    expect((await call(dana, "GET", "/me")).json.sms.state).toBe("unverified");
+    await move("verify");
+    expect(texter.sent).toHaveLength(0);
+    // A code proves it; a wrong code doesn't
+    expect((await call(dana, "POST", "/me/phone/verify", {})).status).toBe(200);
     expect(texter.sent[0]!.to).toBe("+15550102030");
-    expect(texter.sent[0]!.body).toMatch(/Reply STOP/);
+    expect((await call(dana, "POST", "/me/phone/confirm", { code: lastCode(texter) === "000000" ? "111111" : "000000" })).status).toBe(400);
+    expect((await call(dana, "POST", "/me/phone/confirm", { code: lastCode(texter) })).status).toBe(200);
+    expect((await call(dana, "GET", "/me")).json.sms.state).toBe("ready");
+    await move("build");
+    expect(texter.sent).toHaveLength(2);
+    expect(texter.sent[1]!.to).toBe("+15550102030");
+    expect(texter.sent[1]!.body).toMatch(/Reply STOP/);
+    // The notice names no organization, project, or person
+    expect(texter.sent[1]!.body).not.toMatch(/Acme|FLOW|Raj/);
+    // A new number clears consent and verification: zero texts until proven and agreed again
+    const cur = (await call(dana, "GET", "/me")).json.user;
+    const changed = await call(dana, "PATCH", "/me", { version: cur.version, phone: "(555) 010-9999" });
+    expect(changed.json.smsConsentAt).toBeUndefined();
+    expect(changed.json.smsVerifiedAt).toBeUndefined();
+    await move("verify");
+    expect(texter.sent).toHaveLength(2);
+  });
+
+  it("limits code requests and wrong guesses, and says when texts aren't available", async () => {
+    // No sending number: the profile says so and codes are refused
+    const none = await call(dana, "GET", "/me");
+    expect(none.json.sms.state).toBe("unavailable");
+    expect((await call(dana, "POST", "/me/phone/verify", {})).status).toBe(503);
+    const texter = new MemoryTexter();
+    app = createApp({ cfg: { env: "local", publicUrl: "https://neon1.tech", operatorEmails: [OP], devAuth: true }, repo, directory: new MemoryDirectory(), mailer, storage: new MemoryStorage(), texter });
+    await call(dana, "PATCH", "/me", { version: none.json.user.version, phone: "5550102030", smsConsent: true });
+    for (let i = 0; i < 3; i++) expect((await call(dana, "POST", "/me/phone/verify", {})).status).toBe(200);
+    expect((await call(dana, "POST", "/me/phone/verify", {})).status).toBe(429);
+    const wrong = lastCode(texter) === "000000" ? "111111" : "000000";
+    const tries = await Promise.all(Array.from({ length: 8 }, () => call(dana, "POST", "/me/phone/confirm", { code: wrong })));
+    expect(tries.every((r) => r.status !== 200)).toBe(true);
+    // Five counted tries lock the code, even for the right answer
+    expect((await call(dana, "POST", "/me/phone/confirm", { code: lastCode(texter) })).status).toBe(429);
+  });
+
+  it("stops texting a number that replied STOP, and records it", async () => {
+    const texter = new MemoryTexter();
+    app = createApp({ cfg: { env: "local", publicUrl: "https://neon1.tech", operatorEmails: [OP], devAuth: true }, repo, directory: new MemoryDirectory(), mailer, storage: new MemoryStorage(), texter });
+    const me = await call(dana, "GET", "/me");
+    await call(dana, "PATCH", "/me", { version: me.json.user.version, phone: "5550102030", smsConsent: true, notify: { workflow: { email: false, sms: true } } });
+    await call(dana, "POST", "/me/phone/verify", {});
+    await call(dana, "POST", "/me/phone/confirm", { code: lastCode(texter) });
+    // The carrier now refuses: the number opted out
+    texter.send = async () => { throw Object.assign(new Error("opted out"), { name: "ConflictException", Reason: "DESTINATION_PHONE_NUMBER_OPTED_OUT" }); };
+    await move("build");
+    const after = (await call(dana, "GET", "/me")).json;
+    expect(after.user.smsOptedOutAt).toBeTruthy();
+    expect(after.sms.state).toBe("opted_out");
+    // Agreeing again needs a new code, and a number the carrier still blocks gets a plain answer
+    const again = await call(dana, "PATCH", "/me", { version: after.user.version, smsConsent: true });
+    expect(again.json.smsVerifiedAt).toBeUndefined();
+    expect((await call(dana, "GET", "/me")).json.sms.state).toBe("unverified");
+    const blocked = await call(dana, "POST", "/me/phone/verify", {});
+    expect(blocked.status).toBe(409);
+    expect(blocked.json.error).toBe("carrier_opted_out");
+    // After START the code goes through and notices resume
+    const ok = new MemoryTexter();
+    texter.send = ok.send.bind(ok);
+    expect((await call(dana, "POST", "/me/phone/verify", {})).status).toBe(200);
+    expect((await call(dana, "POST", "/me/phone/confirm", { code: lastCode(ok) })).status).toBe(200);
+    expect((await call(dana, "GET", "/me")).json.sms.state).toBe("ready");
+  });
+
+  it("stops at a declined consent or a removed number, and keeps to the daily budget", async () => {
+    const texter = new MemoryTexter();
+    app = createApp({ cfg: { env: "local", publicUrl: "https://neon1.tech", operatorEmails: [OP], devAuth: true }, repo, directory: new MemoryDirectory(), mailer, storage: new MemoryStorage(), texter });
+    const me = await call(dana, "GET", "/me");
+    await call(dana, "PATCH", "/me", { version: me.json.user.version, phone: "5550102030", smsConsent: true, notify: { workflow: { email: false, sms: true } } });
+    await call(dana, "POST", "/me/phone/verify", {});
+    await call(dana, "POST", "/me/phone/confirm", { code: lastCode(texter) });
+    const codes = texter.sent.length;
+    // Turning texts off: not agreed, nothing sent
+    let u = (await call(dana, "GET", "/me")).json.user;
+    await call(dana, "PATCH", "/me", { version: u.version, smsConsent: false });
+    expect((await call(dana, "GET", "/me")).json.sms.state).toBe("not_agreed");
+    await move("build");
+    expect(texter.sent).toHaveLength(codes);
+    // Removing the number: no number, nothing sent
+    u = (await call(dana, "GET", "/me")).json.user;
+    await call(dana, "PATCH", "/me", { version: u.version, phone: "", smsConsent: true });
+    expect((await call(dana, "GET", "/me")).json.sms.state).toBe("no_number");
+    await move("verify");
+    expect(texter.sent).toHaveLength(codes);
+    // Back on and verified: at most ten notices a day, however much happens
+    u = (await call(dana, "GET", "/me")).json.user;
+    await call(dana, "PATCH", "/me", { version: u.version, phone: "5550102030", smsConsent: true });
+    await call(dana, "POST", "/me/phone/verify", {});
+    await call(dana, "POST", "/me/phone/confirm", { code: lastCode(texter) });
+    const before = texter.sent.length;
+    for (let i = 0; i < 12; i++) await move(i % 2 ? "verify" : "build");
+    expect(texter.sent.length - before).toBe(10);
+    expect(texter.sent.slice(before).every((t) => t.body.length <= 160)).toBe(true);
   });
 });
