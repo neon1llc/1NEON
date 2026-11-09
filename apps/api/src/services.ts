@@ -50,7 +50,8 @@ export interface Storage {
   // A link the browser PUTs the bytes to, with this content type
   putUrl(key: string, contentType: string, size: number): Promise<string>;
   // A download link that saves the file under its own name
-  getUrl(key: string, name: string): Promise<string>;
+  // With `inline`, the browser shows it in a tab instead of saving it (viewable types only, see VIEWABLE in the domain)
+  getUrl(key: string, name: string, inline?: string): Promise<string>;
   // What is stored at the key, with each outcome told apart: the size, nothing there, refused (the
   // bucket denies reads until the scan tags a file clean), or a provider problem worth retrying
   inspect(key: string): Promise<Inspection>;
@@ -83,9 +84,9 @@ export class S3Storage implements Storage {
   }
 
   // The bucket refuses this download until GuardDuty tags the object clean
-  async getUrl(key: string, name: string) {
-    const disposition = `attachment; filename*=UTF-8''${encodeURIComponent(name)}`;
-    return getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key, ResponseContentDisposition: disposition }), { expiresIn: LINK_SECONDS });
+  async getUrl(key: string, name: string, inline?: string) {
+    const disposition = `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(name)}`;
+    return getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key, ResponseContentDisposition: disposition, ...(inline ? { ResponseContentType: inline } : {}) }), { expiresIn: LINK_SECONDS });
   }
 
   // GetObjectAttributes needs s3:GetObject as well as its own permission, so while the bucket denies

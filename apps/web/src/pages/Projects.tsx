@@ -118,52 +118,94 @@ export function Projects() {
           })}
         </div>
       ) : (
-        <Timeline projects={list} slug={summary.slug} layerOf={(p) => stage.get(p.stageId)?.layer ?? "needs"} />
+        <Timeline projects={list} slug={summary.slug} stageOf={(p) => { const st = stage.get(p.stageId); return { name: st?.name ?? "", layer: st?.layer ?? "needs", last: st ? st.at === org.stages.length - 1 : false }; }} />
       )}
     </>
   );
 }
 
 
-/** Projects as bars from when they started to their target date, with today marked */
-function Timeline({ projects, slug, layerOf }: { projects: Project[]; slug: string; layerOf: (p: Project) => Layer }) {
+/**
+ * Projects as bars from when they started to their target date. A week grid with dated ticks (months
+ * when the span is long), today as a dashed line, time still ahead lighter, each target as a
+ * diamond, and time past a target in red. Each row says its stage and how the date stands, and a legend explains the colors
+ */
+function Timeline({ projects, slug, stageOf }: { projects: Project[]; slug: string; stageOf: (p: Project) => { name: string; layer: Layer; last: boolean } }) {
   const day = 86_400_000;
-  const today = Date.now();
-  // Projects without a target date show a short open-ended bar to today
+  const today = new Date(new Date().toDateString()).getTime();
+  // Projects without a target date run to today (at least two weeks), faded at the end
   const spans = projects.map((p) => {
-    const start = Date.parse(p.createdAt);
-    const end = p.targetDate ? Date.parse(p.targetDate) : Math.max(today, start + 14 * day);
-    return { p, start, end, open: !p.targetDate };
+    const start = new Date(new Date(p.createdAt).toDateString()).getTime();
+    const target = p.targetDate ? Date.parse(`${p.targetDate}T00:00`) : undefined;
+    const end = target ?? Math.max(today, start + 14 * day);
+    return { p, start, end, target, stage: stageOf(p) };
   });
   if (!spans.length) return null;
   const min = Math.min(...spans.map((s) => s.start), today) - 3 * day;
   const max = Math.max(...spans.map((s) => s.end), today) + 7 * day;
   const pct = (t: number) => ((t - min) / (max - min)) * 100;
-  // Month ticks along the top
-  const months: { at: number; label: string }[] = [];
-  for (let d = new Date(new Date(min).getFullYear(), new Date(min).getMonth() + 1, 1); d.getTime() < max; d.setMonth(d.getMonth() + 1)) {
-    months.push({ at: d.getTime(), label: d.toLocaleString(undefined, { month: "short" }) });
+  // Ticks: every Monday with its date while the span is under about four months, else each month
+  const weekly = max - min <= 120 * day;
+  const ticks: { at: number; label: string }[] = [];
+  if (weekly) {
+    const d = new Date(min);
+    d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));
+    for (; d.getTime() < max; d.setDate(d.getDate() + 7)) ticks.push({ at: d.getTime(), label: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) });
+  } else {
+    for (let d = new Date(new Date(min).getFullYear(), new Date(min).getMonth() + 1, 1); d.getTime() < max; d.setMonth(d.getMonth() + 1)) ticks.push({ at: d.getTime(), label: d.toLocaleString(undefined, { month: "short" }) });
   }
+  const short = (t: number) => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  // How a project's date stands, in words: days left, days late, or no date yet
+  const standing = (target: number | undefined, last: boolean) => {
+    if (target === undefined) return "no target date";
+    const n = Math.round((target - today) / day);
+    if (last) return `target ${short(target)}`;
+    return n > 0 ? `${n}d left, target ${short(target)}` : n === 0 ? "due today" : `${-n}d past target`;
+  };
+  // The grid lines every row draws behind its bar
+  const grid = ticks.map((t) => <i key={t.at} className="tl-tick" style={{ left: `${pct(t.at)}%` }} aria-hidden="true" />);
   return (
     <div className="timeline slide-stage" data-tour="project-list">
-      {/* Month ticks and today, lined up with the bars below */}
+      {/* What the colors and marks mean */}
+      <div className="tl-legend small muted" aria-hidden="true">
+        {LAYERS.map((l) => <span key={l}><i className={`tl-key l-${l}`} />{layerName(l)}</span>)}
+        <span><i className="tl-key diamond" />Target</span>
+        <span><i className="tl-key late" />Past target</span>
+        <span><i className="tl-key now" />Today</span>
+      </div>
+      {/* Date ticks and today, lined up with the bars below */}
       <div className="tl-row head" aria-hidden="true">
-        <span />
+        <span className="small muted">Started → target</span>
         <span className="tl-track">
-          {months.map((m) => <span key={m.at} className="tl-month" style={{ left: `${pct(m.at)}%` }}>{m.label}</span>)}
+          {ticks.map((m) => <span key={m.at} className="tl-month" style={{ left: `${pct(m.at)}%` }}>{m.label}</span>)}
           <span className="tl-month today" style={{ left: `${pct(today)}%` }}>Today</span>
         </span>
       </div>
       <div className="tl-rows">
-        {spans.map(({ p, start, end, open }) => (
-          <Link key={p.id} className="tl-row" to={`/o/${slug}/projects/${p.key}`}>
-            <span className="tl-name"><span className="s">{p.key}</span> {p.name}</span>
-            <span className="tl-track">
-              <i className="tl-now" style={{ left: `${pct(today)}%` }} aria-hidden="true" />
-              <span className={`tl-bar l-${layerOf(p)}${open ? " open" : ""}`} style={{ left: `${pct(start)}%`, width: `${Math.max(1.5, pct(end) - pct(start))}%` }} title={`${p.name}: ${dateLabel(new Date(start).toISOString())} to ${open ? "no target date" : dateLabel(p.targetDate)}`} />
-            </span>
-          </Link>
-        ))}
+        {spans.map(({ p, start, end, target, stage }) => {
+          const late = target !== undefined && target < today && !stage.last;
+          const words = `${p.name}: started ${short(start)}, ${stage.name}, ${standing(target, stage.last)}`;
+          return (
+            <Link key={p.id} className="tl-row" to={`/o/${slug}/projects/${p.key}`} aria-label={words}>
+              <span className="tl-name">
+                <span><span className="s">{p.key}</span> {p.name}</span>
+                <span className={`tl-sub${late ? " late" : ""}`}>{stage.name} · {standing(target, stage.last)}</span>
+              </span>
+              <span className="tl-track" title={words}>
+                {grid}
+                <i className="tl-now" style={{ left: `${pct(today)}%` }} aria-hidden="true" />
+                <span className={`tl-bar l-${stage.layer}${target === undefined ? " open" : ""}`} style={{ left: `${pct(start)}%`, width: `${Math.max(1.5, pct(end) - pct(start))}%` }}>
+                  <span className="tl-date">{short(start)}</span>
+                </span>
+                {/* Time still ahead shows lighter, so the solid part is how far along the calendar it is */}
+                {target !== undefined && today < end && <span className="tl-ahead" style={{ left: `${pct(Math.max(start, today))}%`, width: `${pct(end) - pct(Math.max(start, today))}%` }} aria-hidden="true" />}
+                {/* Time past the target, from the target to today */}
+                {late && <span className="tl-late" style={{ left: `${pct(target)}%`, width: `${pct(today) - pct(target)}%` }} aria-hidden="true" />}
+                {target !== undefined && <i className="tl-target" style={{ left: `${pct(target)}%` }} aria-hidden="true" />}
+              </span>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

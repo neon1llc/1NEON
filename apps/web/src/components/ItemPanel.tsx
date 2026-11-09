@@ -3,7 +3,7 @@
 // and Linear use, so a list stays short and every detail is one tap away.
 
 
-import { STATUSES, WORK_STATUSES, type AuditEvent, type Item, type ItemKind } from "@1neon/domain";
+import { MetricFields, OptionFields, STATUSES, WORK_STATUSES, type AuditEvent, type Item, type ItemKind } from "@1neon/domain";
 import { useQuery } from "@tanstack/react-query";
 import { Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -12,7 +12,7 @@ import { problem, useMembers, useRefresh, useSubmit } from "../lib/hooks.ts";
 import { read } from "../lib/reads.ts";
 import { gate } from "./Reads.tsx";
 import { useOrg, useSession } from "./Shell.tsx";
-import { ago, Avatar, ConflictDialog, Dialog, useToast } from "./ui.tsx";
+import { ago, Avatar, ConflictDialog, Dialog, useAsk, useToast } from "./ui.tsx";
 
 
 // Plain words for every status a person can pick
@@ -41,9 +41,32 @@ interface Comment {
 // --- Editing draft ----------------------------------------------------------------
 
 
-/** The fields the panel edits, as form values (no owner or due date is an empty string) */
-type Draft = { title: string; body: string; status: string; assigneeId: string; dueDate: string };
-const draftOf = (i: Item): Draft => ({ title: i.title, body: i.body, status: i.status, assigneeId: i.assigneeId ?? "", dueDate: i.dueDate ?? "" });
+/** The fields the panel edits, as form values (no owner or due date is an empty string). `f` holds a
+ * kind's own fields as text: an option's cost, timeline, scores, and recommendation; a measure's unit,
+ * starting point, and target */
+type Draft = { title: string; body: string; status: string; assigneeId: string; dueDate: string; f: Record<string, string> };
+const draftOf = (i: Item): Draft => ({ title: i.title, body: i.body, status: i.status, assigneeId: i.assigneeId ?? "", dueDate: i.dueDate ?? "", f: kindFields(i) });
+
+/** A kind's own editable fields as text, so they edit like the rest */
+function kindFields(i: Item): Record<string, string> {
+  if (i.kind === "option") {
+    const o = OptionFields.parse(i.fields);
+    return { cost: o.cost, timeline: o.timeline, costScore: String(o.costScore), qualityScore: String(o.qualityScore), effortScore: String(o.effortScore), recommended: o.recommended ? "yes" : "" };
+  }
+  if (i.kind === "metric") {
+    const m = MetricFields.parse(i.fields);
+    return { unit: m.unit, baseline: m.baseline === undefined ? "" : String(m.baseline), target: m.target === undefined ? "" : String(m.target) };
+  }
+  return {};
+}
+
+/** The text values back as the API's types: scores and numbers as numbers, the recommendation as yes or no */
+function typed(key: string, v: string): unknown {
+  if (key.endsWith("Score")) return Number(v);
+  if (key === "recommended") return v === "yes";
+  if (key === "baseline" || key === "target") return v.trim() === "" || Number.isNaN(Number(v)) ? undefined : Number(v);
+  return v;
+}
 
 /** The PATCH fields for what the draft changed from `from`; empty owner and due date clear them */
 export function changesFrom(draft: Draft, from: Item): Record<string, unknown> {
@@ -54,7 +77,48 @@ export function changesFrom(draft: Draft, from: Item): Record<string, unknown> {
   if (draft.status !== was.status) out.status = draft.status;
   if (draft.assigneeId !== was.assigneeId) out.assigneeId = draft.assigneeId || null;
   if (draft.dueDate !== was.dueDate) out.dueDate = draft.dueDate || null;
+  // Only the kind's fields that changed are sent; the API merges them into the rest
+  const fields = Object.fromEntries(Object.keys(draft.f).filter((k) => draft.f[k] !== was.f[k]).map((k) => [k, typed(k, draft.f[k]!)]));
+  if (Object.keys(fields).length) out.fields = fields;
   return out;
+}
+
+
+/** Who may delete an item: writers, except that options are neon1's, and decisions and approved
+ * options are a permanent record (the API enforces the same) */
+export function useMayDelete(item: Item) {
+  const { canWrite } = useOrg();
+  const me = useSession();
+  return canWrite && item.kind !== "decision" && item.status !== "approved" && (item.kind !== "option" || me.operator);
+}
+
+
+/** Delete an item after an "are you sure"; the version guard stops deleting something just changed.
+ * Resolves true once it's gone */
+export function useDeleteItem(path: string) {
+  const { org } = useOrg();
+  const ask = useAsk();
+  const toast = useToast();
+  const refresh = useRefresh(org.id);
+  return async (item: Item, label: string) => {
+    const yes = await ask({
+      title: `Delete this ${label.toLowerCase()}?`,
+      body: `"${item.title}" and its comments are deleted for everyone on this project. The project's history keeps a note that it was deleted.`,
+      yes: "Delete",
+      danger: true,
+    });
+    if (!yes) return false;
+    try {
+      await api(`${path}/items/${item.id}?version=${item.version}`, { method: "DELETE" });
+      toast(`Deleted: ${item.title}`);
+      refresh();
+      return true;
+    } catch (e) {
+      toast(e instanceof HttpError && e.status === 409 ? "Someone changed it first. Look at the latest, then delete again if you still want to." : problem(e));
+      refresh();
+      return false;
+    }
+  };
 }
 
 
@@ -69,8 +133,11 @@ export function changesFrom(draft: Draft, from: Item): Record<string, unknown> {
 export function ItemPanel({ item, label, path, open, onClose }: { item: Item; label: string; path: string; open: boolean; onClose: () => void }) {
   const { org, canWrite: writer, canAdmin } = useOrg();
   const me = useSession();
-  // Options are neon1's proposals: the client reads, comments on, and approves them, but doesn't edit them
-  const canWrite = writer && (item.kind !== "option" || me.operator);
+  // Options are neon1's proposals: the client reads, comments on, and approves them, but doesn't edit
+  // them. An approved option is part of its decision's record, so nobody edits it
+  const canWrite = writer && (item.kind !== "option" || me.operator) && item.status !== "approved";
+  const mayDelete = useMayDelete(item);
+  const deleteItem = useDeleteItem(path);
   const toast = useToast();
   const refresh = useRefresh(org.id);
   const members = useMembers(org.id);
@@ -140,16 +207,9 @@ export function ItemPanel({ item, label, path, open, onClose }: { item: Item; la
     }
     refresh();
   });
-  // Remove after a confirm; the version guard stops removing something just changed
+  // Delete after the are-you-sure, against the version the panel opened with
   const remove = async () => {
-    if (!confirm(`Remove "${item.title}"?`)) return;
-    try {
-      await api(`${path}/items/${item.id}?version=${base.version}`, { method: "DELETE" });
-      onClose();
-    } catch (e) {
-      toast(problem(e));
-    }
-    refresh();
+    if (await deleteItem(base, label)) onClose();
   };
   // Add a comment, then reload the thread; one at a time, so a double click posts once
   const comment = () => runPost(async () => {
@@ -161,7 +221,10 @@ export function ItemPanel({ item, label, path, open, onClose }: { item: Item; la
       toast(problem(e));
     }
   });
+  const ask = useAsk();
+  // Deleting a comment asks first, like every delete
   const deleteComment = async (id: string) => {
+    if (!(await ask({ title: "Delete this comment?", body: "It's deleted for everyone on this project.", yes: "Delete", danger: true }))) return;
     try {
       await api(`${path}/items/${item.id}/comments/${id}`, { method: "DELETE" });
       void thread.refetch();
@@ -207,11 +270,14 @@ export function ItemPanel({ item, label, path, open, onClose }: { item: Item; la
       {canWrite ? (
         <textarea aria-label="Details" placeholder="Details" value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} rows={4} />
       ) : item.body ? <p className="pre">{item.body}</p> : null}
-      {canWrite && (
+      {/* An option's terms and scores, and a measure's unit and range, edit here too */}
+      {canWrite && <KindFields kind={item.kind} f={draft.f} onChange={(f) => setDraft({ ...draft, f })} />}
+      {item.status === "approved" && <p className="small muted">Approved, so its terms are part of the decision's record and can't change. A different plan is a new option.</p>}
+      {(canWrite || mayDelete) && (
         <div className="actions">
-          <button className="btn btn-primary" disabled={!dirty || !draft.title.trim() || saving} onClick={() => void save(base.version)}>{saving ? "Saving…" : "Save"}</button>
+          {canWrite && <button className="btn btn-primary" disabled={!dirty || !draft.title.trim() || saving} onClick={() => void save(base.version)}>{saving ? "Saving…" : "Save"}</button>}
           <button className="btn btn-ghost" onClick={onClose}>Close</button>
-          {item.kind !== "decision" && <button className="icon-act" style={{ marginLeft: "auto" }} onClick={() => void remove()} aria-label={`Remove ${item.title}`} title="Remove"><Trash2 size={16} aria-hidden="true" /></button>}
+          {mayDelete && <button className="btn btn-danger" style={{ marginLeft: "auto" }} onClick={() => void remove()}><Trash2 size={15} aria-hidden="true" /> Delete</button>}
         </div>
       )}
       {/* The conversation: newest at the bottom, like a chat */}
@@ -266,5 +332,43 @@ function conflictRows(draft: Draft, base: Item, theirs: Item, person: (uid: stri
   if ("status" in mine) rows.push({ label: "Status", mine: STATUS_WORDS[draft.status] ?? draft.status, theirs: STATUS_WORDS[t.status] ?? t.status });
   if ("assigneeId" in mine) rows.push({ label: "Owner", mine: person(draft.assigneeId), theirs: person(t.assigneeId) });
   if ("dueDate" in mine) rows.push({ label: "Due", mine: draft.dueDate, theirs: t.dueDate });
+  // A kind's own fields (cost, scores, unit, and so on), one row each
+  for (const k of Object.keys((mine.fields as Record<string, unknown> | undefined) ?? {})) rows.push({ label: k, mine: draft.f[k] ?? "", theirs: t.f[k] ?? "" });
   return rows;
+}
+
+
+// Scores run 1 to 5 where 5 is always the better end, so the words match the option card's meters
+const SCORE_CHOICES: Record<string, string[]> = {
+  costScore: ["Highest", "High", "Medium", "Low", "Lowest"],
+  qualityScore: ["Basic", "Fair", "Good", "Very good", "Best"],
+  effortScore: ["Heaviest", "Heavy", "Medium", "Light", "Lightest"],
+};
+
+
+/** The editors for a kind's own fields; kinds without any show nothing */
+function KindFields({ kind, f, onChange }: { kind: ItemKind; f: Record<string, string>; onChange: (f: Record<string, string>) => void }) {
+  const set = (k: string, v: string) => onChange({ ...f, [k]: v });
+  if (kind === "option") return (
+    <div className="props">
+      <label>Cost<input value={f.cost ?? ""} onChange={(e) => set("cost", e.target.value)} placeholder="e.g. $4,800 fixed" maxLength={80} /></label>
+      <label>Timeline<input value={f.timeline ?? ""} onChange={(e) => set("timeline", e.target.value)} placeholder="e.g. 3 weeks" maxLength={80} /></label>
+      {(["costScore", "qualityScore", "effortScore"] as const).map((k) => (
+        <label key={k}>{{ costScore: "Cost rating", qualityScore: "Quality rating", effortScore: "Effort rating" }[k]}
+          <select value={f[k]} onChange={(e) => set(k, e.target.value)}>
+            {SCORE_CHOICES[k]!.map((w, i) => <option key={w} value={String(i + 1)}>{w}</option>)}
+          </select>
+        </label>
+      ))}
+      <label className="check"><input type="checkbox" checked={f.recommended === "yes"} onChange={(e) => set("recommended", e.target.checked ? "yes" : "")} /> Recommended</label>
+    </div>
+  );
+  if (kind === "metric") return (
+    <div className="props">
+      <label>Unit<input value={f.unit ?? ""} onChange={(e) => set("unit", e.target.value)} placeholder="e.g. hours" maxLength={24} /></label>
+      <label>Starts at<input inputMode="decimal" value={f.baseline ?? ""} onChange={(e) => set("baseline", e.target.value.replace(/[^\d.-]/g, ""))} /></label>
+      <label>Target<input inputMode="decimal" value={f.target ?? ""} onChange={(e) => set("target", e.target.value.replace(/[^\d.-]/g, ""))} /></label>
+    </div>
+  );
+  return null;
 }

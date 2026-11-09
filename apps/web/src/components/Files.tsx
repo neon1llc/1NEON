@@ -2,12 +2,12 @@
 // camera or files, a browser's file picker, or a drop onto the page.
 
 
-import { fileState, type DocumentRecord, type FileState, type Layer } from "@1neon/domain";
+import { fileState, VIEWABLE, type DocumentRecord, type FileState, type Layer } from "@1neon/domain";
 import { useRef, useState, type ReactNode } from "react";
 import { api, HttpError, openable, send } from "../lib/api.ts";
 import { problem, useRefresh } from "../lib/hooks.ts";
 import { useOrg, useSession } from "./Shell.tsx";
-import { ago, LayerBadge, useToast } from "./ui.tsx";
+import { ago, LayerBadge, useAsk, useToast } from "./ui.tsx";
 
 
 // Where an upload is filed: its layer, and optionally a project and the "file needed" item it answers
@@ -118,12 +118,14 @@ const STATE_NOTE: Record<FileState, string> = { receiving: "", checking: "malwar
 const size = (n: number) => (n < 1024 ? `${n} B` : n < 1024 ** 2 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1024 ** 2).toFixed(1)} MB`);
 
 
-/** Files as rows: name, where it's filed, when, and Download; uploaders and admins may remove */
+/** Files as rows: the name opens it (in a tab when the browser can show it, otherwise it downloads),
+ * then where it's filed, when, and Download; the uploader and admins may delete, after a check */
 export function FileList({ docs, projectName, empty = "No files yet." }: { docs: DocumentRecord[]; projectName?: (id?: string) => string | undefined; empty?: string }) {
   const { org, canAdmin } = useOrg();
   const me = useSession();
   const toast = useToast();
   const refresh = useRefresh(org.id);
+  const ask = useAsk();
   // Ready files, plus ones still checking or that failed, so nobody wonders where an upload went
   const list = docs.filter((d) => fileState(d) !== "receiving");
   if (!list.length) return <p className="muted small">{empty}</p>;
@@ -139,9 +141,22 @@ export function FileList({ docs, projectName, empty = "No files yet." }: { docs:
       toast(problem(e));
     }
   };
-  // Removing asks first; admins need strong sign-in for others' files
+  // Open in a new tab: PDFs, pictures, and plain text show there; anything else downloads instead.
+  // The tab opens on the click itself (a tab opened after waiting would be blocked), then gets the link
+  const view = async (d: DocumentRecord) => {
+    if (!VIEWABLE.has(d.contentType)) return void download(d);
+    const tab = window.open("", "_blank");
+    try {
+      const { url } = await api<{ url: string }>(`/t/${org.id}/docs/${d.id}/download${q(d) ? `${q(d)}&` : "?"}view=1`);
+      if (tab) { tab.opener = null; tab.location.href = await openable(url); } else location.href = await openable(url);
+    } catch (e) {
+      tab?.close();
+      toast(problem(e));
+    }
+  };
+  // Deleting asks first; admins need strong sign-in for others' files
   const remove = async (d: DocumentRecord) => {
-    if (!confirm(`Remove ${d.name}?`)) return;
+    if (!(await ask({ title: `Delete ${d.name}?`, body: "It's deleted for everyone in this organization and can't be downloaded again. The activity log keeps a note that it was deleted.", yes: "Delete", danger: true }))) return;
     try {
       await api(`/t/${org.id}/docs/${d.id}${q(d)}`, { method: "DELETE" });
     } catch (e) {
@@ -155,13 +170,14 @@ export function FileList({ docs, projectName, empty = "No files yet." }: { docs:
         <div className="file" key={d.id}>
           <LayerBadge layer={d.layer} />
           <div className="meta">
-            <span className="t">{d.name}</span>
+            {/* A ready file's name opens it, like other titles; others are plain text until they're ready */}
+            {fileState(d) === "ready" ? <button type="button" className="t item-open" onClick={() => void view(d)} title={VIEWABLE.has(d.contentType) ? "Open in a new tab" : "Download"}>{d.name}</button> : <span className="t">{d.name}</span>}
             <span className="s">{[projectName?.(d.projectId), size(d.size), ago(d.createdAt), STATE_NOTE[fileState(d)]].filter(Boolean).join(" · ")}</span>
             {(d.state === "failed" || d.state === "rejected") && <span className="s warn-text">Not available: {fileProblem(d)}</span>}
           </div>
           <span className="acts">
             <button className="chip" onClick={() => void download(d)} disabled={fileState(d) !== "ready"}>{fileState(d) === "checking" ? "Checking…" : "Download"}</button>
-            {(d.updatedBy === me.user.id || canAdmin) && <button className="chip" onClick={() => void remove(d)} aria-label={`Remove ${d.name}`}>Remove</button>}
+            {(d.updatedBy === me.user.id || canAdmin) && <button className="chip" onClick={() => void remove(d)} aria-label={`Delete ${d.name}`}>Delete</button>}
           </span>
         </div>
       ))}

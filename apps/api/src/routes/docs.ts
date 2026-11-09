@@ -2,7 +2,7 @@
 // scanned before download, and the in-memory file links local dev uses instead of S3.
 
 
-import { CreateDocInput, DocumentRecord, fileState, newId, type FileProblem } from "@1neon/domain";
+import { CreateDocInput, DocumentRecord, fileState, newId, VIEWABLE, type FileProblem } from "@1neon/domain";
 import type { Context } from "hono";
 import { settleFile, unwatchOp, watchOp } from "../files.ts";
 import { actorId, body, fail, need, now, type Env } from "../lib/http.ts";
@@ -102,7 +102,9 @@ export function docRoutes(app: App, k: Kit) {
     if (state === "rejected") fail(410, "infected", "This file was flagged by the malware scan and can't be downloaded.");
     if (state === "failed") fail(410, "file_failed", FILE_PROBLEM[cur.problem ?? "missing"]);
     if (state !== "ready" || cur.scan !== "clean") fail(409, "scanning", "This file is still being checked. Try again in a minute.");
-    return c.json({ url: await d.storage.getUrl(cur.key, cur.name) });
+    // ?view=1 opens a viewable file in the browser; other types (and every plain request) download
+    const view = c.req.query("view") === "1" && VIEWABLE.has(cur.contentType) ? cur.contentType : undefined;
+    return c.json({ url: await d.storage.getUrl(cur.key, cur.name, view), inline: Boolean(view) });
   });
 
   // Remove a file: the person who uploaded it, or an admin

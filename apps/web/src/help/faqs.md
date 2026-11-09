@@ -37,13 +37,22 @@ No. Each section says what belongs there, shows an example, and offers suggestio
 The bell at the top glows softly when something new happens, like a file upload, a decision, or a project moving stage. Tap it to see what changed and who did it, then tap one to open it. Important changes also email you; choose which in your profile under **Notifications**.
 
 ### How do I comment or change an item?
-Tap the item. A panel opens with its status, owner, due date, and details, and a place to comment. Everyone in your organization sees the comments.
+Tap the item's title. A panel opens with its status, owner, due date, and details, and a place to comment. Everyone in your organization sees the comments. Options and measures open the same way, with their cost and scores, or unit and target, there too.
+
+### How do I check something off?
+Tick the box beside it. Every item that can be finished has one, and the counts on each tab and section show how many are done. A choice between options counts as one, done once an option is approved, and a measure counts as done when it reaches its target. Status updates and decisions are records, so they don't count. Files you upload aren't counted either; a **File needed** is, and it's checked off when you send the file.
+
+### How do I delete something?
+Use the trash button on the item, or **Delete** in its panel. Either one asks first. Approved options and decisions can't be deleted, since they're the record of what was agreed; options themselves come from neon1. Files have their own **Delete** for the person who uploaded them and admins.
 
 ### What does the onion next to a project mean?
 It shows progress. Needs is the center ring and Normalize is the outside one; each ring fills as that layer's work gets done.
 
 ### What does the board show?
-Every project as a card, in the stage it's in. Columns run left to right from the first call to care after handover. Drag a card to move it, or use its **Move** button on a phone.
+Every project as a card, in the stage it's in. Columns run left to right from the first call to care after handover. Drag a card to move it, or use its **Move to** menu on a phone. A closed project moves back the same way, or use **Reopen** on its page.
+
+### What does the timeline show?
+Under **Projects**, **Timeline** draws each project from the day it started to its target date, colored by its layer. The dashed line is today, the diamond is the target, the lighter part is time still ahead, and red stripes are time past the target. Each row also says its stage and how many days are left.
 
 ### How do I start a project?
 Choose **New project**, answer a few short questions, and the project starts with a checklist that fits. You can change everything later.
@@ -71,7 +80,7 @@ A quick comparison of each option, in plain words. Lowest cost, best quality, an
 ## Files
 
 ### How do I send a file?
-Use **Upload** next to a file I asked for, or go to **Files** and upload it there. Pick the project it belongs to.
+Use **Upload** next to a file I asked for, or go to **Files** and upload it there. Pick the project it belongs to. Tap a file's name to open it: PDFs, pictures, and text open in a new tab, and anything else downloads.
 
 ### Are files safe?
 Every file is checked for viruses before anyone can download it, and stays private to your organization. Please don't upload passwords or keys.

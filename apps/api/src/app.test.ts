@@ -222,6 +222,15 @@ describe("projects and concurrency", () => {
     expect(ok.json.stageId).toBe("build");
   });
 
+  it("lets a project already past Decide move back from Closed without a reason", async () => {
+    const list = await call(OP, "GET", `/t/${s.acme.id}/projects`);
+    const p = list.json.find((x: { key: string }) => x.key === "SEC-1");
+    const closed = await call(OP, "POST", `/t/${s.acme.id}/projects/${p.id}/move`, { version: p.version, stageId: "closed" });
+    expect(closed.json.stageId).toBe("closed");
+    const back = await call(OP, "POST", `/t/${s.acme.id}/projects/${p.id}/move`, { version: closed.json.version, stageId: "care" });
+    expect(back.json.stageId).toBe("care");
+  });
+
   it("records an immutable decision when an option is approved", async () => {
     const list = await call("raj@acmedental.example", "GET", `/t/${s.acme.id}/projects`);
     const p = list.json.find((x: { key: string }) => x.key === "FLOW-1");

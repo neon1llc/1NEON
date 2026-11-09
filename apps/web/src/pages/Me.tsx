@@ -8,7 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { applyTheme, useSession, useTopBar } from "../components/Shell.tsx";
-import { Avatar, useToast } from "../components/ui.tsx";
+import { Avatar, useAsk, useToast } from "../components/ui.tsx";
 import { api, BASE_PATH, devUser, LIVE, pickPerson } from "../lib/api.ts";
 import { menuOf, NOTIFY_GROUPS } from "@1neon/domain";
 import { problem } from "../lib/hooks.ts";
@@ -39,6 +39,7 @@ export function MePage() {
     if (hash) document.getElementById(hash.slice(1))?.scrollIntoView({ block: "start", behavior: "smooth" });
   }, [hash]);
   const toast = useToast();
+  const ask = useAsk();
   const help = useHelp();
   const [totpOpen, setTotpOpen] = useState(false);
   useTopBar(<span>Your profile</span>, []);
@@ -105,7 +106,7 @@ export function MePage() {
   };
   // Text codes: on once the number is proved; off needs a confirmed session (the API asks)
   const textFactor = async (on: boolean) => {
-    if (!on && !confirm("Stop using text codes to confirm it's you?")) return;
+    if (!on && !(await ask({ title: "Turn off text codes?", body: "You'll confirm it's you with a passkey or your authenticator app instead.", yes: "Turn off", danger: true }))) return;
     try {
       await api("/me/text-factor", { method: on ? "POST" : "DELETE", body: on ? {} : undefined });
       toast(on ? "Text codes are on. Use one whenever 1NEON asks you to confirm it's you." : "Text codes are off.");
@@ -116,7 +117,7 @@ export function MePage() {
   };
   // Remove the authenticator app (the API asks to confirm first when needed)
   const removeTotp = async () => {
-    if (!confirm("Remove the authenticator app from your account?")) return;
+    if (!(await ask({ title: "Remove the authenticator app?", body: "Its codes stop working for your account. You can set it up again any time.", yes: "Remove", danger: true }))) return;
     try {
       await api("/me/totp", { method: "DELETE" });
       toast("Authenticator app removed.");

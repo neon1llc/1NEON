@@ -56,10 +56,9 @@ function pretendPasskeys() {
   restorePasskeys ??= fakePasskeys(MARIA);
 }
 
-/** Open the profile from the menu, the way Maria would */
+/** Open the profile from the menu, the way Maria would (go opens the menu first when it's tucked away) */
 async function profile(s: Stage, section?: string) {
-  if (phone()) await s.go("/me");
-  else await s.click(".who-link", 900);
+  await s.go("/me");
   await s.waitFor("#notifications");
   if (section) await s.hover(section, 500);
 }

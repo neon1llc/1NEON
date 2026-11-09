@@ -6,7 +6,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
 import { RouteError } from "./components/Reads.tsx";
-import { ToastProvider } from "./components/ui.tsx";
+import { AskProvider, ToastProvider } from "./components/ui.tsx";
 import { AllLayout, OrgLayout, PlainLayout, Root } from "./components/Shell.tsx";
 import { Faqs } from "./pages/Faqs.tsx";
 import { Legal } from "./pages/Legal.tsx";
@@ -88,8 +88,11 @@ setCache({ invalidateQueries: () => queries.invalidateQueries(), clear: () => qu
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queries}>
+      {/* Toasts and the are-you-sure dialog reach every page */}
       <ToastProvider>
-        <RouterProvider router={router} />
+        <AskProvider>
+          <RouterProvider router={router} />
+        </AskProvider>
       </ToastProvider>
     </QueryClientProvider>
   </StrictMode>,

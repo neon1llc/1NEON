@@ -1,5 +1,5 @@
 // apps/web/src/components/ui.tsx - Small shared pieces: avatars, health, the 1NEON rings mark,
-// layer badges, toasts, conflict dialog.
+// layer badges, toasts, the are-you-sure dialog, conflict dialog.
 
 
 import { LAYER_LETTER, LAYER_NAMES, type Health as HealthT, type Layer } from "@1neon/domain";
@@ -85,14 +85,25 @@ export function Rings({ active, title }: { active?: Layer; title?: string }) {
 }
 
 
-/** How far along each layer is: [done, total] per layer, from the items that can be finished */
+/**
+ * How far along each layer is: [done, total] per layer, counting only what can be finished, so every
+ * layer can reach full. Each work item counts once, done when checked off. A project's options count
+ * together as one need, the choice, done once one is approved (the others are alternatives, not
+ * leftovers). Decisions and status updates are records, so they don't count
+ */
 export function layerProgress(items: { kind: string; status: string }[], layerOf: (kind: string) => Layer | undefined): Record<Layer, [number, number]> {
   const out = { needs: [0, 0], execution: [0, 0], observation: [0, 0], next: [0, 0] } as Record<Layer, [number, number]>;
+  const options = items.filter((i) => i.kind === "option");
   for (const i of items) {
     const l = layerOf(i.kind);
-    if (!l || i.kind === "decision" || i.kind === "update") continue;
+    if (!l || i.kind === "decision" || i.kind === "update" || i.kind === "option") continue;
     out[l][1]++;
-    if (i.status === "done" || i.status === "approved") out[l][0]++;
+    if (i.status === "done") out[l][0]++;
+  }
+  const ol = layerOf("option");
+  if (options.length && ol) {
+    out[ol][1]++;
+    if (options.some((o) => o.status === "approved")) out[ol][0]++;
   }
   return out;
 }
@@ -204,6 +215,49 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div aria-live="polite" className="sr">{msg}</div>
       {msg && <div className="toast" role="status">{msg}</div>}
     </ToastCtx.Provider>
+  );
+}
+
+
+// --- Are you sure? ----------------------------------------------------------
+
+
+/** What an "are you sure" step says: the question, what happens, and the two buttons' words */
+export interface Ask {
+  title: string;
+  body?: string;
+  yes: string;
+  no?: string;
+  // A destructive yes (delete, remove, turn off) shows in red
+  danger?: boolean;
+}
+const AskCtx = createContext<(a: Ask) => Promise<boolean>>(async () => false);
+/** Ask before something that can't be undone; resolves true only on the yes button */
+export const useAsk = () => useContext(AskCtx);
+
+
+/** Provides `useAsk()`: one in-page dialog for every confirmation, in place of the browser's own */
+export function AskProvider({ children }: { children: ReactNode }) {
+  const [asking, setAsking] = useState<Ask & { answer: (yes: boolean) => void }>();
+  const ask = useCallback((a: Ask) => new Promise<boolean>((answer) => setAsking({ ...a, answer })), []);
+  // Any way out but the yes button (No, Escape, the backdrop) is a no
+  const close = (yes: boolean) => {
+    asking?.answer(yes);
+    setAsking(undefined);
+  };
+  return (
+    <AskCtx.Provider value={ask}>
+      {children}
+      <Dialog open={Boolean(asking)} onClose={() => close(false)} label={asking?.title ?? "Are you sure?"} className="ask">
+        <h2>{asking?.title}</h2>
+        {asking?.body && <p className="muted small">{asking.body}</p>}
+        {/* The safe answer takes focus, so Enter never deletes by accident */}
+        <div className="actions">
+          <button className={`btn ${asking?.danger ? "btn-danger" : "btn-primary"}`} onClick={() => close(true)}>{asking?.yes}</button>
+          <button className="btn btn-ghost" onClick={() => close(false)} autoFocus>{asking?.no ?? "Cancel"}</button>
+        </div>
+      </Dialog>
+    </AskCtx.Provider>
   );
 }
 

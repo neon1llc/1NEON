@@ -134,10 +134,13 @@ export function projectRoutes(app: App, k: Kit) {
     const stage = t.stages.find((s) => s.id === input.stageId);
     if (!stage) fail(400, "invalid", "That stage doesn't exist.");
     const stageChanged = stage.id !== p.stageId;
-    // Soft gate: entering Build or later without an approved decision is allowed, but needs a reason
+    // Soft gate: moving on past Decide without an approved decision is allowed, but needs a reason.
+    // Only crossing it forward asks: a project already past Decide (one being reopened from Closed,
+    // say) moves among the later stages freely
     const order = t.stages.findIndex((s) => s.id === stage.id);
+    const from = t.stages.findIndex((s) => s.id === p.stageId);
     const decideAt = t.stages.findIndex((s) => s.id === "decide");
-    if (stageChanged && decideAt >= 0 && order > decideAt) {
+    if (stageChanged && decideAt >= 0 && order > decideAt && from <= decideAt) {
       const decided = (await repo.listItems(t.id, p.id)).some((i) => i.kind === "decision");
       if (!decided && !input.reason) fail(428, "reason_required", "No option has been approved yet. Add a reason to move on anyway.");
     }

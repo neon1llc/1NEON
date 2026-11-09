@@ -7,7 +7,7 @@ import { ArrowRight, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
 import { GUIDE, Pick, RequestBuilder, Starters } from "../components/Guide.tsx";
-import { ItemPanel, STATUS_WORDS } from "../components/ItemPanel.tsx";
+import { ItemPanel, STATUS_WORDS, useDeleteItem, useMayDelete } from "../components/ItemPanel.tsx";
 import { gate, Stale } from "../components/Reads.tsx";
 import { Link, NavLink, useLocation, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
@@ -42,8 +42,9 @@ const KIND_LABEL: Record<ItemKind, [string, string]> = {
 };
 // Kinds shown under a layer tab. Decisions appear as banners, never as editable rows
 const KINDS_IN = (layer: Layer) => (Object.keys(KIND_LAYER) as ItemKind[]).filter((k) => KIND_LAYER[k] === layer && k !== "decision");
-// Kinds that are done or not done, shown with a checkbox
-const CHECKABLE = new Set<ItemKind>(["task", "milestone", "check", "handoff", "file_request", "requirement", "discovery", "care"]);
+// Every work item is done or not done, with a checkbox, so each counted need can be finished. Options
+// finish by approval, measures by reaching their target, and decisions and updates are records
+const CHECKABLE = new Set<ItemKind>((Object.keys(KIND_LAYER) as ItemKind[]).filter((k) => !["option", "metric", "decision", "update"].includes(k)));
 
 
 /** A project by key (FLOW-1): the key resolves to an ID through the project list */
@@ -116,11 +117,35 @@ export function ProjectPage() {
 
 /** The one thing to do next on this project, and who it's waiting on */
 function NextStep({ project: p, items, stage, base }: { project: Project; items: Item[]; stage?: Stage; base: string }) {
-  const { org, access } = useOrg();
+  const { org, access, canWrite } = useOrg();
   const me = useSession();
+  const toast = useToast();
+  const refresh = useRefresh(org.id);
   const members = useMembers(org.id);
   const names = new Map(members.data?.map((m) => [m.userId, m.name || m.email]) ?? []);
   const actor = { userId: me.user.id, operator: me.operator, strongSession: false };
+  // The last stage (Closed) ends a project. Reopening moves it back to the stage before, from where it
+  // moves anywhere like any project (the board's drag and Move to do the same)
+  const at = org.stages.findIndex((s) => s.id === p.stageId);
+  const closed = at === org.stages.length - 1 && at > 0;
+  const back = closed ? org.stages.slice(0, at).filter((s) => !s.hidden).at(-1) : undefined;
+  const reopen = async () => {
+    if (!back) return;
+    try {
+      await api(`/t/${org.id}/projects/${p.id}/move`, { method: "POST", body: { version: p.version, stageId: back.id } });
+      toast(`${p.key} reopened in ${back.name}`);
+    } catch (e) {
+      toast(problem(e));
+    }
+    refresh();
+  };
+  if (closed) return (
+    <div className="next-step" data-tour="next-step" role="status">
+      <span className="eyebrow">Closed</span>
+      <p>This project is closed. {canWrite ? `Reopen it to pick the work back up in ${back?.name ?? "an earlier stage"}.` : "Nothing more is planned."}</p>
+      {canWrite && back && <button className="btn btn-primary btn-sm" onClick={() => void reopen()}>Reopen</button>}
+    </div>
+  );
   // Once an option is approved, the others stop asking for a decision
   const decided = items.some((i) => i.kind === "option" && i.status === "approved");
   const proposed = decided ? [] : items.filter((i) => i.kind === "option" && i.status === "proposed");
@@ -275,7 +300,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
           </>
         )}
         <h2 className="section-h">Measures <small>baseline → target</small></h2>
-        {metrics.length === 0 ? <Empty text="No measures yet. Add them under Observe." /> : <div className="scores">{metrics.map((m) => <MetricCard key={m.id} item={m} />)}</div>}
+        {metrics.length === 0 ? <Empty text="No measures yet. Add them under Observe." /> : <div className="scores">{metrics.map((m) => <MetricCard key={m.id} item={m} path={`/t/${org.id}/projects/${p.id}`} />)}</div>}
       </section>
       {/* Side column: health, dates, latest update, flags, people, and archiving */}
       <aside>
@@ -436,16 +461,21 @@ function PeopleDialog({ open, onClose, people, version, onSave }: { open: boolea
 
 
 /** A measure: latest reading (or the baseline), the range, and progress toward the target */
-function MetricCard({ item, onReading }: { item: Item; onReading?: (value: number) => void }) {
+function MetricCard({ item, path, onReading }: { item: Item; path: string; onReading?: (value: number) => void }) {
   // Fields are validated on read, so a malformed record can't break the page
   const m = MetricFields.parse(item.fields);
   const latest = m.readings.at(-1);
   const pct = metricProgress(m);
-  // The reading being typed
+  // The reading being typed, and the edit panel (opened from the title, like every item)
   const [value, setValue] = useState("");
+  const [open, setOpen] = useState(false);
   return (
-    <div className="card metric">
-      <div className="small">{item.title}</div>
+    <div className="card metric" id={`item-${item.id}`}>
+      <div className="card-head">
+        <button type="button" className="item-open small" onClick={() => setOpen(true)}>{item.title}</button>
+        <DeleteItem item={item} path={path} label="Measure" />
+      </div>
+      <ItemPanel item={item} label="Measure" path={path} open={open} onClose={() => setOpen(false)} />
       <div className="val">{latest ? `${latest.value}${m.unit ? ` ${m.unit}` : ""}` : m.baseline !== undefined ? `${m.baseline}${m.unit ? ` ${m.unit}` : ""}` : "–"}</div>
       <div className="range">{latest ? `Latest, ${dateLabel(latest.at)}` : "Where it starts; no readings yet"}</div>
       <div className="range">
@@ -513,13 +543,14 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
         if (!list.length && !canWrite && kind !== "request") return null;
         return (
           <section className="kind-group" key={kind} id={kind === "option" ? "options" : kind === "file_request" ? "files" : undefined}>
-            <h2 className="section-h">{KIND_LABEL[kind][1]} <small>{list.length}</small></h2>
+            {/* Checkable groups show done of total, like the tabs; options and records show how many */}
+            <h2 className="section-h">{KIND_LABEL[kind][1]} <small>{CHECKABLE.has(kind) && list.length ? `${list.filter((i) => i.status === "done").length}/${list.length}` : list.length}</small></h2>
             {/* Options compare side by side, measures show as cards, everything else as rows */}
             {kind === "option" ? (
               <Options items={list} path={path} project={project} />
             ) : kind === "metric" ? (
               list.length ? <div className="scores">{list.map((m) => (
-                <MetricCard key={m.id} item={m} onReading={canWrite ? (value) => {
+                <MetricCard key={m.id} item={m} path={path} onReading={canWrite ? (value) => {
                   const f = MetricFields.parse(m.fields);
                   void patch(m, { fields: { readings: [...f.readings, { at: new Date().toISOString().slice(0, 10), value, note: "" }] } });
                 } : undefined} />
@@ -595,6 +626,7 @@ function ItemRow({ item, path, marker, onToggle, extra }: { item: Item; path: st
         {item.kind === "requirement" && <span className={`tag prio-${String(item.fields.priority ?? "should")}`}>{PRIORITY_WORDS[String(item.fields.priority ?? "should")]}</span>}
         {item.status !== "open" && item.status !== "done" && <span className="tag">{STATUS_WORDS[item.status] ?? item.status}</span>}
         {owner && <Avatar id={owner.userId} name={owner.name || owner.email} size={22} />}
+        <DeleteItem item={item} path={path} label={label} />
       </span>
       <ItemPanel item={item} label={label} path={path} open={open} onClose={() => setOpen(false)} />
     </div>
@@ -773,6 +805,9 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
   // The option waiting on approval, and the conditions being typed
   const [approving, setApproving] = useState<Item>();
   const [conditions, setConditions] = useState("");
+  // The option open in its panel (details, comments, and for neon1 the edit fields)
+  const [openId, setOpenId] = useState<string>();
+  const opened = items.find((o) => o.id === openId);
   if (!items.length) return null;
   // After a decision, the other options can still be chosen instead, but quietly
   const decided = items.some((o) => o.status === "approved");
@@ -807,11 +842,14 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
           const f = OptionFields.parse(o.fields);
           return (
             <article key={o.id} id={`item-${o.id}`} className={`card option${f.recommended ? " rec" : ""}`}>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {f.recommended && <span className="tag rec">recommended</span>}
-                <span className={`tag${o.status === "approved" ? " client" : ""}`}>{o.status}</span>
+              <div className="card-head">
+                <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {f.recommended && <span className="tag rec">recommended</span>}
+                  <span className={`tag${o.status === "approved" ? " client" : ""}`}>{STATUS_WORDS[o.status]?.toLowerCase() ?? o.status}</span>
+                </span>
+                <DeleteItem item={o} path={path} label="Option" />
               </div>
-              <h4>{o.title}</h4>
+              <h4><button type="button" className="item-open" onClick={() => setOpenId(o.id)}>{o.title}</button></h4>
               {o.body && <p className="small muted" style={{ marginTop: 0, whiteSpace: "pre-wrap" }}>{o.body}</p>}
               {f.cost && <p className="mono small" style={{ margin: "0 0 8px" }}>{f.cost}{f.timeline ? ` · ${f.timeline}` : ""}</p>}
               {/* Cost, quality, and effort, scored so more bars is always better */}
@@ -830,6 +868,7 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
           );
         })}
       </div>
+      {opened && <ItemPanel item={opened} label="Option" path={path} open onClose={() => setOpenId(undefined)} />}
       {/* Approval confirmation with optional conditions */}
       <Dialog open={Boolean(approving)} onClose={() => setApproving(undefined)} label="Approve option">
         <h2>Approve "{approving?.title}"?</h2>
@@ -843,4 +882,14 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
       </Dialog>
     </>
   );
+}
+
+
+/** A small trash button on a row or card: deletes after the same are-you-sure as the item's panel.
+ * Shown only to people who may delete it (see useMayDelete) */
+function DeleteItem({ item, path, label }: { item: Item; path: string; label: string }) {
+  const may = useMayDelete(item);
+  const remove = useDeleteItem(path);
+  if (!may) return null;
+  return <button type="button" className="icon-act del" onClick={() => void remove(item, label)} aria-label={`Delete ${item.title}`} title="Delete"><Trash2 size={15} aria-hidden="true" /></button>;
 }

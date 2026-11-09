@@ -20,7 +20,7 @@ import { ConfirmDialog } from "./Confirm.tsx";
 import { HelpProvider, useHelp } from "./Help.tsx";
 import { Palette } from "./Palette.tsx";
 import { gate, Stale, type Read } from "./Reads.tsx";
-import { Avatar, Icon, initials, LayerBadge, LAYERS, layerName, layerSlug, Rings } from "./ui.tsx";
+import { Avatar, Icon, initials, LayerBadge, LAYERS, layerName, layerSlug, Rings, useAsk } from "./ui.tsx";
 
 
 // --- Session -----------------------------------------------------------------
@@ -456,7 +456,8 @@ function DemoBar() {
   // Back to the picker as someone else; the demo's data stays as it is
   const switchPerson = () => { devUser.set(""); void qc.invalidateQueries(); };
   // Start over forgets every change made on this device
-  const startOver = () => { if (confirm("Start the demo over? Every change you made here goes away.")) void resetDemo(); };
+  const ask = useAsk();
+  const startOver = async () => { if (await ask({ title: "Start the demo over?", body: "Every change you made in this demo goes away.", yes: "Start over", danger: true })) void resetDemo(); };
   return (
     <div className="demo-bar" role="region" aria-label="Demo">
       <span className="demo-tag">demo</span>

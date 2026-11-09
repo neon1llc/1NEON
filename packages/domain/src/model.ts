@@ -355,6 +355,13 @@ export const FileProblem = z.enum(["missing", "size_mismatch", "scan_failed", "s
 export type FileProblem = z.infer<typeof FileProblem>;
 
 
+/**
+ * File types a browser may show in a tab ("open" on a file). Only inert formats: never HTML, SVG, or
+ * anything that runs script, so an uploaded file can't act as a page. Everything else downloads
+ */
+export const VIEWABLE = new Set(["application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp", "text/plain"]);
+
+
 /** A file's record. Bytes live in S3 under the organization's folder; `scan` gates downloads.
  * Without a project it's a general file for the organization; with `itemId` it answers a "file needed" item */
 export const DocumentRecord = z.object({
