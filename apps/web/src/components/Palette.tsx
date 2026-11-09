@@ -39,16 +39,21 @@ export function Palette({ me, org, open, setOpen, onHelp, onTour }: { me: Me; or
     fn();
   };
   const base = org ? `/o/${org.slug}` : "";
+  // The caller's access here; neon1's operator can do everything
+  const access = me.orgs.find((o) => o.id === org?.id)?.access ?? org?.access;
+  const canAdmin = me.operator || access === "admin";
+  const canWrite = canAdmin || access === "editor";
   return (
     <Dialog open={open} onClose={() => setOpen(false)} label="Search" className="palette">
       <Command label="Search 1NEON" loop>
         <Command.Input value={q} onValueChange={setQ} placeholder="Search pages and projects, or type a command" autoFocus />
         <Command.List>
           <Command.Empty>Nothing matches. Try another word.</Command.Empty>
-          {org && (
+          {/* Actions only for people who can take them: viewers read, only admins invite */}
+          {org && canWrite && (
             <Command.Group heading="Do">
               <Command.Item onSelect={go(() => nav(`${base}/projects/new`))}>Start a new project</Command.Item>
-              <Command.Item onSelect={go(() => nav(`${base}/people`))}>Invite people</Command.Item>
+              {canAdmin && <Command.Item onSelect={go(() => nav(`${base}/people`))}>Invite people</Command.Item>}
               <Command.Item onSelect={go(() => nav(`${base}/documents`))}>Upload a file</Command.Item>
             </Command.Group>
           )}

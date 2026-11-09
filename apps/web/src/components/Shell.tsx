@@ -234,8 +234,10 @@ function SignIn() {
     void send({ op: "answer", kind: "code", value: m[1] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // A fresh code was asked for, so the line above the box says so
+  const [resent, setResent] = useState(false);
   // Start over with another email, forgetting the saved step
-  const restart = () => { clearStep(session()); setAt({ step: "email" }); setCode(""); };
+  const restart = () => { clearStep(session()); setAt({ step: "email" }); setCode(""); setResent(false); };
   // Fade in only on the first sign-in screen after arriving from the site, not on a later return to it
   const [arrive] = useState(() => arriving);
   useEffect(() => { arriving = false; }, []);
@@ -296,11 +298,13 @@ function SignIn() {
         {/* Step 2b: the emailed code, or an authenticator app's code */}
         {(at.step === "code" || at.step === "totp") && (
           <form className="stack" onSubmit={(e) => { e.preventDefault(); void send({ op: "answer", kind: at.step, value: code.trim() }); }}>
-            <p className="fine">{at.step === "code" ? <>We sent a code to <b>{email}</b>.</> : "Enter the code from your authenticator app."}</p>
+            <p className="fine" role="status">{at.step === "code" ? <>We sent {resent ? "a new code" : "a code"} to <b>{email}</b>.</> : "Enter the code from your authenticator app."}</p>
             {at.wrong && <p className="notice" role="alert">That code didn't match. Check it and try again.</p>}
             <label className="sr" htmlFor="code">Code</label>
             <input id="code" className="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" required autoFocus placeholder="code" value={code} onChange={(e) => setCode(cleanCode(e.target.value))} />
             <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? "Checking…" : "Sign in"}</button>
+            {/* No email yet? Starting again with the same address sends a fresh code */}
+            {at.step === "code" && <button className="linkish fine" type="button" disabled={busy} onClick={() => { setResent(true); void send({ op: "start", email: email.trim(), remember }); }}>Send a new code</button>}
           </form>
         )}
         {at.step !== "email" && <p className="fine"><button className="linkish" onClick={restart}>Use a different email</button></p>}

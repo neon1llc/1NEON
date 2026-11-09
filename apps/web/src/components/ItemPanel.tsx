@@ -235,11 +235,11 @@ export function ItemPanel({ item, label, path, open, onClose }: { item: Item; la
         <textarea aria-label="Write a comment" placeholder="Write a comment" value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={4000} />
         <button className="btn btn-ghost btn-sm" disabled={!note.trim() || posting}>{posting ? "Sending…" : "Send"}</button>
       </form>
-      {/* What happened to it, newest first */}
+      {/* What happened to it and who did it, newest first, worded like Home's recent activity */}
       {(thread.data?.history.length ?? 0) > 0 && (
         <details className="history">
           <summary>History</summary>
-          <ul className="feed">{thread.data!.history.map((h) => <li key={h.id}><span>{h.summary}</span><time>{ago(h.at)}</time></li>)}</ul>
+          <ul className="feed">{thread.data!.history.map((h) => <li key={h.id}><span>{h.summary} <small className="by">{nameOf(h.actorId)}</small></span><time>{ago(h.at)}</time></li>)}</ul>
         </details>
       )}
       {/* Yours beside theirs for each field the person changed; Keep mine saves those fields over theirs */}
