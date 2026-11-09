@@ -3,7 +3,7 @@
 
 
 import { describe, expect, it } from "vitest";
-import { can, canApprove, type Action } from "./access.ts";
+import { can, canApprove, canNameDecider, deciderIds, type Action } from "./access.ts";
 import { initialRanks, rankBetween } from "./rank.ts";
 import { formatClientId, newId, slugify } from "./ids.ts";
 import { betterWhen, metricProgress, MetricFields, themeOf, User } from "./model.ts";
@@ -146,6 +146,24 @@ describe("canApprove", () => {
     expect(canApprove(person("u_raj"), "admin", []).ok).toBe(true);
     expect(canApprove(person("u_dana"), "editor", []).ok).toBe(false);
     expect(canApprove(person("u_op", true), "admin", []).ok).toBe(false);
+  });
+});
+
+
+
+// Naming who decides: a client admin in a confirmed session; never an editor or the operator role
+describe("canNameDecider", () => {
+  const actor = (operator: boolean, strongSession: boolean) => ({ userId: "u", operator, strongSession });
+
+  it("needs a client admin who confirmed it's them", () => {
+    expect(canNameDecider(actor(false, true), "admin").ok).toBe(true);
+    expect(canNameDecider(actor(false, false), "admin")).toEqual({ ok: false, reason: "strong_auth_required" });
+    expect(canNameDecider(actor(false, true), "editor")).toEqual({ ok: false, reason: "decider_admin_only" });
+    expect(canNameDecider(actor(true, true), "admin")).toEqual({ ok: false, reason: "decider_admin_only" });
+  });
+
+  it("compares decision makers as a set", () => {
+    expect(deciderIds([{ userId: "b", role: "decision_maker" }, { userId: "a", role: "decision_maker" }, { userId: "c", role: "stakeholder" }])).toEqual(["a", "b"]);
   });
 });
 

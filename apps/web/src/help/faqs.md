@@ -60,7 +60,7 @@ Charts made from your organization's own data: open and overdue work, how often 
 Open the project's **Needs** layer, compare the options, and choose **Approve this option**. You can add conditions, such as "only after 6pm". The approval is recorded with your name, the time, and a copy of the option's terms (title, description, cost, and timeline) exactly as you saw them.
 
 ### Who can approve?
-The person named as the project's decision maker. If nobody is named, an admin of your organization can. An editor or admin can name one under **People** on the project's overview.
+The person named as the project's decision maker. If nobody is named, an admin of your organization can. Only an admin of your organization can name or change the decision maker, under **People** on the project's overview, after confirming it's them; editors can change everyone else on the project. Each change is recorded with the old and new decision maker, and neon1 can't be named.
 
 ### Can an approval be changed?
 Not edited. Once approved, neither the decision nor the option it came from can be edited or removed. To change course, a new option is proposed and approved; the earlier decision stays on record, marked as replaced, so the history stays clear.

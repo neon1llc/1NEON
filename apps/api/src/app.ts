@@ -23,6 +23,8 @@ import {
   UpdateProjectInput,
   can,
   canApprove,
+  canNameDecider,
+  deciderIds,
   fileState,
   formatClientId,
   groupOf,
@@ -118,6 +120,7 @@ const REASONS = {
   strong_auth_required: [403, "strong_auth_required", "Confirm it's you with your passkey or authenticator app (or set one up on your profile), then try again."],
   read_only_view: [403, "read_only", "All clients is read only. Open the organization to make changes."],
   not_decider: [403, "not_decider", "Only this project's decision maker can approve. An admin can name one on the project."],
+  decider_admin_only: [403, "decider_admin_only", "Only an admin of this organization can name or change the decision maker."],
 } as const;
 
 
@@ -972,6 +975,7 @@ export function createApp(d: Deps) {
     const earlier = await replay();
     if (earlier) return c.json(earlier, 201);
     await activeMembers(t.id, input.people.map((p) => p.userId));
+    const named = await deciderChange(c, [], input.people);
     const tpl = templateById(input.template);
     const n = await repo.nextProjectNumber(t.id, tpl.keyPrefix);
     const first = t.stages.find((s) => !s.hidden) ?? t.stages[0]!;
@@ -1019,6 +1023,7 @@ export function createApp(d: Deps) {
       repo.projectOp(project, { create: true }),
       ...items.map((it) => repo.itemOp(it, { create: true })),
       repo.auditOp({ tenantId: t.id, actorId: by, action: "project.created", target: project.id, summary: `Created ${project.key} ${project.name}` }),
+      ...(named ? [repo.auditOp({ tenantId: t.id, actorId: by, action: "project.decider_changed", target: project.id, summary: `${project.key} decision maker: ${named}` })] : []),
       ...(input.idempotencyKey ? [repo.idempotencyOp(t.id, input.idempotencyKey, by, project.id)] : []),
     ];
     if (ops.length > MAX_TRANSACTION) fail(400, "too_large", "That template has too many starter items to create at once.");
@@ -1050,10 +1055,15 @@ export function createApp(d: Deps) {
     // An archived project takes only its unarchive
     if (p.archived && input.archived !== false) fail(409, "archived", "This project is archived. Unarchive it to make changes.");
     if (input.people) await activeMembers(p.tenantId, input.people.map((x) => x.userId));
+    const named = input.people ? await deciderChange(c, p.people, input.people) : undefined;
     const { version, targetDate, ...patch } = input;
     const next: Project = { ...p, ...defined(patch), version: p.version + 1, updatedAt: now(), updatedBy: actorId(c) };
     if (targetDate !== undefined) next.targetDate = targetDate ?? undefined;
-    await repo.table.write([repo.projectOp(next, { version }), repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: "project.updated", target: p.id, summary: `Updated ${p.key}` })]);
+    await repo.table.write([
+      repo.projectOp(next, { version }),
+      repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: "project.updated", target: p.id, summary: `Updated ${p.key}` }),
+      ...(named ? [repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: "project.decider_changed", target: p.id, summary: `${p.key} decision maker: ${named}` })] : []),
+    ]);
     return c.json(next);
   });
 
@@ -1353,6 +1363,21 @@ export function createApp(d: Deps) {
     const reading = c.req.method === "GET" || c.req.method === "HEAD";
     if (p.archived && !reading && !allow.archived) fail(409, "archived", "This project is archived. Unarchive it to make changes.");
     return p;
+  }
+
+  /**
+   * A change to who decides needs a confirmed client admin (canNameDecider), and the operator is never
+   * named. Returns "old → new" names for the audit record, or undefined when the decision makers stay
+   */
+  async function deciderChange(c: Context<Env>, before: Project["people"], after: Project["people"]) {
+    const was = deciderIds(before);
+    const now_ = deciderIds(after);
+    if (was.join() === now_.join()) return undefined;
+    check(canNameDecider(who(c).actor, c.get("access")));
+    const users = new Map((await Promise.all([...new Set([...was, ...now_])].map((id) => repo.getUser(id)))).filter((u) => u).map((u) => [u!.id, u!]));
+    if (now_.some((id) => cfg.operatorEmails.includes(users.get(id)?.email ?? ""))) fail(400, "operator_decider", "neon1 proposes the options, so it can't be this organization's decision maker. Name someone from the organization.");
+    const list = (ids: string[]) => ids.map((id) => users.get(id)?.name || users.get(id)?.email || id).join(", ") || "nobody";
+    return `${list(was)} → ${list(now_)}`;
   }
 
   /** Refuse anyone who isn't an active member of the organization (assignees, project people) */

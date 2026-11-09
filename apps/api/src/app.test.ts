@@ -635,3 +635,64 @@ describe("texts", () => {
     expect(texter.sent.slice(before).every((t) => t.body.length <= 160)).toBe(true);
   });
 });
+
+
+// Owner policy (2026-11-09): only a confirmed client admin names or changes who decides
+describe("naming the decision maker", () => {
+  const raj = "raj@acmedental.example";
+  const dana = "dana@acmedental.example";
+  const ids = async () => ({
+    raj: (await call(raj, "GET", "/me")).json.user.id as string,
+    dana: (await call(dana, "GET", "/me")).json.user.id as string,
+    op: (await call(OP, "GET", "/me")).json.user.id as string,
+  });
+  const flow1 = async () => {
+    const p = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json.find((x: { key: string }) => x.key === "FLOW-1");
+    return { p, path: `/t/${s.acme.id}/projects/${p.id}` };
+  };
+
+  it("won't let an editor appoint themselves, then approve", async () => {
+    const u = await ids();
+    const { p, path } = await flow1();
+    const r = await call(dana, "PATCH", path, { version: p.version, people: [{ userId: u.dana, role: "decision_maker" }] });
+    expect(r.status).toBe(403);
+    expect(r.json.error).toBe("decider_admin_only");
+    // Nor remove the client's approver
+    const gone = await call(dana, "PATCH", path, { version: p.version, people: [] });
+    expect(gone.json.error).toBe("decider_admin_only");
+    const o = (await call(dana, "GET", path)).json.items.find((i: { kind: string }) => i.kind === "option");
+    expect((await call(dana, "POST", `${path}/items/${o.id}/approve`, { version: o.version })).json.error).toBe("not_decider");
+  });
+
+  it("lets an editor change other roles while the decision maker stays", async () => {
+    const u = await ids();
+    const { p, path } = await flow1();
+    const people = [...p.people.filter((x: { userId: string }) => x.userId !== u.dana), { userId: u.dana, role: "stakeholder" }];
+    expect((await call(dana, "PATCH", path, { version: p.version, people })).status).toBe(200);
+  });
+
+  it("won't let the operator name the decision maker, or be named", async () => {
+    const u = await ids();
+    const { p, path } = await flow1();
+    expect((await call(OP, "PATCH", path, { version: p.version, people: [{ userId: u.dana, role: "decision_maker" }] })).json.error).toBe("decider_admin_only");
+    expect((await call(raj, "PATCH", path, { version: p.version, people: [{ userId: u.op, role: "decision_maker" }] })).json.error).toBe("operator_decider");
+  });
+
+  it("lets a confirmed client admin change it, and records old and new", async () => {
+    const u = await ids();
+    const { p, path } = await flow1();
+    const r = await call(raj, "PATCH", path, { version: p.version, people: [{ userId: u.dana, role: "decision_maker" }] });
+    expect(r.status).toBe(200);
+    const audit = await repo.listAudit(s.acme.id);
+    const row = audit.find((e) => e.action === "project.decider_changed");
+    expect(row?.summary).toBe("FLOW-1 decision maker: Raj Patel → Dana Kim");
+    expect(row?.actorId).toBe(u.raj);
+  });
+
+  it("applies the same rule when a project is created", async () => {
+    const u = await ids();
+    expect((await call(dana, "POST", `/t/${s.acme.id}/projects`, { name: "x", people: [{ userId: u.dana, role: "decision_maker" }] })).json.error).toBe("decider_admin_only");
+    expect((await call(dana, "POST", `/t/${s.acme.id}/projects`, { name: "y", people: [{ userId: u.dana, role: "tech_contact" }] })).status).toBe(201);
+    expect((await call(raj, "POST", `/t/${s.acme.id}/projects`, { name: "z", people: [{ userId: u.raj, role: "decision_maker" }] })).status).toBe(201);
+  });
+});

@@ -38,7 +38,7 @@ export interface Actor {
 
 
 /** A refusal carries its reason so the API can answer 403, 404, or "set up strong sign-in" */
-export type Decision = { ok: true } | { ok: false; reason: "not_member" | "forbidden" | "strong_auth_required" | "read_only_view" | "not_decider" };
+export type Decision = { ok: true } | { ok: false; reason: "not_member" | "forbidden" | "strong_auth_required" | "read_only_view" | "not_decider" | "decider_admin_only" };
 
 
 /**
@@ -83,4 +83,21 @@ export function canApprove(
   if (deciders.length) return deciders.includes(actor.userId) ? { ok: true } : { ok: false, reason: "not_decider" };
   // No one named: the organization's own admins decide; neon1 proposes, so the operator role alone never approves
   return access === "admin" && !actor.operator ? { ok: true } : { ok: false, reason: "not_decider" };
+}
+
+
+/**
+ * Who may name or change a project's decision maker (owner policy, 2026-11-09): only an admin member
+ * of the client, in a confirmed session. Editors still edit the work and its other people, but an
+ * approval commits the client to scope and cost, so whoever proposes can't appoint who approves.
+ * neon1's operator role proposes and never delegates the client's authority.
+ */
+export function canNameDecider(actor: Actor, access: AccessLevel | undefined): Decision {
+  if (actor.operator || access !== "admin") return { ok: false, reason: "decider_admin_only" };
+  return actor.strongSession ? { ok: true } : { ok: false, reason: "strong_auth_required" };
+}
+
+/** The decision makers in a project's people list, sorted, for comparing before and after */
+export function deciderIds(people: readonly { userId: string; role: string }[]): string[] {
+  return [...new Set(people.filter((p) => p.role === "decision_maker").map((p) => p.userId))].sort();
 }
