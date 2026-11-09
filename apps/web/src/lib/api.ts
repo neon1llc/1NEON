@@ -80,16 +80,24 @@ export async function resetDemo() {
 }
 
 
+// How long a read may take before it counts as failed (a slow phone network still fits)
+const READ_DEADLINE = 20_000;
+
+
 /** Call the API. The x-1neon header satisfies the CSRF check; cookies ride along automatically */
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const headers: Record<string, string> = { "x-1neon": "1" };
   if (init.body !== undefined) headers["content-type"] = "application/json";
   if (pickPerson && devUser.get()) headers["x-dev-user"] = devUser.get();
+  const method = init.method ?? "GET";
   const r = await send(BASE + path, {
-    method: init.method ?? "GET",
+    method,
     headers,
     credentials: "same-origin",
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    // A read that never answers ends as a failure the page can offer to retry, never an endless
+    // spinner. Writes get no deadline: giving up locally can't undo what the server may have done
+    signal: method === "GET" && typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(READ_DEADLINE) : undefined,
   });
   // Empty bodies (204) come back as undefined
   // A non-JSON reply (a gateway error page) still becomes a readable error
@@ -100,6 +108,8 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   } catch {
     data = r.ok ? undefined : { error: "http", message: "The server didn't answer properly. Please try again." };
   }
+  // A 401 anywhere but the session check itself means the sign-in ended: Root checks again and shows sign-in
+  if (r.status === 401 && path !== "/me" && !path.startsWith("/auth/")) dispatchEvent(new CustomEvent("1neon:signed-out"));
   // Admin actions from an unconfirmed session open the "Confirm it's you" dialog
   if (r.status === 403 && (data as ApiError | undefined)?.error === "strong_auth_required") dispatchEvent(new CustomEvent("1neon:confirm"));
   if (!r.ok) throw new HttpError(r.status, (data as ApiError | undefined) ?? { error: "http", message: r.statusText });

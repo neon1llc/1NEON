@@ -4,6 +4,7 @@
 
 import type { AccessLevel } from "@1neon/domain";
 import { useState } from "react";
+import { gate, Stale } from "../components/Reads.tsx";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
 import { ago, Avatar, useToast } from "../components/ui.tsx";
 import { api } from "../lib/api.ts";
@@ -61,7 +62,9 @@ export function People() {
       <h1 className="page-title">People</h1>
       <p className="lead">Everyone here sees the same projects. Access sets what they can change.</p>
       {canAdmin && <Invite />}
-      <div style={{ overflowX: "auto" }}>
+      <Stale reads={[members]} />
+      {/* Until the list answers, no empty table */}
+      {gate([members]) ?? <div style={{ overflowX: "auto" }}>
         {/* One row per member: who, email, access, and status with its action */}
         <table className="people" data-tour="people-list">
           <thead><tr><th>Name</th><th>Email</th><th>Access</th><th>Status</th></tr></thead>
@@ -94,7 +97,7 @@ export function People() {
             ))}
           </tbody>
         </table>
-      </div>
+      </div>}
       {/* Legend for the access levels */}
       <h2 className="section-h">What each access level can do</h2>
       <ul className="small muted">{Object.values(ACCESS).map((a) => <li key={a}>{a}</li>)}</ul>

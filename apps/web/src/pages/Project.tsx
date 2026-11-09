@@ -8,6 +8,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
 import { GUIDE, Pick, RequestBuilder, Starters } from "../components/Guide.tsx";
 import { ItemPanel, STATUS_WORDS } from "../components/ItemPanel.tsx";
+import { gate, Stale } from "../components/Reads.tsx";
 import { Link, NavLink, useLocation, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerName, layerProgress, OnionProgress, Trend, ago, daysSince, useToast } from "../components/ui.tsx";
@@ -62,9 +63,14 @@ export function ProjectPage() {
     </span>,
     [key, summary.slug, detail.data?.edits.map((e) => e.userId + e.recordId).join()],
   );
+  // The list first (it turns the key into an ID), then the project; a failure says so with Try again
+  const out = { to: `/o/${summary.slug}/projects`, label: "All projects" };
+  const waitList = gate([projects], { out });
+  if (waitList) return waitList;
   // An unknown key gets a clear empty state, not a spinner
-  if (projects.data && !pid) return <Empty text={`There's no project ${key} in ${org.name}.`} action={<Link className="btn btn-ghost" to={`/o/${summary.slug}/projects`}>All projects</Link>} />;
-  if (!detail.data) return <p className="muted" aria-busy="true">Loading…</p>;
+  if (!pid) return <Empty text={`There's no project ${key} in ${org.name}.`} action={<Link className="btn btn-ghost" to={out.to}>All projects</Link>} />;
+  const wait = gate([detail], { out });
+  if (wait || !detail.data) return wait;
   const { project: p, items } = detail.data;
   // Stage progress: earlier stages are done, the current one is lit
   const stageAt = org.stages.findIndex((s) => s.id === p.stageId);
@@ -75,6 +81,8 @@ export function ProjectPage() {
   const prog = layerProgress(items.map((i) => (i.kind === "metric" && (metricProgress(MetricFields.parse(i.fields)) ?? 0) >= 1 ? { ...i, status: "done" } : i)), (k) => KIND_LAYER[k as ItemKind]);
   return (
     <>
+      {/* Shown data that a refresh couldn't update is marked, so nobody acts on it unknowingly */}
+      <Stale reads={[projects, detail]} />
       {/* Key, current stage with its age, then the name with health and archive state */}
       <p className="mono small muted" style={{ margin: 0 }}>{p.key} · {org.stages[stageAt]?.name} for {daysSince(p.stageEnteredAt)}d</p>
       <h1 className="page-title" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -261,7 +269,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
             {p.people.map((x) => (
               <div className="row" key={x.userId} style={{ gridTemplateColumns: "auto 1fr auto" }}>
                 <Avatar id={x.userId} name={names.get(x.userId) ?? "?"} />
-                <span>{names.get(x.userId) ?? "Former member"}</span>
+                <span>{names.get(x.userId) ?? (members.data ? "Former member" : "Name not loaded")}</span>
                 <span className="s">{x.role.replace("_", " ")}</span>
               </div>
             ))}

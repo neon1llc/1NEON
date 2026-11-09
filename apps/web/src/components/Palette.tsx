@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Command } from "cmdk";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { api } from "../lib/api.ts";
+import { read } from "../lib/reads.ts";
 import type { Me, OrgSummary } from "../lib/types.ts";
 import { Dialog } from "./ui.tsx";
 
@@ -17,7 +17,7 @@ export function Palette({ me, org, open, setOpen, onHelp, onTour }: { me: Me; or
   const nav = useNavigate();
   const [q, setQ] = useState("");
   // Projects to jump to; fetched only while the palette is open
-  const projects = useQuery({ queryKey: ["projects", org?.id], queryFn: () => api<Project[]>(`/t/${org!.id}/projects`), enabled: open && Boolean(org) });
+  const projects = useQuery({ queryKey: ["projects", org?.id], queryFn: () => read<Project[]>(`/t/${org!.id}/projects`, "array"), enabled: open && Boolean(org) });
 
   // Ctrl K / ⌘K anywhere, and "/" when not typing in a field
   useEffect(() => {

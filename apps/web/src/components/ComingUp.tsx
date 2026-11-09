@@ -6,7 +6,8 @@
 import { KIND_LAYER, type ItemKind } from "@1neon/domain";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
-import { api } from "../lib/api.ts";
+import { read } from "../lib/reads.ts";
+import { gate } from "./Reads.tsx";
 
 
 // One dated thing, as the API returns it
@@ -31,8 +32,10 @@ const addDays = (iso: string, n: number) => new Date(Date.parse(iso + "T00:00:00
 
 /** Coming up for one organization */
 export function ComingUp({ tid, base }: { tid: string; base: string }) {
-  const up = useQuery({ queryKey: ["upcoming", tid], queryFn: () => api<{ today: string; events: Event[] }>(`/t/${tid}/upcoming`), refetchInterval: 60_000 });
-  if (!up.data) return <section className="card coming" aria-busy="true"><h2 className="section-h">Coming up</h2></section>;
+  const up = useQuery({ queryKey: ["upcoming", tid], queryFn: () => read<{ today: string; events: Event[] }>(`/t/${tid}/upcoming`, { today: "string", events: "array" }), refetchInterval: 60_000 });
+  // Loading, or failed with nothing to show: the card says which, never an empty calendar
+  const wait = gate([up], { compact: true });
+  if (wait || !up.data) return <section className="card coming" aria-busy={up.isPending}><h2 className="section-h">Coming up</h2>{up.isError && wait}</section>;
   const { today, events } = up.data;
   // Three weeks from the Monday of this week, so each row of the eye scans one week
   const dow = (new Date(today + "T00:00:00Z").getUTCDay() + 6) % 7;

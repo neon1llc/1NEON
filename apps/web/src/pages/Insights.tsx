@@ -4,9 +4,10 @@
 
 
 import { useQuery } from "@tanstack/react-query";
+import { gate, Stale } from "../components/Reads.tsx";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { LAYERS, layerName } from "../components/ui.tsx";
-import { api } from "../lib/api.ts";
+import { read } from "../lib/reads.ts";
 
 
 // The insights payload
@@ -37,14 +38,15 @@ const HEALTH = [
 export function Insights() {
   const { org } = useOrg();
   useTopBar(<span>{org.name} · Insights</span>, [org.name]);
-  const q = useQuery({ queryKey: ["insights", org.id], queryFn: () => api<Data>(`/t/${org.id}/insights`) });
+  const q = useQuery({ queryKey: ["insights", org.id], queryFn: () => read<Data>(`/t/${org.id}/insights`, { work: "object", decisions: "object", measures: "object", people: "object", weeks: "array", activity: "object", byLayer: "object", byHealth: "object" }) });
   const d = q.data;
   const onTimeRate = d && d.work.onTime + d.work.late ? Math.round((d.work.onTime / (d.work.onTime + d.work.late)) * 100) : undefined;
   return (
     <>
       <h1 className="page-title">Insights</h1>
       <p className="lead">How work is going across {org.name}, made from what's already here.</p>
-      {!d ? <p className="muted" aria-busy="true">Loading…</p> : (
+      <Stale reads={[q]} />
+      {gate([q]) ?? (d && (
         <>
           {/* Headline numbers: each one a plain sentence underneath */}
           <div className="kpis" data-tour="kpis">
@@ -62,7 +64,7 @@ export function Insights() {
             <HealthBar byHealth={d.byHealth} total={d.projects} />
           </div>
         </>
-      )}
+      ))}
     </>
   );
 }

@@ -5,6 +5,7 @@
 import type { Layer, Project } from "@1neon/domain";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
+import { gate, Stale } from "../components/Reads.tsx";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { daysSince, Empty, Health, LayerBadge, LAYERS, layerName } from "../components/ui.tsx";
 import { useProjects } from "../lib/hooks.ts";
@@ -61,6 +62,8 @@ export function Projects() {
   // List sits left of Timeline, so switching pans that way
   const pick = (v: "list" | "timeline") => { if (v === view) return; write(VIEW_KEY, v); slide(v === "timeline" ? "next" : "back", () => setView(v)); };
   const order = (s: Sort) => { setSort(s); write(`${VIEW_KEY}.sort`, s); };
+  // Loading, or failed with nothing to show: no empty list and no "No projects yet" until it answers
+  const wait = gate([projects]);
   return (
     <>
       {/* Title, the list or timeline switch, and New project for editors */}
@@ -88,11 +91,12 @@ export function Projects() {
           <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} /> Archived
         </label>
       </div>
-      {projects.isPending && <p className="muted" aria-busy="true">Loading…</p>}
-      {projects.data && list.length === 0 && (
+      <Stale reads={[projects]} />
+      {wait}
+      {!wait && list.length === 0 && (
         <Empty text={q || layer !== "all" ? "No project matches." : "No projects yet."} action={canWrite && !q && layer === "all" && <Link className="btn btn-primary" to={`/o/${summary.slug}/projects/new`}>Start the first one</Link>} />
       )}
-      {view === "list" ? (
+      {wait ? null : view === "list" ? (
         // One row per project: key and name, stage with its days, health, and target date
         <div className="ptable slide-stage" data-tour="project-list" role="table" aria-label="Projects">
           {list.length > 0 && (

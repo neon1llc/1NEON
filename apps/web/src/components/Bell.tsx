@@ -9,6 +9,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import type { AuditEvent, Level } from "@1neon/domain";
 import { api } from "../lib/api.ts";
+import { read } from "../lib/reads.ts";
+import { gate, Stale } from "./Reads.tsx";
 import { useMembers } from "../lib/hooks.ts";
 import { ago } from "./ui.tsx";
 
@@ -23,12 +25,14 @@ export function Bell({ tid, slug }: { tid: string; slug: string }) {
   const qc = useQueryClient();
   const members = useMembers(tid);
   const names = new Map(members.data?.map((m) => [m.userId, m.name || m.email]) ?? []);
-  const q = useQuery({ queryKey: ["notes", tid], queryFn: () => api<Notes>(`/t/${tid}/notifications`), refetchInterval: 20_000 });
+  const q = useQuery({ queryKey: ["notes", tid], queryFn: () => read<Notes>(`/t/${tid}/notifications`, { unread: "number", events: "array" }), refetchInterval: 20_000 });
   const [open, setOpen] = useState(false);
   // What was new when the list opened stays marked while it's open, even after it's marked seen
   const [fresh, setFresh] = useState<Set<string>>(new Set());
   const box = useRef<HTMLDivElement>(null);
   const unread = q.data?.unread ?? 0;
+  // Loading or failed with nothing to show: the list says which instead of "Nothing yet"
+  const wait = gate([q], { compact: true });
 
   // Open: remember what's new, then tell the API it's been seen
   const toggle = async () => {
@@ -60,9 +64,11 @@ export function Bell({ tid, slug }: { tid: string; slug: string }) {
       {open && (
         <div className="bell-list" role="dialog" aria-label="Notifications">
           <div className="bell-head"><b>Notifications</b><Link to="/me#notifications" onClick={() => setOpen(false)} className="small">Choose what emails you</Link></div>
-          {!q.data?.events.length && <p className="muted small bell-empty">Nothing yet. Changes others make here will show up in this list.</p>}
+          {/* "Nothing yet" only when the list really answered empty; a failure says so instead */}
+          <Stale reads={[q]} />
+          {wait ?? (!q.data?.events.length && <p className="muted small bell-empty">Nothing yet. Changes others make here will show up in this list.</p>)}
           <ul>
-            {q.data?.events.map((e) => (
+            {!wait && q.data?.events.map((e) => (
               <li key={e.id} className={`lvl-${e.level}${fresh.has(e.id) ? " new" : ""}`}>
                 <span className="dot" aria-hidden="true" />
                 <span className="what">

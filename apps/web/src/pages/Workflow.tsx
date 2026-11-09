@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { Board, type MoveRequest } from "../components/Board.tsx";
+import { gate, Stale } from "../components/Reads.tsx";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { Dialog, Empty, useToast } from "../components/ui.tsx";
 import { api, HttpError } from "../lib/api.ts";
@@ -43,20 +44,22 @@ export function Workflow() {
     refresh();
   };
 
-  // Archived projects leave the board
+  // Archived projects leave the board; until the list answers, the board waits instead of showing empty
   const live = (projects.data ?? []).filter((p) => !p.archived);
+  const wait = gate([projects]);
   return (
     <>
       <h1 className="page-title">Board</h1>
       <p className="lead">
         {canWrite ? "Drag a card, or use its Move menu, to change a project's stage." : "Every project and where it stands."}
       </p>
+      <Stale reads={[projects]} />
       {/* Read-only board for viewers: no onMove */}
-      {projects.data && live.length === 0 ? (
+      {wait ?? (live.length === 0 ? (
         <Empty text="No projects yet." action={canWrite && <Link className="btn btn-primary" to={`/o/${summary.slug}/projects/new`}>New project</Link>} />
       ) : (
         <Board stages={org.stages} projects={live} hrefFor={(p) => `/o/${summary.slug}/projects/${p.key}`} onMove={canWrite ? (m) => void move(m) : undefined} />
-      )}
+      ))}
       {/* The reason prompt for moving past Decide without a decision */}
       <Dialog open={Boolean(pending)} onClose={() => setPending(undefined)} label="Reason needed">
         <h2>Move on without a decision?</h2>

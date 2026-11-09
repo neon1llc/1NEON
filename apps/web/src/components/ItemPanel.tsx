@@ -9,6 +9,8 @@ import { Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, HttpError } from "../lib/api.ts";
 import { problem, useMembers, useRefresh } from "../lib/hooks.ts";
+import { read } from "../lib/reads.ts";
+import { gate } from "./Reads.tsx";
 import { useOrg, useSession } from "./Shell.tsx";
 import { ago, Avatar, Dialog, useToast } from "./ui.tsx";
 
@@ -50,7 +52,7 @@ export function ItemPanel({ item, label, path, open, onClose }: { item: Item; la
     if (open) setDraft({ title: item.title, body: item.body, status: item.status, assigneeId: item.assigneeId ?? "", dueDate: item.dueDate ?? "" });
   }, [open, item]);
   // Comments and history load only while the panel is open
-  const thread = useQuery({ queryKey: ["comments", item.id], queryFn: () => api<{ comments: Comment[]; history: AuditEvent[] }>(`${path}/items/${item.id}/comments`), enabled: open });
+  const thread = useQuery({ queryKey: ["comments", item.id], queryFn: () => read<{ comments: Comment[]; history: AuditEvent[] }>(`${path}/items/${item.id}/comments`, { comments: "array", history: "array" }), enabled: open });
 
   // While open for editing, show others that this item is being edited; the marker expires on its own
   useEffect(() => {
@@ -154,6 +156,8 @@ export function ItemPanel({ item, label, path, open, onClose }: { item: Item; la
       )}
       {/* The conversation: newest at the bottom, like a chat */}
       <h3 className="section-h">Comments</h3>
+      {/* "No comments yet" only once the thread answered; a failure says so with Try again */}
+      {gate([thread], { compact: true, what: "Loading comments…" })}
       <ul className="comments">
         {thread.data?.comments.map((cm) => (
           <li key={cm.id}>

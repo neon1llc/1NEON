@@ -6,9 +6,10 @@ import type { DocumentRecord, Layer } from "@1neon/domain";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { DropZone, FileList } from "../components/Files.tsx";
+import { gate, Stale } from "../components/Reads.tsx";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { LayerBadge, LAYERS, layerName } from "../components/ui.tsx";
-import { api } from "../lib/api.ts";
+import { read } from "../lib/reads.ts";
 
 
 // What the hub reads: the finished uploads, and project names to show beside them
@@ -22,13 +23,15 @@ interface DocsResponse {
 export function Documents() {
   const { org } = useOrg();
   useTopBar(<span>{org.name} · Files</span>, [org.name]);
-  const q = useQuery({ queryKey: ["project", org.id, "docs"], queryFn: () => api<DocsResponse>(`/t/${org.id}/docs`) });
+  const q = useQuery({ queryKey: ["project", org.id, "docs"], queryFn: () => read<DocsResponse>(`/t/${org.id}/docs`, { docs: "array", projects: "array" }) });
   // Where the next upload is filed, and which layer the list shows
   const [projectId, setProjectId] = useState("");
   const [layer, setLayer] = useState<Layer>("needs");
   const [show, setShow] = useState<Layer | "all">("all");
   const docs = q.data?.docs ?? [];
   const projectName = (id?: string) => (id ? q.data?.projects.find((p) => p.id === id)?.key : "General");
+  // Counts only once the list has answered; a zero while it loads or fails would be a false claim
+  const count = (n: number) => (q.data ? <span className="muted">{n}</span> : null);
   return (
     <>
       <h1 className="page-title">Files</h1>
@@ -52,14 +55,15 @@ export function Documents() {
       </DropZone>
       {/* Filter by layer, with counts */}
       <div className="chips" role="group" aria-label="Show files from">
-        <button className={`chip${show === "all" ? " on" : ""}`} onClick={() => setShow("all")}>All <span className="muted">{docs.length}</span></button>
+        <button className={`chip${show === "all" ? " on" : ""}`} onClick={() => setShow("all")}>All {count(docs.length)}</button>
         {LAYERS.map((l) => (
           <button key={l} className={`chip${show === l ? " on" : ""}`} onClick={() => setShow(l)}>
-            <LayerBadge layer={l} /> {layerName(l)} <span className="muted">{docs.filter((d) => d.layer === l).length}</span>
+            <LayerBadge layer={l} /> {layerName(l)} {count(docs.filter((d) => d.layer === l).length)}
           </button>
         ))}
       </div>
-      {q.isPending ? <p className="muted" aria-busy="true">Loading…</p> : <FileList docs={show === "all" ? docs : docs.filter((d) => d.layer === show)} projectName={projectName} empty="No files here yet." />}
+      <Stale reads={[q]} />
+      {gate([q]) ?? <FileList docs={show === "all" ? docs : docs.filter((d) => d.layer === show)} projectName={projectName} empty="No files here yet." />}
     </>
   );
 }

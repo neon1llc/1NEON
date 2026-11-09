@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { api, DEMO as IN_DEMO, LIVE as IN_LIVE, devUser, HttpError, pickPerson, resetDemo } from "../lib/api.ts";
+import { failureOf, read } from "../lib/reads.ts";
 import { passkeyAssertion } from "../lib/passkey.ts";
 import { cleanCode, clearStep, loadStep, saveStep, session } from "../lib/signin.ts";
 import type { Me, OrgResponse, OrgSummary } from "../lib/types.ts";
@@ -16,6 +17,7 @@ import { FileText as FileIcon, Folder as FolderIcon, Home as HomeIcon, Kanban as
 import { ConfirmDialog } from "./Confirm.tsx";
 import { HelpProvider, useHelp } from "./Help.tsx";
 import { Palette } from "./Palette.tsx";
+import { gate, Stale, type Read } from "./Reads.tsx";
 import { Avatar, Icon, initials, LayerBadge, LAYERS, layerName, Rings } from "./ui.tsx";
 
 
@@ -25,7 +27,7 @@ import { Avatar, Icon, initials, LayerBadge, LAYERS, layerName, Rings } from "./
 /** The signed-in person and their organizations; a 401 here means "show sign-in" */
 export function useMe() {
   // A dropped connection (common on phones waking up) is retried a few times; an HTTP answer is final
-  return useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me"), retry: (n, e) => !(e instanceof HttpError) && n < 4, retryDelay: (n) => Math.min(800 * 2 ** n, 6000) });
+  return useQuery({ queryKey: ["me"], queryFn: () => read<Me>("/me", { user: "object", orgs: "array" }), retry: (n, e) => !(e instanceof HttpError) && n < 4, retryDelay: (n) => Math.min(800 * 2 ** n, 6000) });
 }
 
 
@@ -56,6 +58,13 @@ const lastSeen = () => {
 export function Root() {
   const me = useMe();
   const loc = useLocation();
+  const qc = useQueryClient();
+  // Any call that hears 401 asks for a fresh session check; its 401 then shows sign-in below
+  useEffect(() => {
+    const check = () => void qc.invalidateQueries({ queryKey: ["me"] });
+    addEventListener("1neon:signed-out", check);
+    return () => removeEventListener("1neon:signed-out", check);
+  }, [qc]);
   useEffect(() => {
     if (me.data) applyTheme(me.data.user.theme);
   }, [me.data]);
@@ -76,9 +85,11 @@ export function Root() {
     if (arriving || lastSeen() === "out") return <div className="signin" aria-busy="true" />;
     return <div className="content muted" aria-busy="true">Loading…</div>;
   }
-  if (me.error) {
+  // An ended sign-in always shows sign-in. Any other failure keeps an app already on screen (the frame
+  // marks it as not refreshed); with nothing loaded yet it's the lost-signal screen, worded for a
+  // server error when the API answered at all
+  if (me.error && (me.data === undefined || failureOf(me.error) === "session")) {
     if (me.error instanceof HttpError && me.error.status === 401) return <SignIn />;
-    // Anything else: the lost-signal screen, worded for a server error when the API answered at all
     return <Offline onRetry={me.refetch} server={me.error instanceof HttpError} />;
   }
   const data = me.data!;
@@ -321,17 +332,25 @@ export const useOrg = () => useContext(OrgCtx)!;
 /** Routes under /o/:slug: resolve the slug from the person's own list, then load the organization */
 export function OrgLayout() {
   const me = useSession();
+  const qc = useQueryClient();
   const { slug } = useParams();
   const summary = me.orgs.find((o) => o.slug === slug);
-  const org = useQuery({ queryKey: ["org", summary?.id], queryFn: () => api<OrgResponse>(`/t/${summary!.id}`), enabled: Boolean(summary) });
-  // Not in my list: show "not here" without asking the API about an organization I can't see
-  if (!summary) return <Frame><NotMember /></Frame>;
-  if (!org.data) return <Frame org={summary}><div className="content muted" aria-busy="true">Loading…</div></Frame>;
+  const org = useQuery({ queryKey: ["org", summary?.id], queryFn: () => read<OrgResponse>(`/t/${summary!.id}`, { org: "object", access: "string" }), enabled: Boolean(summary) });
+  // A 403 or 404 for an organization in my list means my access changed: refresh the list, which drops it
+  const lost = org.isError && failureOf(org.error) === "unavailable";
+  useEffect(() => {
+    if (lost) void qc.invalidateQueries({ queryKey: ["me"] });
+  }, [lost, qc]);
+  // Not in my list, or no longer mine: the same "not here", without saying whether it exists
+  if (!summary || lost) return <Frame><NotMember /></Frame>;
+  // Still loading, or failed with nothing to show: say which, with Try again
+  const wait = gate([org]);
+  if (wait || !org.data) return <Frame org={summary}>{wait}</Frame>;
   const access = org.data.access;
   const value: OrgCtxValue = { ...org.data, summary, canWrite: access !== "viewer", canAdmin: access === "admin" };
   return (
     <OrgCtx.Provider value={value}>
-      <Frame org={summary}>
+      <Frame org={summary} reads={[org]}>
         <Outlet />
       </Frame>
     </OrgCtx.Provider>
@@ -402,12 +421,13 @@ function Item({ to, icon, label, end, tour }: { to: string; icon: ReactNode; lab
 }
 
 
-/** Menu, top bar, phone tab bar, and content area shared by every signed-in page */
-function Frame({ org, all, children }: { org?: OrgSummary; all?: boolean; children: ReactNode }) {
+/** Menu, top bar, phone tab bar, and content area shared by every signed-in page. `reads` are the
+ * layout's own queries, marked like the session when a refresh fails */
+function Frame({ org, all, reads, children }: { org?: OrgSummary; all?: boolean; reads?: Read[]; children: ReactNode }) {
   const me = useSession();
   return (
     <HelpProvider me={me}>
-      <FrameBody org={org} all={all}>{children}</FrameBody>
+      <FrameBody org={org} all={all} reads={reads}>{children}</FrameBody>
     </HelpProvider>
   );
 }
@@ -435,8 +455,10 @@ function DemoBar() {
 }
 
 // The frame itself, inside the help context so the ? button and search can use it
-function FrameBody({ org, all, children }: { org?: OrgSummary; all?: boolean; children: ReactNode }) {
+function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?: boolean; reads?: Read[]; children: ReactNode }) {
   const me = useSession();
+  // The session query itself, for marking the frame when a background check of it fails
+  const meRead = useMe();
   const help = useHelp();
   // The person's choice: the menu always on screen (labels on wide screens, icons on narrow), or behind a button
   const rail = (me.user.menu ?? "rail") === "rail";
@@ -528,7 +550,10 @@ function FrameBody({ org, all, children }: { org?: OrgSummary; all?: boolean; ch
           <button className="icon-btn help-btn" onClick={help.open} data-tour="help" aria-label="Help for this page" title="Help for this page">?</button>
         </header>
         <Crumbs.Provider value={setTop}>
-          <main className="content" id="main"><div className="page-in" key={section}>{children}</div></main>
+          <main className="content" id="main">
+            <Stale reads={[meRead, ...reads]} />
+            <div className="page-in" key={section}>{children}</div>
+          </main>
         </Crumbs.Provider>
       </div>
       {/* Phones: the main places as a tab bar at the bottom, within thumb reach */}

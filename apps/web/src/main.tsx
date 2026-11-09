@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
+import { RouteError } from "./components/Reads.tsx";
 import { ToastProvider } from "./components/ui.tsx";
 import { AllLayout, OrgLayout, PlainLayout, Root } from "./components/Shell.tsx";
 import { AllWorkflow } from "./pages/AllWorkflow.tsx";
@@ -24,35 +25,40 @@ import { Workflow } from "./pages/Workflow.tsx";
 import { WorkspacePage } from "./pages/Workspace.tsx";
 import { BASE_PATH, DEMO, devUser, LIVE } from "./lib/api.ts";
 import { setCache, setNavigate } from "./lib/nav.ts";
+import { offline } from "./lib/reads.ts";
 import { Example } from "./pages/Example.tsx";
 import "./styles/app.css";
 
 
-// Data stays fresh for 10 seconds; HTTP errors (401, 403, 404) are answers, not reasons to retry
+// Data stays fresh for 10 seconds. Only a dropped connection retries on its own (twice); an HTTP answer
+// or a malformed reply is shown at once, with the page's own Try again
 const queries = new QueryClient({
-  defaultOptions: { queries: { staleTime: 10_000, retry: (n, e) => n < 2 && !("status" in (e as object)) } },
+  defaultOptions: { queries: { staleTime: 10_000, retry: (n, e) => n < 2 && offline(e) } },
 });
 
 
-// Routes. /o/:slug is one organization, /all is the operator's read-only view, /me is the profile
+// Routes. /o/:slug is one organization, /all is the operator's read-only view, /me is the profile.
+// A page that throws while rendering shows RouteError: inside the frame for signed-in pages, so the
+// menu still works, and on its own for anything above that
 const router = createBrowserRouter(
   [
     // Public pages: no sign-in needed, so they sit outside Root's gate
-    { path: "privacy", element: <Legal doc="privacy" /> },
-    { path: "terms", element: <Legal doc="terms" /> },
-    { path: "cookies", element: <Legal doc="cookies" /> },
-    { path: "faqs", element: <Faqs /> },
-    { path: "example", element: <Example /> },
+    { path: "privacy", element: <Legal doc="privacy" />, errorElement: <RouteError /> },
+    { path: "terms", element: <Legal doc="terms" />, errorElement: <RouteError /> },
+    { path: "cookies", element: <Legal doc="cookies" />, errorElement: <RouteError /> },
+    { path: "faqs", element: <Faqs />, errorElement: <RouteError /> },
+    { path: "example", element: <Example />, errorElement: <RouteError /> },
     { path: "faq", element: <Navigate to="/faqs" replace /> },
     { path: "help", element: <Navigate to="/faqs" replace /> },
     {
       path: "/",
       element: <Root />,
+      errorElement: <RouteError />,
       children: [
         {
           path: "o/:slug",
           element: <OrgLayout />,
-          children: [
+          children: [{ errorElement: <RouteError inFrame />, children: [
             { index: true, element: <Navigate to="workspace" replace /> },
             { path: "workspace", element: <WorkspacePage /> },
             { path: "workflow", element: <Workflow /> },
@@ -65,10 +71,10 @@ const router = createBrowserRouter(
             { path: "documents", element: <Documents /> },
             { path: "insights", element: <Insights /> },
             { path: "settings", element: <Settings /> },
-          ],
+          ] }],
         },
-        { path: "all", element: <AllLayout />, children: [{ index: true, element: <Navigate to="workflow" replace /> }, { path: "workflow", element: <AllWorkflow /> }] },
-        { element: <PlainLayout />, children: [{ path: "me", element: <MePage /> }] },
+        { path: "all", element: <AllLayout />, children: [{ errorElement: <RouteError inFrame />, children: [{ index: true, element: <Navigate to="workflow" replace /> }, { path: "workflow", element: <AllWorkflow /> }] }] },
+        { element: <PlainLayout />, children: [{ errorElement: <RouteError inFrame />, children: [{ path: "me", element: <MePage /> }] }] },
         { path: "*", element: <NotFound /> },
       ],
     },

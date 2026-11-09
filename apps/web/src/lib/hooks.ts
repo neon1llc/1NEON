@@ -3,7 +3,8 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Project } from "@1neon/domain";
-import { api, HttpError } from "./api.ts";
+import { HttpError } from "./api.ts";
+import { read } from "./reads.ts";
 import type { MemberRow, ProjectDetail } from "./types.ts";
 
 
@@ -18,19 +19,19 @@ export const qk = {
 
 /** Every project in the organization (archived included; pages filter) */
 export function useProjects(tid: string) {
-  return useQuery({ queryKey: qk.projects(tid), queryFn: () => api<Project[]>(`/t/${tid}/projects`) });
+  return useQuery({ queryKey: qk.projects(tid), queryFn: () => read<Project[]>(`/t/${tid}/projects`, "array") });
 }
 
 
 /** One project, re-fetched every 15 seconds so edit markers and others' changes show up */
 export function useProject(tid: string, pid: string | undefined) {
-  return useQuery({ queryKey: qk.project(tid, pid ?? ""), queryFn: () => api<ProjectDetail>(`/t/${tid}/projects/${pid}`), enabled: Boolean(pid), refetchInterval: 15_000 });
+  return useQuery({ queryKey: qk.project(tid, pid ?? ""), queryFn: () => read<ProjectDetail>(`/t/${tid}/projects/${pid}`, { project: "object", items: "array", docs: "array", edits: "array" }), enabled: Boolean(pid), refetchInterval: 15_000 });
 }
 
 
 /** Members with profile details, for names, avatars, and the People table */
 export function useMembers(tid: string) {
-  return useQuery({ queryKey: qk.members(tid), queryFn: () => api<MemberRow[]>(`/t/${tid}/members`) });
+  return useQuery({ queryKey: qk.members(tid), queryFn: () => read<MemberRow[]>(`/t/${tid}/members`, "array") });
 }
 
 

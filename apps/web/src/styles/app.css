@@ -151,6 +151,14 @@ a.row:hover { background: var(--accent-soft); }
 .two { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 28px; }
 .empty { border: 1px dashed var(--line-strong); border-radius: var(--r); padding: 28px; text-align: center; color: var(--muted); }
 .empty p { margin: 0 0 14px; }
+/* A read that failed: what happened, Try again, and a way out; compact inside cards and menus */
+.problem { border: 1px solid var(--amber); border-radius: var(--r); padding: 18px 20px; background: color-mix(in srgb, var(--amber) 8%, transparent); max-width: 680px; }
+.problem p { margin: 0 0 12px; }
+.problem-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.problem.compact { padding: 10px 12px; border-radius: var(--r-sm); font-size: 14px; margin: 6px 0; }
+.problem.compact p { margin-bottom: 8px; }
+/* Data still on screen after a refresh failed */
+.notice.stale { justify-content: space-between; flex-wrap: wrap; }
 
 /* Avatars and status */
 /* Avatars stack; an outline marks someone editing */

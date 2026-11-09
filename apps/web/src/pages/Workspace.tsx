@@ -7,13 +7,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Check, CircleCheck, FileUp, ListTodo } from "lucide-react";
 import { Link } from "react-router";
 import { ComingUp } from "../components/ComingUp.tsx";
+import { Problem, Stale } from "../components/Reads.tsx";
 import { useHelp } from "../components/Help.tsx";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
 import { ago, Health } from "../components/ui.tsx";
 import type { Project } from "@1neon/domain";
 type HealthT = Project["health"];
-import { api } from "../lib/api.ts";
 import { qk } from "../lib/hooks.ts";
+import { failureOf, hidesData, read } from "../lib/reads.ts";
 import type { Workspace } from "../lib/types.ts";
 
 
@@ -32,7 +33,7 @@ export function WorkspacePage() {
   const help = useHelp();
   const base = `/o/${summary.slug}`;
   // Counts, waiting items, and activity in one call, refreshed every 30 seconds
-  const ws = useQuery({ queryKey: qk.workspace(org.id), queryFn: () => api<Workspace>(`/t/${org.id}/workspace`), refetchInterval: 30_000 });
+  const ws = useQuery({ queryKey: qk.workspace(org.id), queryFn: () => read<Workspace>(`/t/${org.id}/workspace`, { counts: "object", waiting: "array", activity: "array" }), refetchInterval: 30_000 });
   useTopBar(<span>{org.name}</span>, [org.name]);
   const c = ws.data?.counts;
   const first = (me.user.name || "").split(" ")[0];
@@ -46,13 +47,17 @@ export function WorkspacePage() {
   ];
   const setupLeft = steps.filter((s) => !s.done).length;
   const n = ws.data?.waiting.length ?? 0;
+  // A failure with nothing to show (or one that hides what was shown) replaces the cards, so no card
+  // claims "all caught up" or "no activity" for data that never arrived
+  const blocked = ws.isError && (!ws.data || hidesData(failureOf(ws.error)));
 
   return (
     <>
       <h1 className="page-title">{first ? `Hi, ${first}` : "Home"}</h1>
-      <p className="lead">{ws.data ? (n ? `${n} ${n === 1 ? "thing needs" : "things need"} you.` : "Nothing needs you right now.") : " "}</p>
+      <p className="lead">{ws.data && !blocked ? (n ? `${n} ${n === 1 ? "thing needs" : "things need"} you.` : "Nothing needs you right now.") : " "}</p>
+      <Stale reads={[ws]} />
 
-      <div className="home">
+      {blocked ? <Problem error={ws.error} reads={[ws]} /> : <div className="home">
         <div className="home-main">
         {/* Needs you: the main event, each with the one action it asks for */}
         <section className="card needs" data-tour="needs-you" aria-busy={ws.isPending}>
@@ -125,7 +130,7 @@ export function WorkspacePage() {
             </ul>
           </section>
         </div>
-      </div>
+      </div>}
     </>
   );
 }

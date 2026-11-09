@@ -4,6 +4,7 @@
 
 import type { Layer } from "@1neon/domain";
 import { Link, useParams } from "react-router";
+import { gate, Stale } from "../components/Reads.tsx";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { daysSince, Empty, Health, LAYERS, layerName, Rings } from "../components/ui.tsx";
 import { useProjects } from "../lib/hooks.ts";
@@ -36,6 +37,9 @@ export function LayerPage() {
     <>
       <h1 className="page-title" style={{ display: "flex", gap: 12, alignItems: "center" }}><Rings active={l} title={layerName(l)} />{layerName(l)}</h1>
       <p className="lead" data-tour="layer-list">{ABOUT[l]}</p>
+      <Stale reads={[projects]} />
+      {/* Until the list answers, no stage claims "Nothing in it" */}
+      {gate([projects]) ?? <>
       {/* A section per stage in this layer, links opening each project on this layer's tab */}
       {stages.map((s) => {
         const list = here.filter((p) => p.stageId === s.id);
@@ -71,6 +75,7 @@ export function LayerPage() {
           </div>
         </>
       )}
+      </>}
     </>
   );
 }
