@@ -39,16 +39,23 @@ export interface Mailer {
 }
 
 
+/** What storage reports for a key; `code` is the provider's error name, safe to log */
+export type Inspection = { kind: "present"; size: number } | { kind: "absent" } | { kind: "denied" } | { kind: "error"; code: string };
+/** The scan's verdict, plus "absent" (no object) and "error" (couldn't ask), which aren't verdicts */
+export type ScanVerdict = "pending" | "clean" | "infected" | "unsupported" | "failed" | "absent" | "error";
+
+
 /** File storage: short-lived links for the browser to upload and download directly, and the scan result */
 export interface Storage {
   // A link the browser PUTs the bytes to, with this content type
   putUrl(key: string, contentType: string, size: number): Promise<string>;
   // A download link that saves the file under its own name
   getUrl(key: string, name: string): Promise<string>;
-  // The stored size in bytes, or undefined when nothing is there yet
-  stat(key: string): Promise<number | undefined>;
-  // The malware scan's verdict; nothing to read yet means it's still running
-  scan(key: string): Promise<"pending" | "clean" | "infected">;
+  // What is stored at the key, with each outcome told apart: the size, nothing there, refused (the
+  // bucket denies reads until the scan tags a file clean), or a provider problem worth retrying
+  inspect(key: string): Promise<Inspection>;
+  // The malware scan's verdict: no tag yet means still running; absent and error are kept distinct
+  scan(key: string): Promise<ScanVerdict>;
   // Remove the file
   remove(key: string): Promise<void>;
 }
@@ -81,28 +88,44 @@ export class S3Storage implements Storage {
     return getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key, ResponseContentDisposition: disposition }), { expiresIn: LINK_SECONDS });
   }
 
-  // GetObjectAttributes is its own permission, so it works before the scan tags the file clean
-  async stat(key: string) {
+  // GetObjectAttributes needs s3:GetObject as well as its own permission, so while the bucket denies
+  // reads of an unscanned object this answers "denied"; after the clean tag it reads the size
+  async inspect(key: string): Promise<Inspection> {
     try {
-      return (await this.s3.send(new GetObjectAttributesCommand({ Bucket: this.bucket, Key: key, ObjectAttributes: ["ObjectSize"] }))).ObjectSize;
-    } catch {
-      return undefined;
+      const size = (await this.s3.send(new GetObjectAttributesCommand({ Bucket: this.bucket, Key: key, ObjectAttributes: ["ObjectSize"] }))).ObjectSize;
+      return size === undefined ? { kind: "error", code: "NoSize" } : { kind: "present", size };
+    } catch (e) {
+      return s3Failure(e);
     }
   }
 
-  async scan(key: string) {
+  // Tags aren't covered by the read deny, so the verdict can be read while the scan runs. GuardDuty
+  // writes NO_THREATS_FOUND, THREATS_FOUND, UNSUPPORTED, ACCESS_DENIED, or FAILED
+  async scan(key: string): Promise<ScanVerdict> {
     try {
       const r = await this.s3.send(new GetObjectTaggingCommand({ Bucket: this.bucket, Key: key }));
       const v = r.TagSet?.find((t) => t.Key === "GuardDutyMalwareScanStatus")?.Value;
-      return v === "NO_THREATS_FOUND" ? "clean" : v === "THREATS_FOUND" ? "infected" : "pending";
-    } catch {
-      return "pending"; // not uploaded yet
+      if (v === undefined) return "pending";
+      return v === "NO_THREATS_FOUND" ? "clean" : v === "THREATS_FOUND" ? "infected" : v === "UNSUPPORTED" ? "unsupported" : "failed";
+    } catch (e) {
+      const f = s3Failure(e);
+      return f.kind === "absent" ? "absent" : "error";
     }
   }
 
   async remove(key: string) {
     await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
+}
+
+
+/** An S3 error as an inspection: missing object, refused, or anything else by its error name */
+function s3Failure(e: unknown): Inspection {
+  const err = e as { name?: string; $metadata?: { httpStatusCode?: number } };
+  const status = err.$metadata?.httpStatusCode;
+  if (err.name === "NoSuchKey" || err.name === "NotFound" || status === 404) return { kind: "absent" };
+  if (err.name === "AccessDenied" || status === 403) return { kind: "denied" };
+  return { kind: "error", code: err.name || "Error" };
 }
 
 

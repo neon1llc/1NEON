@@ -2,7 +2,7 @@
 // camera or files, a browser's file picker, or a drop onto the page.
 
 
-import type { DocumentRecord, Layer } from "@1neon/domain";
+import { fileState, type DocumentRecord, type FileState, type Layer } from "@1neon/domain";
 import { useRef, useState, type ReactNode } from "react";
 import { api, HttpError, openable, send } from "../lib/api.ts";
 import { problem, useRefresh } from "../lib/hooks.ts";
@@ -18,8 +18,10 @@ export interface FileTarget {
 }
 
 
-/** Upload each file: make its record, send the bytes straight to storage, then mark it done */
-export async function uploadFiles(tid: string, files: File[], target: FileTarget) {
+/** Upload each file: make its record, send the bytes straight to storage, then report it done.
+ * Returns each file's state after that report: ready, or still checking (the scan runs on its own) */
+export async function uploadFiles(tid: string, files: File[], target: FileTarget): Promise<DocumentRecord[]> {
+  const out: DocumentRecord[] = [];
   for (const f of files) {
     const { doc, upload } = await api<{ doc: DocumentRecord; upload: string }>(`/t/${tid}/docs`, {
       method: "POST",
@@ -28,8 +30,19 @@ export async function uploadFiles(tid: string, files: File[], target: FileTarget
     // A blocked or dropped connection throws rather than returning a status; both get a plain message
     const r = await send(upload, { method: "PUT", headers: { "content-type": f.type || "application/octet-stream" }, body: f }).catch(() => undefined);
     if (!r?.ok) throw new Error(`Couldn't send ${f.name} to storage. Check your connection and try again.`);
-    await api(`/t/${tid}/docs/${doc.id}/done${doc.projectId ? `?p=${doc.projectId}` : ""}`, { method: "POST" });
+    const after = await api<DocumentRecord>(`/t/${tid}/docs/${doc.id}/done${doc.projectId ? `?p=${doc.projectId}` : ""}`, { method: "POST" });
+    // A file that failed its check right away (wrong size, flagged) stops the batch with its reason
+    if (after.state === "failed" || after.state === "rejected") throw new Error(`${f.name}: ${fileProblem(after)}`);
+    out.push(after);
   }
+  return out;
+}
+
+
+/** Why a file isn't available, in plain words */
+export function fileProblem(d: DocumentRecord) {
+  if (d.state === "rejected") return "the malware scan flagged it, so it can't be opened.";
+  return { missing: "it never arrived. Upload it again.", size_mismatch: "it arrived incomplete. Upload it again.", scan_failed: "the malware scan couldn't finish. Upload it again.", scan_unsupported: "the malware scan can't read this kind of file (often a password-protected archive). Send it another way.", timeout: "the malware scan took too long. Upload it again." }[d.problem ?? "missing"];
 }
 
 
@@ -43,8 +56,10 @@ export function useUpload(target: FileTarget, onDone?: () => void) {
     if (!files.length) return;
     setBusy(true);
     try {
-      await uploadFiles(org.id, files, target);
-      toast(files.length === 1 ? `Uploaded ${files[0]!.name}` : `Uploaded ${files.length} files`);
+      const done = await uploadFiles(org.id, files, target);
+      const checking = done.filter((d) => fileState(d) !== "ready").length;
+      const what = files.length === 1 ? files[0]!.name : `${files.length} files`;
+      toast(checking ? `Uploaded ${what}. A quick malware check runs first; it opens once that's done.` : `Uploaded ${what}`);
       onDone?.();
     } catch (e) {
       toast(e instanceof HttpError ? problem(e) : (e as Error).message);
@@ -95,6 +110,10 @@ export function DropZone({ target, children }: { target: FileTarget; children?: 
 }
 
 
+// A short note on each row for files that aren't plain ready ones
+const STATE_NOTE: Record<FileState, string> = { receiving: "", checking: "malware check running", ready: "", rejected: "flagged by scan", failed: "upload failed" };
+
+
 // File sizes in the units people expect
 const size = (n: number) => (n < 1024 ? `${n} B` : n < 1024 ** 2 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1024 ** 2).toFixed(1)} MB`);
 
@@ -105,7 +124,8 @@ export function FileList({ docs, projectName, empty = "No files yet." }: { docs:
   const me = useSession();
   const toast = useToast();
   const refresh = useRefresh(org.id);
-  const list = docs.filter((d) => d.uploaded);
+  // Ready files, plus ones still checking or that failed, so nobody wonders where an upload went
+  const list = docs.filter((d) => fileState(d) !== "receiving");
   if (!list.length) return <p className="muted small">{empty}</p>;
   const q = (d: DocumentRecord) => (d.projectId ? `?p=${d.projectId}` : "");
   // Downloads wait for the malware scan; a pending scan says so instead of failing quietly
@@ -136,10 +156,11 @@ export function FileList({ docs, projectName, empty = "No files yet." }: { docs:
           <LayerBadge layer={d.layer} />
           <div className="meta">
             <span className="t">{d.name}</span>
-            <span className="s">{[projectName?.(d.projectId), size(d.size), ago(d.createdAt), d.scan === "infected" ? "flagged by scan" : ""].filter(Boolean).join(" · ")}</span>
+            <span className="s">{[projectName?.(d.projectId), size(d.size), ago(d.createdAt), STATE_NOTE[fileState(d)]].filter(Boolean).join(" · ")}</span>
+            {(d.state === "failed" || d.state === "rejected") && <span className="s warn-text">Not available: {fileProblem(d)}</span>}
           </div>
           <span className="acts">
-            <button className="chip" onClick={() => void download(d)} disabled={d.scan === "infected"}>Download</button>
+            <button className="chip" onClick={() => void download(d)} disabled={fileState(d) !== "ready"}>{fileState(d) === "checking" ? "Checking…" : "Download"}</button>
             {(d.updatedBy === me.user.id || canAdmin) && <button className="chip" onClick={() => void remove(d)} aria-label={`Remove ${d.name}`}>Remove</button>}
           </span>
         </div>

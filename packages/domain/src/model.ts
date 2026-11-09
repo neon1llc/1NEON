@@ -333,6 +333,18 @@ export const itemFields: Partial<Record<ItemKind, z.ZodType>> = {
 };
 
 
+/**
+ * Where a file stands: receiving (link issued, bytes not confirmed), checking (bytes arrived, waiting
+ * for the malware scan and a size check), ready (clean, the right size, downloadable), rejected (the
+ * scan found a threat), or failed (bytes missing, the wrong size, or a scan that couldn't finish)
+ */
+export const FileState = z.enum(["receiving", "checking", "ready", "rejected", "failed"]);
+export type FileState = z.infer<typeof FileState>;
+/** Why a file failed, as a safe code the page turns into words */
+export const FileProblem = z.enum(["missing", "size_mismatch", "scan_failed", "scan_unsupported", "timeout"]);
+export type FileProblem = z.infer<typeof FileProblem>;
+
+
 /** A file's record. Bytes live in S3 under the organization's folder; `scan` gates downloads.
  * Without a project it's a general file for the organization; with `itemId` it answers a "file needed" item */
 export const DocumentRecord = z.object({
@@ -347,11 +359,20 @@ export const DocumentRecord = z.object({
   key: z.string().max(512),
   scan: z.enum(["pending", "clean", "infected"]),
   needsApproval: z.boolean().default(false),
-  // False until the browser reports the upload finished
+  // True once the file is ready; kept for older records and callers that only ask "is it there"
   uploaded: z.boolean().default(false),
+  // Missing on records from before states existed: those read as ready if uploaded, else receiving
+  state: FileState.optional(),
+  problem: FileProblem.optional(),
   ...versioned,
 });
 export type DocumentRecord = z.infer<typeof DocumentRecord>;
+
+
+/** A file's state, reading older records by their `uploaded` flag */
+export function fileState(x: Pick<DocumentRecord, "state" | "uploaded">): FileState {
+  return x.state ?? (x.uploaded ? "ready" : "receiving");
+}
 
 
 /** Who did what, when. Written in the same transaction as the change it describes */

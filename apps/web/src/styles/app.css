@@ -339,6 +339,8 @@ html.from-site, html.from-site body { background: var(--void); }
 .file .meta { display: grid; min-width: 0; }
 .file .t { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file .s { font: 12px var(--mono); color: var(--muted); }
+/* Why a file failed its check, under its name */
+.file .s.warn-text { color: var(--red); white-space: normal; }
 .file .acts { display: flex; gap: 6px; }
 .file-ask { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
 @media (max-width: 600px) { .file { grid-template-columns: auto minmax(0, 1fr); } .file .acts { grid-column: 1 / -1; justify-content: flex-end; } }

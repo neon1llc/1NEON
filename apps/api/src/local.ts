@@ -2,11 +2,11 @@
 // sign-in accounts, and mail, all kept in memory. No AWS here, so the demo bundle stays small.
 
 
-import type { Directory, Mailer, Storage, Texter } from "./services.ts";
+import type { Directory, Inspection, Mailer, ScanVerdict, Storage, Texter } from "./services.ts";
 
 
 /** Local and test stand-ins */
-/** Files in memory; the dev API serves the links, and everything counts as scanned clean */
+/** Files in memory; the dev API serves the links, and anything stored counts as scanned clean */
 export class MemoryStorage implements Storage {
   readonly files = new Map<string, { type: string; bytes: Uint8Array }>();
   async putUrl(key: string) {
@@ -15,11 +15,17 @@ export class MemoryStorage implements Storage {
   async getUrl(key: string) {
     return `/1NEON/api/dev-files/${encodeURIComponent(key)}`;
   }
-  async stat(key: string) {
-    return this.files.get(key)?.bytes.length;
+  // Tests set a verdict per key (or a whole outcome) to walk files through each state
+  verdicts = new Map<string, ScanVerdict>();
+  inspections = new Map<string, Inspection>();
+  async inspect(key: string): Promise<Inspection> {
+    const set = this.inspections.get(key);
+    if (set) return set;
+    const f = this.files.get(key);
+    return f ? { kind: "present", size: f.bytes.length } : { kind: "absent" };
   }
-  async scan(key: string) {
-    return this.files.has(key) ? "clean" as const : "pending" as const;
+  async scan(key: string): Promise<ScanVerdict> {
+    return this.verdicts.get(key) ?? (this.files.has(key) ? "clean" : "absent");
   }
   async remove(key: string) {
     this.files.delete(key);

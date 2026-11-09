@@ -343,7 +343,9 @@ describe("write guards", () => {
   it("won't mark an upload done before its bytes arrive", async () => {
     const p = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json[0];
     const start = await call(OP, "POST", `/t/${s.acme.id}/docs`, { name: "a.pdf", size: 4, layer: "needs", projectId: p.id });
-    expect((await call(OP, "POST", `/t/${s.acme.id}/docs/${start.json.doc.id}/done?p=${p.id}`)).json.error).toBe("not_uploaded");
+    const done = await call(OP, "POST", `/t/${s.acme.id}/docs/${start.json.doc.id}/done?p=${p.id}`);
+    expect(done.json.state).toBe("receiving");
+    expect(done.json.uploaded).toBe(false);
   });
 
   it("freezes an archived project until it's unarchived", async () => {

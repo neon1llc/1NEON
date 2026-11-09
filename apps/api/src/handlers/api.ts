@@ -8,6 +8,7 @@ import { CognitoAuth } from "../auth.ts";
 import { loadConfig } from "../config.ts";
 import { AwsTexter, CognitoDirectory, S3Storage, SesMailer } from "../services.ts";
 import { drainOutbox } from "../outbox.ts";
+import { sweepFiles } from "../files.ts";
 import { DynamoTable } from "../store/dynamo.ts";
 import { Repo } from "../store/repo.ts";
 
@@ -25,12 +26,13 @@ const repo = new Repo(new DynamoTable(cfg.table));
 const mailer = new SesMailer(cfg.mailFrom);
 // Texts only once the toll-free number is set up
 const texter = cfg.smsFrom ? new AwsTexter(cfg.smsFrom) : undefined;
+const storage = new S3Storage(cfg.docsBucket);
 const app = createApp({
   cfg,
   repo,
   directory: new CognitoDirectory(cfg.userPoolId),
   mailer,
-  storage: new S3Storage(cfg.docsBucket),
+  storage,
   texter,
   auth: new CognitoAuth({ userPoolId: cfg.userPoolId, clientId: cfg.clientId, authDomain: cfg.authDomain, publicUrl: cfg.publicUrl }),
   // Messages wait in the outbox for the scheduled worker below, never inside a request
@@ -44,17 +46,19 @@ const http = handle(app);
 
 /**
  * One function, two callers: API Gateway requests, and the EventBridge schedule that runs the outbox
- * worker once a minute. A schedule event has source "aws.events"; nothing from the internet reaches
+ * worker and the file sweep once a minute. A schedule event has source "aws.events"; nothing from the internet reaches
  * this function except through API Gateway, so that shape can't be forged by a visitor
  */
 export const handler = async (event: Parameters<typeof http>[0] | { source?: string }, context: Parameters<typeof http>[1]) => {
   if ((event as { source?: string }).source === "aws.events") {
-    const result = await drainOutbox({ repo, mailer, texter, cfg }, { budgetMs: 9_000 });
+    const result = await drainOutbox({ repo, mailer, texter, cfg }, { budgetMs: 7_000 });
+    // Then files whose scan finished since the last pass become ready (or rejected) without a re-upload
+    const files = await sweepFiles({ repo, storage }).catch((e) => ({ watched: 0, settled: 0, error: (e as Error).name }));
     // One line per pass in CloudWatch's embedded metric format: counts and queue age only, never
     // addresses or bodies. Written to stdout directly, because the JSON log wrapper would hide the
     // metric directive inside its message field
-    process.stdout.write(`${JSON.stringify(outboxMetrics(result))}\n`);
-    return result;
+    process.stdout.write(`${JSON.stringify({ ...outboxMetrics(result), files })}\n`);
+    return { ...result, files };
   }
   return http(event as Parameters<typeof http>[0], context);
 };

@@ -463,10 +463,13 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
 
 /** Under a "file needed" item: what's been sent so far, and an Upload that checks the item off */
 function FileAsk({ item, docs }: { item: Item; docs: DocumentRecord[] }) {
+  // Ready files count as sent; ones still in their malware check say so
   const sent = docs.filter((d) => d.uploaded);
+  const checking = docs.filter((d) => d.state === "checking");
   return (
     <div className="file-ask">
       {sent.map((d) => <span key={d.id} className="tag client">{d.name}</span>)}
+      {checking.map((d) => <span key={d.id} className="tag">{d.name} · checking</span>)}
       <UploadButton target={{ layer: "needs", projectId: item.projectId, itemId: item.id }} label={sent.length ? "Send another" : "Upload"} className="chip" />
     </div>
   );

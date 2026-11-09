@@ -23,11 +23,11 @@ import {
   UpdateProjectInput,
   can,
   canApprove,
+  fileState,
   formatClientId,
   groupOf,
   settableStatus,
-  wants,
-  type AuditEvent,
+  type FileProblem,
   itemFields,
   newId,
   rankBetween,
@@ -57,6 +57,7 @@ import { checkTotp, newTotp } from "./totp.ts";
 import { keys, PENDING_TOTP_MS, PENDING_TOTP_TRIES, Repo } from "./store/repo.ts";
 import { ConflictError, StoreBusyError, type Row, type WriteOp } from "./store/types.ts";
 import { drainOutbox, outboxForAudit, outboxOp, withTimeout } from "./outbox.ts";
+import { settleFile, unwatchOp, watchOp } from "./files.ts";
 import { accountAllows, isOptOut, CODE_MS, CODE_TRIES, CODES_PER_HOUR, codeText, e164, hashCode, newCode, smsAfterSave, smsState } from "./sms.ts";
 
 
@@ -118,6 +119,16 @@ const REASONS = {
   read_only_view: [403, "read_only", "All clients is read only. Open the organization to make changes."],
   not_decider: [403, "not_decider", "Only this project's decision maker can approve. An admin can name one on the project."],
 } as const;
+
+
+// Why a failed file can't be downloaded, in words; the codes are defined in the domain model
+const FILE_PROBLEM: Record<FileProblem, string> = {
+  missing: "The file never arrived in storage. Upload it again.",
+  size_mismatch: "The stored file isn't the size that was sent. Upload it again.",
+  scan_failed: "The malware scan couldn't finish on this file. Upload it again, or send it another way.",
+  scan_unsupported: "The malware scan can't read this kind of file (often a password-protected archive). Send it another way.",
+  timeout: "The malware scan took too long on this file. Upload it again.",
+};
 
 
 // Each table's own write, before any app wrapped it
@@ -1254,10 +1265,13 @@ export function createApp(d: Deps) {
   // Where a file's bytes live: the organization's folder, then the project (or "_"), then the record
   const docKey = (x: DocumentRecord) => `t/${x.tenantId}/${x.projectId ?? "_"}/${x.id}/${x.name.replace(/[^\w.\- ]+/g, "_")}`;
 
-  /** Every finished upload in the organization: the general files and each live project's */
+  /**
+   * Every file past its upload link in the organization: the general files and each live project's.
+   * Files still checking, or that failed, are listed with their state so nobody uploads twice
+   */
   async function allDocs(tid: string, pids: string[]) {
     const lists = await Promise.all([repo.listDocs(tid, undefined), ...pids.map((pid) => repo.listDocs(tid, pid))]);
-    return lists.flat().filter((x) => x.uploaded).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return lists.flat().filter((x) => fileState(x) !== "receiving").sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   /** The record named by :did, in the project given as ?p= (none for general files); a trashed project's files are gone too */
@@ -1292,36 +1306,31 @@ export function createApp(d: Deps) {
     const ts = now();
     const x = DocumentRecord.parse({ ...input, tenantId: t.id, id: newId("d"), key: "", scan: "pending", uploaded: false, version: 1, createdAt: ts, updatedAt: ts, updatedBy: actorId(c) });
     x.key = docKey(x);
-    await repo.saveDoc(x, { create: true });
+    x.state = "receiving";
+    // The watch row lets the sweep finish this file even if the browser never reports back
+    await repo.table.write([repo.docOp(x, { create: true }), watchOp(x)]);
     return c.json({ doc: x, upload: await d.storage.putUrl(x.key, x.contentType, x.size) }, 201);
   });
 
-  // The browser finished sending the bytes: show the file, and check off the item it answers
+  // The browser finished sending the bytes. The file becomes ready once the scan passes and the size
+  // matches, now or on a later sweep; until then it shows as checking. Calling again is harmless
   app.post("/t/:tid/docs/:did/done", async (c) => {
     need(c, "comment");
     const x = await doc(c);
-    if (x.uploaded) return c.json(x);
-    // The bytes must really be in storage, at the size the upload link was signed for
-    const size = await d.storage.stat(x.key);
-    if (size !== x.size) fail(409, "not_uploaded", "The file didn't finish uploading. Try again.");
-    const ts = now();
-    const next: DocumentRecord = { ...x, uploaded: true, version: x.version + 1, updatedAt: ts };
-    const ops = [repo.docOp(next, { version: x.version }), repo.auditOp({ tenantId: x.tenantId, actorId: actorId(c), action: "doc.uploaded", target: x.id, summary: `Uploaded "${x.name}"` })];
-    const item = x.projectId && x.itemId ? await repo.getItem(x.tenantId, x.projectId, x.itemId) : undefined;
-    if (item && item.status !== "done") ops.push(repo.itemOp({ ...item, status: "done", version: item.version + 1, updatedAt: ts, updatedBy: actorId(c) }, { version: item.version }));
-    await repo.table.write(ops);
-    return c.json(next);
+    return c.json(await settleFile({ repo, storage: d.storage }, x, { confirmed: true }));
   });
 
   // A download link, once the malware scan has passed
   app.get("/t/:tid/docs/:did/download", async (c) => {
     need(c, "read");
     const x = await doc(c);
-    const scan = x.scan === "clean" ? "clean" : await d.storage.scan(x.key);
-    if (scan !== x.scan) await repo.saveDoc({ ...x, scan, version: x.version + 1, updatedAt: now() }, { version: x.version }).catch(() => undefined);
-    if (scan === "infected") fail(410, "infected", "This file was flagged by the malware scan and can't be downloaded.");
-    if (scan === "pending") fail(409, "scanning", "This file is still being scanned. Try again in a minute.");
-    return c.json({ url: await d.storage.getUrl(x.key, x.name) });
+    // Only a ready file downloads; anything else gets a check now, then a plain reason
+    const cur = await settleFile({ repo, storage: d.storage }, x);
+    const state = fileState(cur);
+    if (state === "rejected") fail(410, "infected", "This file was flagged by the malware scan and can't be downloaded.");
+    if (state === "failed") fail(410, "file_failed", FILE_PROBLEM[cur.problem ?? "missing"]);
+    if (state !== "ready" || cur.scan !== "clean") fail(409, "scanning", "This file is still being checked. Try again in a minute.");
+    return c.json({ url: await d.storage.getUrl(cur.key, cur.name) });
   });
 
   // Remove a file: the person who uploaded it, or an admin
@@ -1330,7 +1339,7 @@ export function createApp(d: Deps) {
     if (x.updatedBy !== actorId(c)) need(c, "delete");
     else need(c, "comment");
     await d.storage.remove(x.key);
-    await repo.table.write([{ delete: keys.doc(x.tenantId, x.projectId, x.id) }, repo.auditOp({ tenantId: x.tenantId, actorId: actorId(c), action: "doc.deleted", target: x.id, summary: `Removed "${x.name}"` })]);
+    await repo.table.write([{ delete: keys.doc(x.tenantId, x.projectId, x.id) }, unwatchOp(x), repo.auditOp({ tenantId: x.tenantId, actorId: actorId(c), action: "doc.deleted", target: x.id, summary: `Removed "${x.name}"` })]);
     return c.json({ ok: true });
   });
 
