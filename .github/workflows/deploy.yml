@@ -1,14 +1,17 @@
-# .github/workflows/deploy.yml - Build and ship the app from main: API code, then the web app.
-# Off until the repository variable AWS_DEPLOY_ROLE_ARN is set (see infra/README.md).
+# .github/workflows/deploy.yml - One release per commit on main: a secret scan, then Terraform, then the API
+# and the web app. App code never ships ahead of the infrastructure from the same commit, and nothing ships
+# if any step before it failed. Each part is off until its repository variable is set (AWS_TERRAFORM_ROLE_ARN,
+# AWS_DEPLOY_ROLE_ARN; see infra/README.md).
 
 name: deploy
 
-# Pushes to main that touch app code, or a manual run
+# Pushes to main that touch app code or infrastructure, or a manual run. Terraform plans on every release
+# and applies only when the plan has changes, so no path filtering decides what converges
 on:
   push:
     branches: [main]
     # Root package.json and the shared tsconfig change the build too
-    paths: ["apps/**", "packages/**", "package.json", "package-lock.json", "tsconfig.base.json", ".github/workflows/deploy.yml"]
+    paths: ["apps/**", "packages/**", "package.json", "package-lock.json", "tsconfig.base.json", "infra/**", ".github/workflows/deploy.yml"]
   workflow_dispatch:
 
 # Read-only by default; the job adds the OIDC token it needs
@@ -33,11 +36,68 @@ jobs:
 
       - run: docker run --rm -v "$PWD:/src" -w /src ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git --redact --no-banner .
 
-  # Skipped until the deploy role exists; id-token lets the job assume it. Nothing ships unless the
-  # secret scan passed on this same commit
-  deploy:
+  # Production infrastructure for this commit. Skipped until the Terraform role exists; id-token lets the job
+  # assume it. Runs only after the secret scan passed on this same commit
+  terraform:
     needs: secrets
-    if: vars.AWS_DEPLOY_ROLE_ARN != ''
+    if: vars.AWS_TERRAFORM_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    # One run at a time, and never cancel an apply halfway
+    concurrency:
+      group: terraform-prod
+      cancel-in-progress: false
+
+    # Every command runs in the production stack
+    defaults:
+      run:
+        working-directory: infra/envs/prod
+
+    steps:
+      # Actions are pinned to commit SHAs; the checkout keeps no token
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The same Terraform version people use locally; no wrapper, so output stays plain
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.16.0
+          terraform_wrapper: false
+
+      # Short-lived credentials through GitHub OIDC; the role trusts only this repo's main branch
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # Init against the S3 backend, then save the plan. Exit code 2 means the plan has changes
+      - run: terraform init -input=false
+      - id: plan
+        run: |
+          set +e
+          terraform plan -input=false -no-color -detailed-exitcode -out=tfplan
+          code=$?
+          set -e
+          [ "$code" = 1 ] && exit 1
+          echo "changes=$([ "$code" = 2 ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+      # Apply exactly the plan above, only when it changes something
+      - if: steps.plan.outputs.changes == 'yes'
+        run: terraform apply -input=false -no-color tfplan
+      # Release record: which commit the infrastructure now matches
+      - run: |
+          echo "infrastructure at ${GITHUB_SHA::7}, changes applied: ${{ steps.plan.outputs.changes }}" >> "$GITHUB_STEP_SUMMARY"
+
+  # The API and web app. Skipped until the deploy role exists; id-token lets the job assume it. Ships only
+  # after the secret scan passed and Terraform converged (or is switched off) on this same commit
+  deploy:
+    needs: [secrets, terraform]
+    if: >-
+      always() && vars.AWS_DEPLOY_ROLE_ARN != '' && needs.secrets.result == 'success'
+      && (needs.terraform.result == 'success' || needs.terraform.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -63,6 +123,14 @@ jobs:
       # The same checks as CI; nothing ships that fails them
       - run: npm ci
       - run: npm run check
+
+      # A CycloneDX inventory of what ships (production dependencies only), kept with the run
+      - run: npm sbom --sbom-format cyclonedx --omit dev > sbom.cdx.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-${{ github.sha }}
+          path: sbom.cdx.json
+          retention-days: 90
 
       # Short-lived credentials through GitHub OIDC; the role trusts only this repo's main branch
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -139,3 +207,7 @@ jobs:
               [ -e "${key}" ] && continue
               aws s3 rm "s3://$APP_BUCKET/$key"
             done
+
+      # Release record: the commit the API reports and the app serves
+      - run: |
+          echo "app at ${GITHUB_SHA::7}, verified through neon1.tech" >> "$GITHUB_STEP_SUMMARY"
