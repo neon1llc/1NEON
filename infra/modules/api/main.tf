@@ -294,6 +294,40 @@ resource "aws_lambda_permission" "apigw" {
 }
 
 
+# --- Outbox worker ---
+
+
+# Once a minute the same function sends what the outbox holds (emails, texts, invitations). Requests
+# only queue messages, so a slow provider never holds one up. Scheduled rules cost nothing
+resource "aws_cloudwatch_event_rule" "outbox" {
+  name                = "${var.name}-outbox"
+  description         = "Send queued 1NEON notifications and invitations"
+  schedule_expression = "rate(1 minute)"
+}
+
+
+# The schedule's target is the API function; the handler tells the two callers apart by source
+resource "aws_cloudwatch_event_target" "outbox" {
+  rule = aws_cloudwatch_event_rule.outbox.name
+  arn  = aws_lambda_function.api.arn
+  # A missed minute is covered by the next one, so no retries of a stale pass
+  retry_policy {
+    maximum_event_age_in_seconds = 60
+    maximum_retry_attempts       = 0
+  }
+}
+
+
+# Only this rule may invoke the function from EventBridge
+resource "aws_lambda_permission" "outbox" {
+  statement_id  = "AllowOutboxSchedule"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.api.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.outbox.arn
+}
+
+
 # The edge stack reads the API domain from SSM; deploys need the function names
 output "api_domain" { value = replace(aws_apigatewayv2_api.main.api_endpoint, "https://", "") }
 output "api_function" { value = aws_lambda_function.api.function_name }

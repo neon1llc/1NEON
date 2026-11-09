@@ -63,6 +63,17 @@ locals {
       dims      = { TableName = var.table_name }
       what      = "DynamoDB throttled writes."
     }
+    # The outbox worker reports these each minute; silence means the worker itself stopped
+    outbox-age = {
+      namespace = "1NEON", metric = "OutboxOldestAgeSec", stat = "Maximum", threshold = 900, missing = "breaching"
+      dims      = {}
+      what      = "A notification or invitation has waited over 15 minutes, or the outbox worker isn't running."
+    }
+    outbox-failed = {
+      namespace = "1NEON", metric = "OutboxFailed", stat = "Sum", threshold = 1
+      dims      = {}
+      what      = "A notification or invitation gave up after its retries. The failed row stays in the OUTBOX partition for 30 days."
+    }
   }
 }
 
@@ -80,7 +91,7 @@ resource "aws_cloudwatch_metric_alarm" "this" {
   evaluation_periods  = 1
   threshold           = each.value.threshold
   comparison_operator = "GreaterThanOrEqualToThreshold"
-  treat_missing_data  = "notBreaching"
+  treat_missing_data  = lookup(each.value, "missing", "notBreaching")
   alarm_actions       = [aws_sns_topic.alerts.arn]
   ok_actions          = [aws_sns_topic.alerts.arn]
 }
