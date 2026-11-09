@@ -34,7 +34,7 @@ export function memberRoutes(app: App, k: Kit) {
       const ts = now();
       if (!uid) {
         uid = newId("u");
-        await repo.createUser({ id: uid, email: p.email, name: p.name, title: p.title, phone: "", operator: false, strongAuth: false, theme: "awake", menu: "rail", version: 1, createdAt: ts, updatedAt: ts, updatedBy: inviter.id });
+        await repo.createUser({ id: uid, email: p.email, name: p.name, title: p.title, phone: "", operator: false, strongAuth: false, theme: "awake", menu: "default", version: 1, createdAt: ts, updatedAt: ts, updatedBy: inviter.id });
       }
       const existing = await repo.getMember(t.id, uid);
       // Already a member: nothing to do. A deactivated member is re-invited

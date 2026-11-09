@@ -10,7 +10,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { applyTheme, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, useToast } from "../components/ui.tsx";
 import { api, BASE_PATH, devUser, LIVE, pickPerson } from "../lib/api.ts";
-import { NOTIFY_GROUPS } from "@1neon/domain";
+import { menuOf, NOTIFY_GROUPS } from "@1neon/domain";
 import { problem } from "../lib/hooks.ts";
 import { passkeyCreation } from "../lib/passkey.ts";
 import { useHelp } from "../components/Help.tsx";
@@ -43,10 +43,10 @@ export function MePage() {
   const [totpOpen, setTotpOpen] = useState(false);
   useTopBar(<span>Your profile</span>, []);
   // Edits stay local until Save
-  const [draft, setDraft] = useState({ name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme, menu: me.user.menu ?? "rail", notify: me.user.notify ?? {}, smsConsent: Boolean(me.user.smsConsentAt) });
+  const [draft, setDraft] = useState({ name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme, menu: menuOf(me.user.menu), notify: me.user.notify ?? {}, smsConsent: Boolean(me.user.smsConsentAt) });
   const [busy, setBusy] = useState(false);
   // Anything that differs from what's saved; Save waits for a change
-  const saved = { name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme, menu: me.user.menu ?? "rail", notify: me.user.notify ?? {}, smsConsent: Boolean(me.user.smsConsentAt) };
+  const saved = { name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme, menu: menuOf(me.user.menu), notify: me.user.notify ?? {}, smsConsent: Boolean(me.user.smsConsentAt) };
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
   // A previewed theme that was never saved goes back to the saved one on leaving the page
   const savedTheme = useRef(me.user.theme);
@@ -164,17 +164,18 @@ export function MePage() {
             ))}
           </div>
         </fieldset>
-        {/* Menu: the icon rail stays on screen, or pages get the full width behind a menu button */}
+        {/* Menu: default opens it from the menu buttons; mini also keeps a slim icon menu on screen */}
         <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
           <legend style={{ marginBottom: 8 }}>Menu</legend>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {(["rail", "hidden"] as const).map((m) => (
+            {(["default", "mini"] as const).map((m) => (
               <label key={m} className={`chip${draft.menu === m ? " on" : ""}`} style={{ cursor: "pointer" }}>
                 <input type="radio" name="menu" className="sr" checked={draft.menu === m} onChange={() => setDraft({ ...draft, menu: m })} />
-                {m === "rail" ? "Always showing" : "Behind a menu button"}
+                {m === "default" ? "Default" : "Mini"}
               </label>
             ))}
           </div>
+          <p className="muted small" style={{ margin: "6px 0 0" }}>{draft.menu === "mini" ? "A slim menu of icons stays on the left. The menu button opens the full menu over it." : "The menu button opens the full menu. A tap outside it, or the button again, closes it."}</p>
         </fieldset>
         {/* Notifications: every kind shows under the bell; choose which also email you */}
         <div className="card small notify" id="notifications">

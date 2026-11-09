@@ -156,6 +156,7 @@ const invite: Show = {
           Home: "Home first. Good.",
           Board: "The board shows every project's stage.",
           "N E O N": "Needs, Execute, Observe, Normalize. Got it.",
+          Menu: "Every page is in the menu, then.",
           Search: "And search, for anything.",
         };
         for (let i = 0; i < 16; i++) {

@@ -200,6 +200,7 @@ const FRAME: Step[] = [
   { at: "nav-board", title: "Board", text: "Every project, in the stage it's in." },
   { at: "nav-projects", title: "Projects and files", text: "Each project keeps its needs, work, results, and files together." },
   { at: "nav-layers", title: "N E O N", text: "Needs, Execute, Observe, Normalize: the four layers every project moves through." },
+  { at: "menu", title: "Menu", text: "Every page and the four layers. Choose Mini on your profile to keep the menu's icons on screen." },
   { at: "search", title: "Search", text: "Jump to any page or project, or start something new." },
   { at: "help", title: "Help", text: "Stuck? Tap ? on any page for a short guide to that page." },
 ];

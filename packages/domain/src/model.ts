@@ -74,6 +74,12 @@ export function themeOf(stored: unknown): Theme {
 }
 
 
+/** The menu as it reads today: only a saved "mini" keeps the slim menu showing */
+export function menuOf(stored: unknown): "default" | "mini" {
+  return stored === "mini" ? "mini" : "default";
+}
+
+
 /** A person, across organizations. Operator and strong sign-in come from sign-in, never from a form */
 /** Where someone is with the welcome tour; missing means they haven't seen it */
 export const Tour = z.enum(["new", "later", "done"]);
@@ -90,8 +96,9 @@ export const User = z.object({
   // authorized from it; factor changes read the live inventory and admin actions read the session
   strongAuth: z.boolean().default(false),
   theme: Theme.default("awake"),
-  // "rail" keeps a slim icon menu on screen; "hidden" gives pages the full width behind a menu button
-  menu: z.enum(["rail", "hidden"]).default("rail"),
+  // "default" opens the full menu from a button; "mini" keeps a slim icon menu on screen as well.
+  // Older records say "rail" or "hidden" (from before 2026-11-09); both read as default (menuOf)
+  menu: z.enum(["default", "mini", "rail", "hidden"]).default("default"),
   // The welcome tour: not yet seen, asked to see it at the next sign-in, or finished or skipped
   tour: Tour.optional(),
   // Set once a passkey is added through the profile, so the portal can offer it to confirm

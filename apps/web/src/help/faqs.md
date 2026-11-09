@@ -99,7 +99,7 @@ A sign-in that uses your face, fingerprint, or device PIN instead of a code. It'
 ## Your account
 
 ### How do I change my name or the look?
-Open your profile from the menu. You can change your name, title, theme, menu, and notifications there, then choose **Save**. Two-step verification and signing out work right away.
+Open your profile from the menu. You can change your name, title, theme, menu, and notifications there, then choose **Save**. The menu button (top left, and Menu at the bottom on phones) opens the full menu; choose **Mini** to also keep a slim menu of icons on the left. Two-step verification and signing out work right away.
 
 ### How do I sign out?
 Open your profile and choose **Sign out**.

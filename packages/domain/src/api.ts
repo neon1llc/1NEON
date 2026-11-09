@@ -116,7 +116,7 @@ export const UpdateMeInput = z.object({
   title: z.string().trim().max(80).optional(),
   phone: z.string().trim().max(32).optional(),
   theme: Theme.optional(),
-  menu: z.enum(["rail", "hidden"]).optional(),
+  menu: z.enum(["default", "mini"]).optional(),
   tour: Tour.optional(),
   notify: NotifyPrefs.optional(),
   // Yes or no to texts; the API records when

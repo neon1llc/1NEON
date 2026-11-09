@@ -77,9 +77,10 @@ select:disabled { cursor: default; opacity: .7; }
 ::placeholder { color: var(--muted); opacity: 1; }
 input:focus, textarea:focus, select:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: transparent; }
 
-/* App shell: a slim icon rail (or none, by preference), and the full menu over the page */
+/* App shell: the full menu opens over the page from the menu buttons; "mini" also keeps a slim icon
+   rail on screen at every size, and the page makes room for it */
 .shell { min-height: 100%; }
-.shell.has-rail .main { padding-left: calc(var(--rail) + env(safe-area-inset-left)); }
+.shell.mini .main { padding-left: calc(var(--rail) + env(safe-area-inset-left)); }
 /* Notched phones sideways: the page's right edge stays clear of the notch too */
 .main { padding-right: env(safe-area-inset-right); }
 :root { --rail: 60px; --box: 28px; }
@@ -87,7 +88,16 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--focus); out
 .side { position: fixed; inset: 0 auto 0 0; z-index: 40; width: calc(var(--rail) + env(safe-area-inset-left)); background: var(--frame); border-right: 1px solid var(--line);
   display: flex; flex-direction: column; gap: 2px; padding: 12px 10px 12px calc(10px + env(safe-area-inset-left)); overflow-x: hidden; overflow-y: auto; transition: width .2s, box-shadow .2s; }
 .side.open { width: calc(272px + env(safe-area-inset-left)); box-shadow: 0 0 40px rgba(0, 0, 0, .3); }
-.shell:not(.has-rail) .side:not(.open) { transform: translateX(-100%); }
+.shell:not(.mini) .side:not(.open) { transform: translateX(-100%); }
+/* The mini rail's rows shrink with the screen's height, so every entry fits without scrolling */
+.shell.mini .side:not(.open) { --row: clamp(18px, calc((100dvh - var(--demo-h, 0px) - 28px) / 15), 40px); --box: min(28px, calc(var(--row) - 4px)); gap: 0; padding-top: 8px; padding-bottom: 8px; }
+.shell.mini .side:not(.open) :is(.brand, .org-mini, .nav a, .site-link, .who-link) { min-height: var(--row); padding-top: 2px; padding-bottom: 2px; }
+.shell.mini .side:not(.open) .nav { gap: 0; margin-top: 2px; }
+.shell.mini .side:not(.open) .nav .sep { margin: 3px 4px; }
+.shell.mini .side:not(.open) .ico svg { width: min(16px, calc(var(--box) - 8px)); height: min(16px, calc(var(--box) - 8px)); }
+.shell.mini .side:not(.open) .badge { font-size: min(12px, calc(var(--box) * .45)); }
+/* Short screens (a phone sideways): the neon1.tech link waits in the full menu, so the rest fits */
+@media (max-height: 500px) { .shell.mini .side:not(.open) .site-link { display: none; } .shell.mini .side:not(.open) .who-link { margin-top: auto; } }
 .scrim { position: fixed; inset: 0; z-index: 39; background: rgba(13, 2, 8, .45); }
 /* Every entry is one row: a 28px box, then its label; collapsed, labels stay readable to screen readers only */
 .side .brand, .side .org-mini, .nav a, .site-link, .who-link { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 6px 6px; border-radius: var(--r-sm);
@@ -432,15 +442,6 @@ fieldset legend { font: 12px var(--mono); color: var(--muted); }
 /* The four layers sit as a group under one label */
 .nav .sep .nav { margin-top: 4px; text-transform: none; letter-spacing: 0; font: inherit; color: var(--text); }
 .side:not(.open) .nav .sep .nav { margin-top: 6px; }
-/* Wide screens: the menu stays open with labels, so nothing is a mystery icon */
-@media (min-width: 1100px) {
-  .shell.has-rail { --rail: 232px; }
-  .shell.has-rail .side .lbl { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
-  .shell.has-rail .side .org-full { display: block; }
-  .shell.has-rail .side .org-mini { display: none; }
-  .shell.has-rail .side:not(.open) .nav .sep { padding: 12px 0 4px; margin: 0; border-top: 0; }
-  .shell.has-rail .side .brand { pointer-events: none; }
-}
 /* Top bar controls: search with its shortcut, and the round help button */
 .search-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 99px; background: var(--panel); color: var(--muted); font: 13px var(--sans, inherit); cursor: pointer; }
 .search-btn:hover { color: var(--text); border-color: var(--accent); }
@@ -451,8 +452,10 @@ fieldset legend { font: 12px var(--mono); color: var(--muted); }
 /* Phone tab bar: hidden until phone widths */
 .tabbar { display: none; }
 @media (max-width: 640px) {
-  .shell.has-rail .main { padding-left: env(safe-area-inset-left); }
-  .shell .side:not(.open) { transform: translateX(-100%); }
+  /* Phones: a slimmer mini rail, and the tab bar starts where it ends */
+  .shell.mini { --rail: 48px; }
+  .shell.mini .side:not(.open) { padding-left: calc(6px + env(safe-area-inset-left)); padding-right: 6px; }
+  .shell.mini .tabbar { left: calc(var(--rail) + env(safe-area-inset-left)); }
   .content { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
   .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; inset: auto 0 0 0; z-index: 30; background: color-mix(in srgb, var(--frame) 94%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--line); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
   .tabbar a, .tabbar button { display: grid; justify-items: center; gap: 2px; padding: 6px 0; border: 0; background: none; color: var(--muted); font: 11px var(--mono); text-decoration: none; border-radius: var(--r-sm); cursor: pointer; }
@@ -558,6 +561,10 @@ button.link { border: 0; background: none; padding: 0; color: var(--accent); tex
 @media (max-width: 640px) {
   .board { scroll-snap-type: x mandatory; }
   .board .col { scroll-snap-align: start; flex-basis: 82vw; }
+  /* Phones: an empty stage's name reads top to bottom, letters upright and close, centered in its strip */
+  .col.empty header { align-items: center; }
+  .col.empty header h3 { align-items: center; }
+  .col.empty header h3 .nm { text-orientation: upright; letter-spacing: -.18em; line-height: 1; font-size: 12px; }
 }
 
 /* --- FAQs --- */
@@ -861,3 +868,8 @@ body:has(.demo-bar) .top { top: var(--demo-h); }
 .metric-draft { padding: 14px; display: grid; gap: 10px; grid-template-columns: 2fr 1fr 1fr 1fr; align-items: end; }
 .metric-draft .rm { grid-column: 1 / -1; justify-self: end; }
 @media (max-width: 640px) { .metric-draft { grid-template-columns: 1fr 1fr 1fr; } .metric-draft .mt { grid-column: 1 / -1; } }
+
+/* Required fields: a small superscript asterisk after the label, keyed once on the form */
+.req { color: var(--red); margin-left: 2px; font-size: .8em; }
+/* Overview: the reminder to finish a project's basics, with its action at the end */
+.notice.finish { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }

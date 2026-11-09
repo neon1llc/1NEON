@@ -181,11 +181,13 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
   const members = useMembers(org.id);
   const toast = useToast();
   const refresh = useRefresh(org.id);
-  // Inline edit of summary and outcome. `editBase` is the version the edit started from, so a save
-  // after someone else's change conflicts instead of silently writing over it
+  // Inline edit of the basics, with the same questions the new-project form asked. `editBase` is the
+  // version the edit started from, so a save after someone else's change conflicts instead of
+  // silently writing over it
+  const basics = () => ({ name: p.name, summary: p.summary, outcome: p.outcome, targetDate: p.targetDate ?? "" });
   const [editing, setEditing] = useState(false);
   const [editBase, setEditBase] = useState(p.version);
-  const [draft, setDraft] = useState({ summary: p.summary, outcome: p.outcome });
+  const [draft, setDraft] = useState(basics);
   // A save that hit a newer version: that version, and the change being saved, until the person chooses
   const [conflict, setConflict] = useState<{ current: Project; patch: Record<string, unknown> }>();
   const [peopleOpen, setPeopleOpen] = useState(false);
@@ -214,7 +216,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
   const save = async (version: number, patch: Record<string, unknown>) => {
     try {
       await api(`/t/${org.id}/projects/${p.id}`, { method: "PATCH", body: { version, ...patch } });
-      if ("summary" in patch || "outcome" in patch) setEditing(false);
+      if ("summary" in patch || "outcome" in patch || "name" in patch) setEditing(false);
       setConflict(undefined);
       toast("Saved");
     } catch (e) {
@@ -224,10 +226,13 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
     refresh();
   };
   // The summary edit started from an older version than the one now on screen
-  const newerWhileEditing = editing && p.version > editBase && (draft.summary !== p.summary || draft.outcome !== p.outcome);
+  const newerWhileEditing = editing && p.version > editBase && JSON.stringify(draft) !== JSON.stringify(basics());
+  // What the basics still lack, for the reminder to finish them
+  const missing = [!p.summary && "what it is", !p.outcome && "what done looks like", metrics.length === 0 && "a measure"].filter(Boolean) as string[];
   // The rows the conflict dialog compares: only the fields this save was changing
   const people = (list: Project["people"]) => list.map((x) => `${names.get(x.userId) ?? "Former member"} (${x.role.replace("_", " ")})`).join(", ");
   const conflictFields = conflict ? [
+    ...("name" in conflict.patch ? [{ label: "Name", mine: String(conflict.patch.name), theirs: conflict.current.name }] : []),
     ...("summary" in conflict.patch ? [{ label: "Summary", mine: String(conflict.patch.summary), theirs: conflict.current.summary }] : []),
     ...("outcome" in conflict.patch ? [{ label: "Done when", mine: String(conflict.patch.outcome), theirs: conflict.current.outcome }] : []),
     ...("people" in conflict.patch ? [{ label: "People", mine: people(conflict.patch.people as Project["people"]), theirs: people(conflict.current.people) }] : []),
@@ -241,21 +246,32 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
       <section>
         {decision && <DecisionCard d={decision} names={names} />}
         {/* Editors can change the summary and outcome in place */}
+        {/* A project made with only its name gets a standing reminder to finish the basics */}
+        {canWrite && !editing && missing.length > 0 && (
+          <div className="notice small finish" role="status">
+            <span>Still to describe: {missing.join(", ")}. It helps everyone see why this project exists and when it's done.</span>
+            <button className="linkish small" onClick={() => { setDraft(basics()); setEditBase(p.version); setEditing(true); }}>Finish now</button>
+          </div>
+        )}
+        {/* Editors change the basics in place, under the same questions the new-project form asked */}
         {editing ? (
-          <form className="form" onSubmit={(e) => { e.preventDefault(); void save(editBase, draft); }}>
+          <form className="form" onSubmit={(e) => { e.preventDefault(); if (draft.name.trim()) void save(editBase, { name: draft.name.trim(), summary: draft.summary, outcome: draft.outcome, targetDate: draft.targetDate || null }); }}>
             {newerWhileEditing && <p className="notice newer" role="status">{names.get(p.updatedBy) ?? "Someone"} saved a newer version while you were editing. Your text is kept; Save asks which version to keep.</p>}
-            <div><label htmlFor="ps">What is this?</label><textarea id="ps" value={draft.summary} onChange={(e) => setDraft({ ...draft, summary: e.target.value })} maxLength={500} /></div>
-            <div><label htmlFor="po">Done when</label><textarea id="po" value={draft.outcome} onChange={(e) => setDraft({ ...draft, outcome: e.target.value })} maxLength={500} /></div>
+            <div><label htmlFor="pn">Name<sup className="req" aria-hidden="true">*</sup></label><input id="pn" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} maxLength={120} required /></div>
+            <div><label htmlFor="ps">In one or two sentences, what is this?</label><textarea id="ps" value={draft.summary} onChange={(e) => setDraft({ ...draft, summary: e.target.value })} maxLength={500} rows={2} /></div>
+            <div><label htmlFor="po">What will be true when it's done?</label><textarea id="po" value={draft.outcome} onChange={(e) => setDraft({ ...draft, outcome: e.target.value })} maxLength={500} rows={2} /></div>
+            <div><label htmlFor="pd">Target date</label><input id="pd" type="date" value={draft.targetDate} onChange={(e) => setDraft({ ...draft, targetDate: e.target.value })} style={{ maxWidth: 220 }} /></div>
+            <p className="small muted" style={{ margin: 0 }}>The real example is under <Link to={`/o/${org.slug}/projects/${p.key}/${layerSlug("needs")}`}>Needs</Link>, and measures under <Link to={`/o/${org.slug}/projects/${p.key}/${layerSlug("observation")}`}>Observe</Link>, where they can be changed too. The key, {p.key}, stays the same.</p>
             <div className="actions" style={{ justifyContent: "flex-start" }}>
-              <button className="btn btn-primary" type="submit">Save</button>
-              <button className="btn btn-ghost" type="button" onClick={() => { setEditing(false); setDraft({ summary: p.summary, outcome: p.outcome }); }}>Cancel</button>
+              <button className="btn btn-primary" type="submit" disabled={!draft.name.trim()}>Save</button>
+              <button className="btn btn-ghost" type="button" onClick={() => { setEditing(false); setDraft(basics()); }}>Cancel</button>
             </div>
           </form>
         ) : (
           <>
             <p className="lead" style={{ marginTop: 0 }}>{p.summary || <span className="muted">No summary yet.</span>}</p>
             <p><b>Done when:</b> {p.outcome || <span className="muted">not written yet</span>}</p>
-            {canWrite && <button className="btn btn-ghost" onClick={() => { setDraft({ summary: p.summary, outcome: p.outcome }); setEditBase(p.version); setEditing(true); }}>Edit</button>}
+            {canWrite && <button className="btn btn-ghost" onClick={() => { setDraft(basics()); setEditBase(p.version); setEditing(true); }}>Edit</button>}
           </>
         )}
         <h2 className="section-h">Measures <small>baseline → target</small></h2>

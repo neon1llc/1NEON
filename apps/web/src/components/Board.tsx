@@ -81,7 +81,7 @@ export function Board({
           >
             {/* Column header: layer, name, and count against its limit */}
             <header>
-              <h3><LayerBadge layer={s.layer} />{s.name}</h3>
+              <h3><LayerBadge layer={s.layer} /><span className="nm">{s.name}</span></h3>
               <span className={`n${overLimit ? " over" : ""}`} title={s.wipLimit ? `Limit ${s.wipLimit}` : undefined}>
                 {cards.length}{s.wipLimit ? `/${s.wipLimit}` : ""}
               </span>

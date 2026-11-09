@@ -57,6 +57,8 @@ export function NewProject() {
   // Measures with a name are kept; the project starts in the first stage that isn't hidden, as the API does
   const kept = metrics.filter((m) => m.title.trim());
   const first = org.stages.find((x) => !x.hidden) ?? org.stages[0];
+  // What was left blank, named on the review so skipping it is a choice, not an accident
+  const later = [!projectSummary.trim() && "what it is", !outcome.trim() && "what done looks like", kept.length === 0 && "a measure"].filter(Boolean) as string[];
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
   // Only the Basics step has a required field
   const ready = [true, name.trim().length > 0, true, true];
@@ -126,7 +128,8 @@ export function NewProject() {
         {/* Step 2: basics */}
         {step === 1 && (
           <>
-            <div><label htmlFor="n">Name</label><input id="n" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required autoFocus placeholder="e.g. move the file server to the cloud" /></div>
+            <p className="small muted" style={{ margin: 0 }}><sup className="req" aria-hidden="true">*</sup> Required. The rest can wait, and the project will remind you.</p>
+            <div><label htmlFor="n">Name<sup className="req" aria-hidden="true">*</sup></label><input id="n" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required autoFocus placeholder="e.g. move the file server to the cloud" /></div>
             <div><label htmlFor="s">In one or two sentences, what is this?</label><textarea id="s" value={projectSummary} onChange={(e) => setSummary(e.target.value)} maxLength={500} rows={2} placeholder="e.g. patients email forms to one inbox, and staff retype them into the record" /></div>
             <div><label htmlFor="o">What will be true when it's done?</label><textarea id="o" value={outcome} onChange={(e) => setOutcome(e.target.value)} maxLength={500} rows={2} placeholder="e.g. patients upload once, and the front desk sees what's missing at a glance" /></div>
             <div><label htmlFor="x">One real example of how it works today</label><textarea id="x" value={example} onChange={(e) => setExample(e.target.value)} maxLength={2000} rows={3} placeholder="e.g. every Monday, Dana exports the schedule to a spreadsheet and emails it to the front desk…" /></div>
@@ -157,7 +160,8 @@ export function NewProject() {
         {/* Step 4: review */}
         {step === 3 && (
           <div className="card">
-            <p className="s mono muted small" style={{ margin: 0 }}>{t.keyPrefix}-· · {t.name}</p>
+            {/* The key's number is given at Create (the next free one), so only its prefix shows here */}
+            <p className="s mono muted small" style={{ margin: 0 }}>{t.keyPrefix} · {t.name}</p>
             <h2 style={{ margin: "6px 0 10px" }}>{name}</h2>
             {projectSummary && <p>{projectSummary}</p>}
             {outcome && <p><b>Done when:</b> {outcome}</p>}
@@ -168,7 +172,8 @@ export function NewProject() {
                 {kept.map((m, i) => <li key={i}>{m.title.trim()}: from {m.baseline || "?"} to {m.target || "?"}{m.unit ? ` ${m.unit}` : ""}</li>)}
               </ul>
             )}
-            <p className="muted small">Starts in {first?.name}. Adds {plural(t.items.length, "starter item")}{kept.length ? ` and ${plural(kept.length, "measure")}` : ""}.</p>
+            {later.length > 0 && <p className="small notice">Not written yet: {later.join(", ")}. You can add {later.length === 1 ? "it" : "them"} later from the project's Overview, which will remind you.</p>}
+            <p className="muted small">Gets the next {t.keyPrefix} number when created. Starts in {first?.name}. Adds {plural(t.items.length, "starter item")}{kept.length ? ` and ${plural(kept.length, "measure")}` : ""}.</p>
           </div>
         )}
         {error && <p className="notice" role="alert">{error}</p>}

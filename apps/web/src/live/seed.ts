@@ -30,7 +30,7 @@ export async function liveSeed(repo: Repo, mailer: MemoryMailer): Promise<LiveSe
     id: newId("u"), email, name, title, phone: "", operator: false,
     // The whole project's Maria is set up already; a short demo's Maria has no second step yet,
     // and an invitee hasn't seen the welcome tour
-    strongAuth: !short, theme: "awake", menu: "rail", tour: fresh ? undefined : "done",
+    strongAuth: !short, theme: "awake", menu: "default", tour: fresh ? undefined : "done",
     version: 1, createdAt: t0, updatedAt: t0, updatedBy: "seed",
   });
   const pradeep = { ...user(PRADEEP, "Pradeep", "Lead engineer"), strongAuth: true };

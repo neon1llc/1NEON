@@ -3,8 +3,9 @@
 
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useParams } from "react-router";
+import { menuOf } from "@1neon/domain";
 import { PLAY, PROJECT } from "../live/where.ts";
 import { api, DEMO as IN_DEMO, LIVE as IN_LIVE, devUser, HttpError, pickPerson, resetDemo } from "../lib/api.ts";
 import { failureOf, read } from "../lib/reads.ts";
@@ -468,18 +469,13 @@ function DemoBar() {
   );
 }
 
-// Phones: the menu is a drawer at this width whatever the person chose (matches the stylesheet's 640px)
-const NARROW = "(max-width: 640px)";
-/** Whether a media query matches now, re-rendering when that changes */
-function useMedia(query: string) {
-  return useSyncExternalStore(
-    (changed) => {
-      const m = matchMedia(query);
-      m.addEventListener("change", changed);
-      return () => m.removeEventListener("change", changed);
-    },
-    () => matchMedia(query).matches,
-  );
+// The organization last in view, for the menu on pages outside one: the remembered one if it's still
+// theirs, else their only one; someone in several with nothing remembered picks from the chooser
+const LAST_ORG = "1neon.lastOrg";
+function lastOrg(orgs: OrgSummary[]) {
+  let slug: string | null = null;
+  try { slug = localStorage.getItem(LAST_ORG); } catch { /* storage blocked */ }
+  return orgs.find((o) => o.slug === slug) ?? (orgs.length === 1 ? orgs[0] : undefined);
 }
 // What can take focus inside the menu, for moving focus into it when it opens
 const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled])";
@@ -491,8 +487,9 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
   // The session query itself, for marking the frame when a background check of it fails
   const meRead = useMe();
   const help = useHelp();
-  // The person's choice: the menu always on screen (labels on wide screens, icons on narrow), or behind a button
-  const rail = (me.user.menu ?? "rail") === "rail";
+  // The person's choice: default opens the full menu from a button; mini also keeps the icon rail
+  // on screen at every size. Either way the full menu opens over the page from the menu buttons
+  const mini = menuOf(me.user.menu) === "mini";
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState(false);
   const [top, setTop] = useState<ReactNode>(null);
@@ -508,10 +505,9 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
     addEventListener("keydown", esc);
     return () => removeEventListener("keydown", esc);
   }, [open]);
-  // Offscreen means out of the focus order: the menu is inert while it's tucked away (behind the menu
-  // button, or a phone's drawer), and while it's open as an overlay the page behind it is inert instead
-  const narrow = useMedia(NARROW);
-  const tucked = !open && (!rail || narrow);
+  // Offscreen means out of the focus order: the menu is inert while it's tucked away behind the menu
+  // buttons, and while it's open as an overlay the page behind it is inert instead
+  const tucked = !open && !mini;
   const side = useRef<HTMLElement>(null);
   const trigger = useRef<HTMLElement | null>(null);
   // Opening moves focus into the menu (to the page in view, or its first control) unless it's already
@@ -529,9 +525,12 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
     const lost = !document.activeElement || document.activeElement === document.body || el.contains(document.activeElement);
     if (back?.isConnected && !back.closest("[inert]") && lost) back.focus();
   }, [open]);
-  const base = org ? `/o/${org.slug}` : "";
+  // Remember the organization in view, so pages outside one (profile, FAQs) keep its menu and tabs
+  useEffect(() => { if (org) try { localStorage.setItem(LAST_ORG, org.slug); } catch { /* storage blocked: falls back below */ } }, [org]);
+  const navOrg = org ?? (all ? undefined : lastOrg(me.orgs));
+  const base = navOrg ? `/o/${navOrg.slug}` : "";
   return (
-    <div className={`shell${rail ? " has-rail" : ""}`}>
+    <div className={`shell${mini ? " mini" : ""}`}>
       {/* First stop for the keyboard: straight to the page, past the menu and top bar. Focus moves in
           code, so the address never gains a #main that pages would read as a link to an item */}
       <a className="skip" href="#main" onClick={(e) => { e.preventDefault(); document.getElementById("main")?.focus(); }}>Skip to content</a>
@@ -547,13 +546,13 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
         </button>
         {/* Organization: the full chooser when there's room for labels, its initials otherwise */}
         <div className="org-full"><OrgChooser current={org} all={all} /></div>
-        <button className="org-mini" type="button" onClick={() => setOpen(true)} title={all ? "All clients" : org?.name ?? "Choose an organization"}>
-          <span className="ico">{all ? "All" : org ? initials(org.name) : "?"}</span>
-          <span className="lbl">{all ? "All clients" : org?.name ?? "Organizations"}</span>
+        <button className="org-mini" type="button" onClick={() => setOpen(true)} title={all ? "All clients" : navOrg?.name ?? "Choose an organization"}>
+          <span className="ico">{all ? "All" : navOrg ? initials(navOrg.name) : "?"}</span>
+          <span className="lbl">{all ? "All clients" : navOrg?.name ?? "Organizations"}</span>
         </button>
         {/* Organization pages get the main places and the four layers; All clients gets only its board */}
         <ul className="nav">
-          {org ? (
+          {navOrg ? (
             <>
               <Item to={`${base}/workspace`} icon={<Icon name="workspace" />} label="Home" tour="nav-home" />
               <Item to={`${base}/workflow`} icon={<Icon name="workflow" />} label="Board" tour="nav-board" />
@@ -592,9 +591,9 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
             <strong>All clients · read only.</strong> Open a client to make changes.
           </div>
         )}
-        {/* Top bar: menu button when there's no rail, the page's crumbs, then search and help */}
+        {/* Top bar: the menu button (always: it costs no room), the page's crumbs, then search and help */}
         <header className="top">
-          {!rail && <button className="icon-btn" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Menu"><MenuIcon size={18} /></button>}
+          <button className="icon-btn menu-btn" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Menu" title="Menu" data-tour="menu"><MenuIcon size={18} /></button>
           <div className="crumb">{top}</div>
           <span className="spacer" />
           <button className="search-btn" onClick={() => setSearch(true)} data-tour="search" aria-label="Search">
@@ -614,7 +613,7 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
       </div>
       {/* Phones: the main places as a tab bar at the bottom, within thumb reach */}
       <nav className="tabbar" aria-label="Main" inert={open}>
-        {org ? (
+        {navOrg ? (
           <>
             <NavLink to={`${base}/workspace`} data-tour="nav-home"><HomeIcon size={20} aria-hidden="true" /><span>Home</span></NavLink>
             <NavLink to={`${base}/workflow`} data-tour="nav-board"><KanbanIcon size={20} aria-hidden="true" /><span>Board</span></NavLink>
@@ -624,7 +623,7 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
         ) : (
           <NavLink to="/"><HomeIcon size={20} aria-hidden="true" /><span>Home</span></NavLink>
         )}
-        <button type="button" onClick={() => setOpen(true)} data-tour="nav-layers"><MenuIcon size={20} aria-hidden="true" /><span>More</span></button>
+        <button type="button" className="menu-btn" onClick={() => setOpen(!open)} aria-expanded={open}><MenuIcon size={20} aria-hidden="true" /><span>Menu</span></button>
       </nav>
       <Palette me={me} org={org} open={search} setOpen={setSearch} onHelp={help.open} onTour={help.welcomeTour} />
       <ConfirmDialog me={me} />

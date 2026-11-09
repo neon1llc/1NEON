@@ -114,7 +114,26 @@ export const STORY: Section[] = [
       await s.click({ sel: ".chip", text: "Match my device" }, 500);
       await s.think("No, I like it light.");
       await s.click({ sel: ".chip", text: "Awake (light)" }, 400);
+      // On a phone (either way up) she tries the mini menu, which keeps the menu's icons on screen
+      const small = matchMedia("(max-width: 640px), (max-height: 500px)").matches;
+      if (small) {
+        await s.think("Menu: Default or Mini? Let me try Mini.");
+        await s.click({ sel: ".chip", text: "Mini" }, 500);
+      }
       await s.click({ sel: "button", text: /^Save$/ }, 1200);
+      if (small) {
+        await s.say("The mini menu keeps every page one tap away, and the full menu opens over it");
+        await s.think("Hey, that's neat. The icons stay put on the left.");
+        await s.click(".top .menu-btn", 900);
+        await s.think("And the menu button opens the full menu with names.");
+        await s.click(".scrim", 500);
+        // Upright phones also have Menu at the end of the tab bar, in reach of her thumb
+        if (await s.has(".tabbar .menu-btn")) {
+          await s.click(".tabbar .menu-btn", 900);
+          await s.think("Same menu from the bottom, right by my thumb. Useful.");
+          await s.click(".scrim", 500);
+        }
+      }
     },
   },
   {

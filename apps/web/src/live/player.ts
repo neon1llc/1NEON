@@ -54,10 +54,13 @@ const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 
 const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 
-/** Is this element on screen and not hidden? */
+/** Is this element on screen and not hidden? Anything inert doesn't count, a person couldn't click
+ * it: the menu tucked off the left edge, or the page behind the open menu. Something merely scrolled
+ * out of view (a board column off to the side) still counts, since reaching it scrolls it in */
 function visible(el: Element) {
   const r = el.getBoundingClientRect();
   if (r.width === 0 || r.height === 0) return false;
+  if (el.closest("[inert]")) return false;
   const cs = getComputedStyle(el);
   return cs.visibility !== "hidden" && cs.display !== "none" && Number(cs.opacity) > 0.05;
 }
@@ -525,13 +528,22 @@ export class Player {
         el.scrollIntoView({ block: "center", behavior: how() });
         await pause(560);
       }
-      const r = el.getBoundingClientRect();
-      await glide(r.left + Math.min(r.width * 0.45, 24 + r.width * 0.2), r.top + r.height * 0.55);
+      // Aim where the element is now; if the layout moved while gliding (a resize, a rotation, a menu
+      // sliding in), aim again at where it went, so the cursor always lands on it
+      for (let tries = 0; tries < 3; tries++) {
+        const r = el.getBoundingClientRect();
+        const x = r.left + Math.min(r.width * 0.45, 24 + r.width * 0.2), y = r.top + r.height * 0.55;
+        await glide(x, y);
+        const now = el.getBoundingClientRect();
+        if (Math.abs(now.left - r.left) < 4 && Math.abs(now.top - r.top) < 4) break;
+      }
       hoverAt(el);
     };
 
     return {
       fast: () => p.fast,
+      /** Whether something is on screen right now (a phone's tab bar, say), without waiting for it */
+      has: async (t: Target) => Boolean(find(t)),
       /** Hold for a moment (skipped when catching up) */
       wait: async (ms: number) => { await pause(ms); },
       /** What's happening, shown in the controls */
@@ -665,7 +677,21 @@ export class Player {
       /** Go somewhere: through a visible menu link when there is one, as a person would */
       go: async (path: string, label?: string) => {
         step();
-        const link = label ? find({ sel: ".side a, .tabbar a", text: label }) : undefined;
+        const where = { sel: ".side a, .tabbar a", text: label ?? "" };
+        let link = label ? find(where) : undefined;
+        // Not on screen (the menu is tucked away): open it the way she would, from the tab bar's Menu
+        // on a phone or the top bar's button otherwise, then pick the link from the full menu
+        if (label && !link && !p.fast) {
+          const btn = find(".tabbar .menu-btn") ?? find(".top .menu-btn");
+          if (btn) {
+            await reach(btn);
+            await pause(150);
+            p.cursor!.press();
+            btn.click();
+            await pause(450);
+            link = find({ sel: ".side.open a", text: label });
+          }
+        }
         if (link && !p.fast) {
           await reach(link);
           await pause(150);
