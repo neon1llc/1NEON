@@ -176,7 +176,8 @@ function Presence({ edits }: { edits: EditMarker[] }) {
 
 /** Overview: decision, summary and outcome, measures, status, and people */
 function Overview({ project: p, items }: { project: Project; items: Item[] }) {
-  const { org, canWrite } = useOrg();
+  const { org, canWrite, access } = useOrg();
+  const me = useSession();
   const members = useMembers(org.id);
   const toast = useToast();
   const refresh = useRefresh(org.id);
@@ -279,7 +280,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
         </div>
         {/* Project roles, with a fallback for people who left the organization */}
         <h2 className="section-h">People {canWrite && <button className="link small" onClick={() => setPeopleOpen(true)}>Edit</button>}</h2>
-        {!p.people.some((x) => x.role === "decision_maker") && <p className="notice small">No decision maker yet. {canWrite ? "Name one, so options can be approved." : "An admin of your organization can approve options."}</p>}
+        {!p.people.some((x) => x.role === "decision_maker") && <p className="notice small">No decision maker yet. An admin of your organization can approve options{access === "admin" && !me.operator ? ", or name a decision maker under People" : ""}.</p>}
         {p.people.length === 0 ? <p className="muted small">No one on this project yet.</p> : (
           <div className="rows">
             {p.people.map((x) => (
@@ -340,7 +341,11 @@ const ROLE_NAMES: Record<Project["people"][number]["role"], string> = {
 /** Add, remove, and set roles for the people on a project. Like the item panel, it works against the
  * version it opened with: a clean list follows newer versions, an edited one stays and says so */
 function PeopleDialog({ open, onClose, people, version, onSave }: { open: boolean; onClose: () => void; people: Project["people"]; version: number; onSave: (people: Project["people"], version: number) => void }) {
-  const { org } = useOrg();
+  const { org, access } = useOrg();
+  const me = useSession();
+  // Owner policy: only a client admin names or changes the decision maker (the API also asks them to
+  // confirm it's them); everyone else edits the other roles around it
+  const mayName = access === "admin" && !me.operator;
   const members = useMembers(org.id);
   const [base, setBase] = useState({ people, version });
   const [draft, setDraft] = useState(people);
@@ -366,18 +371,23 @@ function PeopleDialog({ open, onClose, people, version, onSave }: { open: boolea
     <Dialog open={open} onClose={onClose} label="People on this project">
       <h2>People on this project</h2>
       {dirty && version > base.version && <p className="notice newer" role="status">Someone changed this project while you were editing. Your list is kept; Save asks which to keep.</p>}
+      {!mayName && <p className="small muted">Only an admin of this organization can name or change the decision maker.</p>}
       <div className="people-edit">
-        {draft.map((d, i) => (
-          <div key={d.userId} className="pe-row">
-            <span>{name(d.userId)}</span>
-            <select aria-label={`Role for ${name(d.userId)}`} value={d.role} onChange={(e) => setDraft(draft.map((x, j) => (j === i ? { ...x, role: e.target.value as typeof d.role } : x)))}>
-              {ProjectRole.options.map((r) => <option key={r} value={r}>{ROLE_NAMES[r]}</option>)}
-            </select>
-            <button className="btn btn-ghost btn-sm" onClick={() => setDraft(draft.filter((_, j) => j !== i))} aria-label={`Remove ${name(d.userId)}`}>Remove</button>
-          </div>
-        ))}
+        {draft.map((d, i) => {
+          // Without the right to name, a decision maker's row stays as it is, and nobody else can become one
+          const locked = !mayName && d.role === "decision_maker";
+          return (
+            <div key={d.userId} className="pe-row">
+              <span>{name(d.userId)}</span>
+              <select aria-label={`Role for ${name(d.userId)}`} value={d.role} disabled={locked} onChange={(e) => setDraft(draft.map((x, j) => (j === i ? { ...x, role: e.target.value as typeof d.role } : x)))}>
+                {ProjectRole.options.map((r) => <option key={r} value={r} disabled={!mayName && r === "decision_maker" && d.role !== r}>{ROLE_NAMES[r]}</option>)}
+              </select>
+              <button className="btn btn-ghost btn-sm" disabled={locked} onClick={() => setDraft(draft.filter((_, j) => j !== i))} aria-label={`Remove ${name(d.userId)}`}>Remove</button>
+            </div>
+          );
+        })}
         {addable.length > 0 && (
-          <select aria-label="Add a person" value="" onChange={(e) => e.target.value && setDraft([...draft, { userId: e.target.value, role: draft.some((x) => x.role === "decision_maker") ? "stakeholder" : "decision_maker" }])}>
+          <select aria-label="Add a person" value="" onChange={(e) => e.target.value && setDraft([...draft, { userId: e.target.value, role: mayName && !draft.some((x) => x.role === "decision_maker") ? "decision_maker" : "stakeholder" }])}>
             <option value="">+ Add someone…</option>
             {addable.map((m) => <option key={m.userId} value={m.userId}>{m.name || m.email}</option>)}
           </select>
