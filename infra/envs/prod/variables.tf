@@ -54,10 +54,10 @@ variable "malware_scan" {
 }
 
 
-# Turn on once the toll-free number's registration is approved (and for the registration's own
-# approved testing). While off, the profile says texts aren't available and nothing is sent
+# On (Pradeep, 2026-11-09). Carriers deliver only once the toll-free registration is approved; turning
+# it off again hides texts in the profile and sends nothing
 variable "texts_live" {
   description = "Offer text notices in the portal."
   type        = bool
-  default     = false
+  default     = true
 }
