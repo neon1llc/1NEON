@@ -145,7 +145,10 @@ export function projectRoutes(app: App, k: Kit) {
       if (!decided && !input.reason) fail(428, "reason_required", "No option has been approved yet. Add a reason to move on anyway.");
     }
     const ts = now();
-    const next: Project = { ...p, stageId: stage.id, rank: rankBetween(input.after ?? "", input.before ?? ""), stageEnteredAt: stageChanged ? ts : p.stageEnteredAt, version: p.version + 1, updatedAt: ts, updatedBy: actorId(c) };
+    // A project leaves "not started" on its own once it moves on from its first stage; after that its
+    // health is the team's call (on track, at risk, off track)
+    const started = p.health === "not_started" && stageChanged && order > t.stages.findIndex((s) => !s.hidden);
+    const next: Project = { ...p, stageId: stage.id, rank: rankBetween(input.after ?? "", input.before ?? ""), stageEnteredAt: stageChanged ? ts : p.stageEnteredAt, ...(started ? { health: "on_track" as const } : {}), version: p.version + 1, updatedAt: ts, updatedBy: actorId(c) };
     const summary = stageChanged ? `Moved ${p.key} to ${stage.name}${input.reason ? ` (${input.reason})` : ""}` : `Reordered ${p.key}`;
     await repo.table.write([repo.projectOp(next, { version: input.version }), repo.auditOp({ tenantId: t.id, actorId: actorId(c), action: "project.moved", target: p.id, summary })]);
     return c.json(next);

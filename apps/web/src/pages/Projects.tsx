@@ -2,7 +2,7 @@
 // timeline from start to target date. The list and timeline views follow Kaneo and Plane.
 
 
-import type { Layer, Project } from "@1neon/domain";
+import { isClosed, type Layer, type Project } from "@1neon/domain";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { gate, Stale } from "../components/Reads.tsx";
@@ -118,7 +118,7 @@ export function Projects() {
           })}
         </div>
       ) : (
-        <Timeline projects={list} slug={summary.slug} stageOf={(p) => { const st = stage.get(p.stageId); return { name: st?.name ?? "", layer: st?.layer ?? "needs", last: st ? st.at === org.stages.length - 1 : false }; }} />
+        <Timeline projects={list} slug={summary.slug} stageOf={(p) => { const st = stage.get(p.stageId); return { name: st?.name ?? "", layer: st?.layer ?? "needs", last: isClosed(org.stages, p.stageId) }; }} />
       )}
     </>
   );

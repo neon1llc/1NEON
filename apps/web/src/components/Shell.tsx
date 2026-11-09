@@ -518,7 +518,10 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
     if (!el) return;
     if (open) {
       trigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      if (!el.contains(document.activeElement)) (el.querySelector<HTMLElement>("a[aria-current='page']") ?? el.querySelector<HTMLElement>(FOCUSABLE))?.focus();
+      // The menu always opens at its top, row for row beside the rail; focusing the page in view must
+      // not scroll it (on the profile, that link sits at the very bottom)
+      el.scrollTop = 0;
+      if (!el.contains(document.activeElement)) (el.querySelector<HTMLElement>("a[aria-current='page']") ?? el.querySelector<HTMLElement>(FOCUSABLE))?.focus({ preventScroll: true });
       return;
     }
     const back = trigger.current;

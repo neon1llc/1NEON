@@ -222,6 +222,19 @@ describe("projects and concurrency", () => {
     expect(ok.json.stageId).toBe("build");
   });
 
+  it("takes a project out of not started once it moves on, or once its work begins", async () => {
+    const net = (await call(OP, "GET", `/t/${s.harbor.id}/projects`)).json.find((x: { key: string }) => x.key === "NET-1");
+    expect(net.health).toBe("not_started");
+    const moved = await call(OP, "POST", `/t/${s.harbor.id}/projects/${net.id}/move`, { version: net.version, stageId: "listen" });
+    expect(moved.json.health).toBe("on_track");
+    const ai = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json.find((x: { key: string }) => x.key === "AI-1");
+    expect(ai.health).toBe("not_started");
+    const item = (await call(OP, "POST", `/t/${s.acme.id}/projects/${ai.id}/items`, { kind: "task", title: "First task" })).json;
+    await call(OP, "PATCH", `/t/${s.acme.id}/projects/${ai.id}/items/${item.id}`, { version: item.version, status: "doing" });
+    const after = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json.find((x: { key: string }) => x.key === "AI-1");
+    expect(after.health).toBe("on_track");
+  });
+
   it("lets a project already past Decide move back from Closed without a reason", async () => {
     const list = await call(OP, "GET", `/t/${s.acme.id}/projects`);
     const p = list.json.find((x: { key: string }) => x.key === "SEC-1");

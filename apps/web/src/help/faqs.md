@@ -25,7 +25,13 @@ Yes. It's offered the first time you sign in. Skip it or ask to be reminded next
 The four layers every project moves through, N E O N. **Needs** is what you want and the options to get there. **Execute** is the work. **Observe** checks the results against the goals. **Normalize** makes the change last: handover, training, and care.
 
 ### What should I do first on a project?
-Look at **Next step** at the top of the project. It says what has to happen now and who it's waiting on.
+Look at **Next step** at the top of the project. It says what has to happen now and who it's waiting on, and it changes as soon as that's done: approve an option or send a file and it moves on to the next thing. When nothing is waiting on anyone, it names the stage's goal and offers **Move to** the next stage.
+
+### What do Not started, On track, At risk, and Off track mean?
+They're the project's health. A new project is **Not started**, and it turns **On track** by itself once it moves past its first stage or any of its work is in progress or done. After that, the team sets it on the project's overview, or with a status update. Items have their own status in their panel: To do, In progress, Blocked, or Done.
+
+### What if we rename, reorder, or hide stages?
+Projects follow along. Their steps, the board, and Next step use the new names and order. A hidden stage still shows while a project is in it. Decide keeps asking for an approved option, and Closed still ends a project, under any name or position.
 
 ### How do I tell you what I need?
 Open the project's **Needs** tab and tap **Add request**. Finish a sentence with a few taps: what you'd like to do (choose any, or tap **+** to add your own), what it's for, what happens currently, how often it happens, and when it's due, including a date or a date range. Tap **Define another need** to add more. Each need becomes its own request, and only the first choice is required.

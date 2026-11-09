@@ -2,7 +2,7 @@
 // Execute, Observe, Normalize).
 
 
-import { betterWhen, canApprove, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, ProjectRole, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
+import { betterWhen, canApprove, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, ProjectRole, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
 import { ArrowRight, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
@@ -115,7 +115,13 @@ export function ProjectPage() {
 }
 
 
-/** The one thing to do next on this project, and who it's waiting on */
+/**
+ * The one thing to do next on this project, and who it's waiting on. It follows the work as it happens:
+ * an approval, a file sent, or a checked-off item changes it at once (the page refreshes after each
+ * action). When nothing is waiting on a person, it names the stage's goal and, for editors, offers the
+ * move to the next stage. Stages are found by their IDs and order in Settings, so renaming, reordering,
+ * or hiding stages keeps it right: Decide and Closed keep their roles under any name or place
+ */
 function NextStep({ project: p, items, stage, base }: { project: Project; items: Item[]; stage?: Stage; base: string }) {
   const { org, access, canWrite } = useOrg();
   const me = useSession();
@@ -124,37 +130,43 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
   const members = useMembers(org.id);
   const names = new Map(members.data?.map((m) => [m.userId, m.name || m.email]) ?? []);
   const actor = { userId: me.user.id, operator: me.operator, strongSession: false };
-  // The last stage (Closed) ends a project. Reopening moves it back to the stage before, from where it
-  // moves anywhere like any project (the board's drag and Move to do the same)
   const at = org.stages.findIndex((s) => s.id === p.stageId);
-  const closed = at === org.stages.length - 1 && at > 0;
-  const back = closed ? org.stages.slice(0, at).filter((s) => !s.hidden).at(-1) : undefined;
-  const reopen = async () => {
-    if (!back) return;
+  const closed = isClosed(org.stages, p.stageId);
+  // Where a move goes: the next shown stage, or for a closed project the shown stage before it
+  const ahead = org.stages.slice(at + 1).find((s) => !s.hidden);
+  const back = org.stages.slice(0, at).filter((s) => !s.hidden).at(-1);
+  const decideAt = org.stages.findIndex((s) => s.id === "decide");
+  const moveTo = async (to: Stage, word: string) => {
     try {
-      await api(`/t/${org.id}/projects/${p.id}/move`, { method: "POST", body: { version: p.version, stageId: back.id } });
-      toast(`${p.key} reopened in ${back.name}`);
+      await api(`/t/${org.id}/projects/${p.id}/move`, { method: "POST", body: { version: p.version, stageId: to.id } });
+      toast(`${p.key} ${word} ${to.name}`);
     } catch (e) {
       toast(problem(e));
     }
     refresh();
   };
+  // Closed ends a project; Reopen puts it back a stage, from where it moves anywhere like any project
   if (closed) return (
     <div className="next-step" data-tour="next-step" role="status">
       <span className="eyebrow">Closed</span>
       <p>This project is closed. {canWrite ? `Reopen it to pick the work back up in ${back?.name ?? "an earlier stage"}.` : "Nothing more is planned."}</p>
-      {canWrite && back && <button className="btn btn-primary btn-sm" onClick={() => void reopen()}>Reopen</button>}
+      {canWrite && back && <button className="btn btn-primary btn-sm" onClick={() => void moveTo(back, "reopened in")}>Reopen</button>}
     </div>
   );
   // Once an option is approved, the others stop asking for a decision
-  const decided = items.some((i) => i.kind === "option" && i.status === "approved");
-  const proposed = decided ? [] : items.filter((i) => i.kind === "option" && i.status === "proposed");
+  const approved = items.find((i) => i.kind === "option" && i.status === "approved");
+  const options = items.filter((i) => i.kind === "option");
+  const proposed = approved ? [] : options.filter((i) => i.status === "proposed");
   const files = items.filter((i) => i.kind === "file_request" && i.status !== "done");
   const mine = items.filter((i) => i.assigneeId === me.user.id && i.status !== "done");
   const deciders = p.people.filter((x) => x.role === "decision_maker").map((x) => names.get(x.userId) ?? "the decision maker");
-  // The most pressing step first: a decision, then files, then the caller's own work, then the stage's goal
+  // Moving on past Decide needs an approved option (or a reason, given on the board)
+  const gated = Boolean(ahead) && decideAt >= 0 && at <= decideAt && org.stages.indexOf(ahead!) > decideAt && !approved;
+  const nextName = ahead?.name;
+  // The most pressing step first: a decision, then files, then the caller's own work, then the stage
   let text: ReactNode;
   let action: { to: string; label: string } | undefined;
+  let move: Stage | undefined;
   if (proposed.length && canApprove(actor, access, p.people, isOwnOrg(org.slug)).ok) {
     text = <>Choose an option: {proposed.length} {proposed.length === 1 ? "is" : "are"} ready for your approval.</>;
     action = { to: `${base}/needs#options`, label: "Compare options" };
@@ -167,8 +179,22 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
   } else if (mine.length) {
     text = <>You have {mine.length} open {mine.length === 1 ? "item" : "items"} here.</>;
     action = { to: `${base}/${layerSlug(KIND_LAYER[mine[0]!.kind])}#item-${mine[0]!.id}`, label: "Open" };
+  } else if (approved && decideAt >= 0 && at <= decideAt && ahead) {
+    // The decision is made, so Decide is done: the step is moving on
+    text = <><b>{approved.title}</b> is approved. {canWrite ? <>Next, move the project to <b>{nextName}</b>.</> : <>Next, neon1 moves the project to <b>{nextName}</b>.</>}</>;
+    if (canWrite) move = ahead;
+  } else if (me.operator && canWrite && !options.length && at >= 0 && decideAt >= 0 && at <= decideAt && at >= decideAt - 1) {
+    text = <>Add options for the client to compare and approve.</>;
+    action = { to: `${base}/needs#options`, label: "Add options" };
+  } else if (me.operator && canWrite && !approved && options.length && !proposed.length && at <= decideAt) {
+    text = <>Share an option with the client so they can approve it.</>;
+    action = { to: `${base}/needs#options`, label: "Open options" };
   } else if (stage?.exit) {
-    text = <>To finish <b>{stage.name}</b>: {stage.exit.charAt(0).toLowerCase() + stage.exit.slice(1)}.</>;
+    text = <>To finish <b>{stage.name}</b>: {stage.exit.charAt(0).toLowerCase() + stage.exit.slice(1).replace(/\.$/, "")}.{canWrite && ahead && !gated ? <> When it is, move it to <b>{nextName}</b>.</> : ""}</>;
+    if (canWrite && !gated) move = ahead;
+  } else if (ahead && canWrite && !gated) {
+    text = <>When <b>{stage?.name ?? "this stage"}</b> is done, move the project to <b>{nextName}</b>.</>;
+    move = ahead;
   } else {
     text = <>Nothing needs doing right now.</>;
   }
@@ -177,9 +203,12 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
       <span className="eyebrow">Next step</span>
       <p>{text}</p>
       {action && <Link className="btn btn-primary btn-sm" to={action.to}>{action.label} <ArrowRight size={14} aria-hidden="true" /></Link>}
+      {move && <button className={`btn ${action ? "btn-ghost" : "btn-primary"} btn-sm`} onClick={() => void moveTo(move, "moved to")}>Move to {move.name} <ArrowRight size={14} aria-hidden="true" /></button>}
     </div>
   );
 }
+
+
 
 
 /** Everyone else editing something in this project, once each */

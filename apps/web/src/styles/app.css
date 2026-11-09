@@ -81,23 +81,16 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--focus); out
    rail on screen at every size, and the page makes room for it */
 .shell { min-height: 100%; }
 .shell.mini .main { padding-left: calc(var(--rail) + env(safe-area-inset-left)); }
-/* Notched phones sideways: the page's right edge stays clear of the notch too */
-.main { padding-right: env(safe-area-inset-right); }
 :root { --rail: 60px; --box: 28px; }
 /* The menu: fixed on the left; collapsed it is the rail, open it is full width over the page */
 .side { position: fixed; inset: 0 auto 0 0; z-index: 40; width: calc(var(--rail) + env(safe-area-inset-left)); background: var(--frame); border-right: 1px solid var(--line);
   display: flex; flex-direction: column; gap: 2px; padding: 12px 10px 12px calc(10px + env(safe-area-inset-left)); overflow-x: hidden; overflow-y: auto; transition: width .2s, box-shadow .2s; }
 .side.open { width: calc(272px + env(safe-area-inset-left)); box-shadow: 0 0 40px rgba(0, 0, 0, .3); }
 .shell:not(.mini) .side:not(.open) { transform: translateX(-100%); }
-/* The mini rail's rows shrink with the screen's height, so every entry fits without scrolling */
-.shell.mini .side:not(.open) { --row: clamp(18px, calc((100dvh - var(--demo-h, 0px) - 28px) / 15), 40px); --box: min(28px, calc(var(--row) - 4px)); gap: 0; padding-top: 8px; padding-bottom: 8px; }
+/* The mini rail's rows shrink with the screen's height (see "Menu rows" at the end) */
 .shell.mini .side:not(.open) :is(.brand, .org-mini, .nav a, .site-link, .who-link) { min-height: var(--row); padding-top: 2px; padding-bottom: 2px; }
 .shell.mini .side:not(.open) .nav { gap: 0; margin-top: 2px; }
-.shell.mini .side:not(.open) .nav .sep { margin: 3px 4px; }
-.shell.mini .side:not(.open) .ico svg { width: min(16px, calc(var(--box) - 8px)); height: min(16px, calc(var(--box) - 8px)); }
-.shell.mini .side:not(.open) .badge { font-size: min(12px, calc(var(--box) * .45)); }
-/* Short screens (a phone sideways): the neon1.tech link waits in the full menu, so the rest fits */
-@media (max-height: 500px) { .shell.mini .side:not(.open) .site-link { display: none; } .shell.mini .side:not(.open) .who-link { margin-top: auto; } }
+.shell.mini .side:not(.open) .nav .sep { margin: 3px 0; }
 .scrim { position: fixed; inset: 0; z-index: 39; background: rgba(13, 2, 8, .45); }
 /* Every entry is one row: a 28px box, then its label; collapsed, labels stay readable to screen readers only */
 .side .brand, .side .org-mini, .nav a, .site-link, .who-link { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 6px 6px; border-radius: var(--r-sm);
@@ -906,3 +899,44 @@ body:has(.demo-bar) .top { top: var(--demo-h); }
 .req { color: var(--red); margin-left: 2px; font-size: .8em; }
 /* Overview: the reminder to finish a project's basics, with its action at the end */
 .notice.finish { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+
+/* --- Menu rows, one grid open or closed (2026-11-09) ---
+   Every row of the menu has the same height and place whether it's the mini rail or the full menu, so
+   opening it from the rail only slides each label out to the right of its icon. The rows share the
+   screen's height (15 rows after the paddings, section rules, and profile line), between 40px and
+   18px, so the whole menu fits without scrolling on every screen, a phone sideways included.
+   Section rules and their labels take the same 14px either way: a thin line closed, the word open */
+.side { --row: clamp(18px, calc((100dvh - var(--demo-h, 0px) - 70px) / 15), 40px); --sep: 14px; gap: 0; padding-top: 8px; padding-bottom: 8px; }
+/* Short screens: the chooser keeps only the organization's name, so it fits the row */
+@media (max-height: 500px) { .side .org-full .org small { display: none; } }
+.side :is(.brand, .org-mini, .nav a, .site-link, .who-link),
+.shell.mini .side:not(.open) :is(.brand, .org-mini, .nav a, .site-link, .who-link),
+.side.open :is(.brand, .nav a, .site-link) { min-height: var(--row); height: var(--row); padding-top: 0; padding-bottom: 0; }
+.side .brand { margin-bottom: 0; }
+.side .nav, .shell.mini .side:not(.open) .nav { gap: 0; margin-top: 0; }
+.side .nav .sep, .side:not(.open) .nav .sep, .shell.mini .side:not(.open) .nav .sep { padding: 0; margin: 0; border: 0; }
+.side .nav .sep .nav { margin-top: 0; }
+.side:not(.open) .nav .sep::before { content: ""; display: block; height: var(--sep); background: linear-gradient(var(--line), var(--line)) center / 100% 1px no-repeat; }
+.side.open .nav .sep > .lbl { display: block; height: var(--sep); line-height: var(--sep); padding: 0 6px; font: 10px var(--mono); letter-spacing: .08em; }
+/* The full organization chooser takes exactly the row its initials box takes on the rail */
+.side .org-full .org { margin: 0; height: var(--row); padding: 0 10px; align-content: center; gap: 0; line-height: 1.15; }
+.side .org-full .org small { font-size: 11px; }
+.side .who-link { margin-top: 0; padding-top: 0; }
+/* Icons and layer letters shrink with short rows so they never touch */
+.side { --box: min(28px, calc(var(--row) - 4px)); }
+.side .ico svg { width: min(16px, calc(var(--box) - 8px)); height: min(16px, calc(var(--box) - 8px)); }
+.side .badge { font-size: min(12px, calc(var(--box) * .45)); }
+
+
+/* --- Phones sideways: the camera cutout (2026-11-09) ---
+   The screen runs edge to edge (viewport-fit=cover), and whatever sits beside the cutout fills the
+   space under it in its own color: the menu rail in Mini (its width already includes the inset), or
+   the top bar, page, and tab bar themselves in Default, which pad their contents past it. The same on
+   the right edge, where the other side's inset is */
+:root { --gut: 28px; --inl: 0px; }
+@media (max-width: 900px) { :root { --gut: 16px; } }
+.shell:not(.mini) { --inl: env(safe-area-inset-left); }
+.top { padding-left: calc(var(--gut) + var(--inl)); padding-right: calc(var(--gut) + env(safe-area-inset-right)); }
+.content { padding-left: calc(var(--gut) + var(--inl)); padding-right: calc(var(--gut) + env(safe-area-inset-right)); }
+.tabbar { padding-left: calc(4px + var(--inl)); padding-right: calc(4px + env(safe-area-inset-right)); }
+.demo-bar { padding-left: calc(16px + env(safe-area-inset-left)); padding-right: calc(16px + env(safe-area-inset-right)); }

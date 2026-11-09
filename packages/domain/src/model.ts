@@ -209,6 +209,14 @@ export const ItemKind = z.enum([
 export type ItemKind = z.infer<typeof ItemKind>;
 
 
+/** Is this the closing stage? The stage with the ID "closed" under any name or place in Settings,
+ * or else the last one. A closed project is finished: it reopens by moving back a stage */
+export function isClosed(stages: readonly { id: string }[], stageId: string) {
+  const end = stages.find((s) => s.id === "closed") ?? stages.at(-1);
+  return stages.length > 1 && end?.id === stageId;
+}
+
+
 /** Which layer tab each kind of item lives under */
 export const KIND_LAYER: Record<ItemKind, Layer> = {
   request: "needs",

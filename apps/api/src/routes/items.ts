@@ -74,7 +74,10 @@ export function itemRoutes(app: App, k: Kit) {
     if (assigneeId !== undefined) next.assigneeId = assigneeId ?? undefined;
     if (dueDate !== undefined) next.dueDate = dueDate ?? undefined;
     if (fields) next.fields = validateFields(item.kind, { ...item.fields, ...fields });
-    await repo.table.write([repo.itemOp(next, { version }), repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: `${item.kind}.updated`, target: item.id, summary: `${p.key}: updated ${label(item.kind)} "${next.title}"` })]);
+    // Work begun (an item in progress or done) also takes the project out of "not started"
+    const begun = p.health === "not_started" && input.status !== undefined && (input.status === "doing" || input.status === "done");
+    const started: Project | undefined = begun ? { ...p, health: "on_track", version: p.version + 1, updatedAt: now(), updatedBy: actorId(c) } : undefined;
+    await repo.table.write([repo.itemOp(next, { version }), ...(started ? [repo.projectOp(started, { version: p.version })] : []), repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: `${item.kind}.updated`, target: item.id, summary: `${p.key}: updated ${label(item.kind)} "${next.title}"` })]);
     await repo.clearEditing(p.tenantId, p.id, item.id, actorId(c));
     return c.json(next);
   });
