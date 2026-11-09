@@ -724,7 +724,7 @@ function DecisionCard({ d, names, superseded }: { d: Item; names?: Map<string, s
   const f = d.fields as { approvedBy?: string; approvedAt?: string; optionVersion?: number; approverName?: string; terms?: { title: string; body?: string; cost?: string; timeline?: string } };
   const by = f.approverName || names?.get(String(f.approvedBy)) || "a member";
   return (
-    <div className={`decision${superseded ? " superseded" : ""}`}>
+    <div className={`decision${superseded ? " superseded" : ""}`} id={`item-${d.id}`}>
       <b>{d.title}</b>
       {superseded && <span className="tag" style={{ marginLeft: 8 }}>replaced by a later decision</span>}
       <div className="small muted">by {by} · {ago(String(f.approvedAt))} · option version {String(f.optionVersion)}</div>
@@ -789,7 +789,7 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
           // Fields are validated on read, so a malformed option can't break the board
           const f = OptionFields.parse(o.fields);
           return (
-            <article key={o.id} className={`card option${f.recommended ? " rec" : ""}`}>
+            <article key={o.id} id={`item-${o.id}`} className={`card option${f.recommended ? " rec" : ""}`}>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {f.recommended && <span className="tag rec">recommended</span>}
                 <span className={`tag${o.status === "approved" ? " client" : ""}`}>{o.status}</span>

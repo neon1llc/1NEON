@@ -1,22 +1,30 @@
 // apps/web/src/components/Bell.tsx - Notifications: a bell in the top bar that breathes while
-// something new is waiting, and a list of what others did lately, important ones marked. Opening
-// the list marks everything seen. Choices for email and text live in the profile.
+// something new is waiting, and a list of what others did lately, important ones marked, each one
+// a link to what it's about. Opening the list marks everything seen. Choices for email and text live in the profile.
 
 
 import { BellIcon } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import type { AuditEvent, Level } from "@1neon/domain";
+import type { AuditEvent, Layer, Level } from "@1neon/domain";
 import { api } from "../lib/api.ts";
 import { read } from "../lib/reads.ts";
 import { gate, Stale } from "./Reads.tsx";
 import { useMembers } from "../lib/hooks.ts";
-import { ago } from "./ui.tsx";
+import { ago, layerSlug } from "./ui.tsx";
 
 
-/** One notification as the API returns it */
-type Note = AuditEvent & { group: string; level: Level; unread: boolean };
+/** One notification as the API returns it, with where it leads when the thing still exists */
+type Note = AuditEvent & { group: string; level: Level; unread: boolean; link?: { page?: string; project?: string; layer?: Layer; item?: string } };
+
+/** The address a notification opens: a page, a project, or one item on its layer's tab */
+function hrefOf(slug: string, link: Note["link"]) {
+  if (!link) return undefined;
+  if (link.page) return `/o/${slug}/${link.page}`;
+  if (!link.project) return undefined;
+  return `/o/${slug}/projects/${link.project}${link.layer ? `/${layerSlug(link.layer)}` : ""}${link.item ? `#item-${link.item}` : ""}`;
+}
 interface Notes { seenAt: string; unread: number; events: Note[] }
 
 
@@ -68,15 +76,24 @@ export function Bell({ tid, slug }: { tid: string; slug: string }) {
           <Stale reads={[q]} />
           {wait ?? (!q.data?.events.length && <p className="muted small bell-empty">Nothing yet. Changes others make here will show up in this list.</p>)}
           <ul>
-            {!wait && q.data?.events.map((e) => (
-              <li key={e.id} className={`lvl-${e.level}${fresh.has(e.id) ? " new" : ""}`}>
-                <span className="dot" aria-hidden="true" />
-                <span className="what">
-                  <span>{e.summary}</span>
-                  <span className="muted small">{names.get(e.actorId) ?? "Someone"} · {ago(e.at)}{e.level === "critical" ? " · important" : ""}</span>
-                </span>
-              </li>
-            ))}
+            {!wait && q.data?.events.map((e) => {
+              const href = hrefOf(slug, e.link);
+              const body = (
+                <>
+                  <span className="dot" aria-hidden="true" />
+                  <span className="what">
+                    <span>{e.summary}</span>
+                    <span className="muted small">{names.get(e.actorId) ?? "Someone"} · {ago(e.at)}{e.level === "critical" ? " · important" : ""}</span>
+                  </span>
+                </>
+              );
+              // Each one opens what it's about; something since removed stays as plain text
+              return (
+                <li key={e.id} className={`lvl-${e.level}${fresh.has(e.id) ? " new" : ""}`}>
+                  {href ? <Link to={href} className="note" onClick={() => setOpen(false)}>{body}</Link> : <span className="note">{body}</span>}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

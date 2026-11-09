@@ -509,6 +509,19 @@ describe("notifications", () => {
     await call("dana@acmedental.example", "POST", `/t/${s.acme.id}/notifications/seen`);
     expect((await call("dana@acmedental.example", "GET", `/t/${s.acme.id}/notifications`)).json.unread).toBe(0);
   });
+
+  it("says where each notification leads: the item on its layer, the project, or the page", async () => {
+    const list = await call("raj@acmedental.example", "GET", `/t/${s.acme.id}/projects`);
+    const p = list.json.find((x: { key: string }) => x.key === "FLOW-1");
+    const item = (await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/projects/${p.id}/items`, { kind: "task", title: "Set up the form" })).json;
+    await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/projects/${p.id}/items/${item.id}/comments`, { body: "Starting Monday" });
+    await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/projects/${p.id}/move`, { version: p.version, stageId: "build", reason: "Ready" });
+    const events = (await call("dana@acmedental.example", "GET", `/t/${s.acme.id}/notifications`)).json.events as { action: string; link?: object }[];
+    const of = (a: string) => events.find((e) => e.action === a)?.link;
+    expect(of("task.created")).toEqual({ project: "FLOW-1", layer: "execution", item: item.id });
+    expect(of("comment.created")).toEqual({ project: "FLOW-1", layer: "execution", item: item.id });
+    expect(of("project.moved")).toEqual({ project: "FLOW-1" });
+  });
 });
 
 

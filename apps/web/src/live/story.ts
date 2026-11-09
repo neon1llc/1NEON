@@ -233,8 +233,9 @@ export const STORY: Section[] = [
       await s.think("Oh, a notification!");
       await s.click(".bell-btn", 1400);
       await s.think("Pradeep wants a week of order emails. I have those.");
-      await s.wait(600);
-      await s.click(".bell-btn", 400);
+      // Each notification opens what it's about: this one lands on the file request in Needs
+      await s.click({ sel: ".bell-list a.note", text: "order emails" }, 1000);
+      await s.think("It took me straight to his request.");
       await s.say("She drags the export in from her desktop");
       await s.think("I exported them this morning. Let me drag the zip in.");
       await dropFile(s, { sel: ".file-ask .chip, .file-ask button", text: "Upload" }, "orders-week.zip", "41 orders, names removed", { layer: "needs", itemId: (items) => items.find((i) => i.kind === "file_request")?.id });
