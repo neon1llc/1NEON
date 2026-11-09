@@ -55,9 +55,9 @@ export function Documents() {
       </DropZone>
       {/* Filter by layer, with counts */}
       <div className="chips" role="group" aria-label="Show files from">
-        <button className={`chip${show === "all" ? " on" : ""}`} onClick={() => setShow("all")}>All {count(docs.length)}</button>
+        <button className={`chip${show === "all" ? " on" : ""}`} aria-pressed={show === "all"} onClick={() => setShow("all")}>All {count(docs.length)}</button>
         {LAYERS.map((l) => (
-          <button key={l} className={`chip${show === l ? " on" : ""}`} onClick={() => setShow(l)}>
+          <button key={l} className={`chip${show === l ? " on" : ""}`} aria-pressed={show === l} onClick={() => setShow(l)}>
             <LayerBadge layer={l} /> {layerName(l)} {count(docs.filter((d) => d.layer === l).length)}
           </button>
         ))}

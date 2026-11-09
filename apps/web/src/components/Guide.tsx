@@ -4,7 +4,7 @@
 
 
 import type { ItemKind } from "@1neon/domain";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 
 /** What to write for one kind: a one-line hint, example title and details, and starters */
@@ -82,12 +82,22 @@ export function Starters({ kind, taken, onPick }: { kind: ItemKind; taken: strin
 }
 
 
-/** One row of single-choice chips; tapping the chosen chip again clears it */
+/**
+ * One row of single-choice chips, built on native radio buttons so Tab enters the group once and the
+ * arrow keys move the choice. Tapping the chosen chip again clears it, and so does Space on it (a
+ * checked radio ignores Space on its own); arrows and taps on another chip land on a new value
+ */
 export function Pick<T extends string>({ label, options, value, onChange }: { label: string; options: readonly (readonly [T, string])[]; value: T | ""; onChange: (v: T | "") => void }) {
+  // One name per group, so each Pick on a page moves on its own
+  const name = useId();
   return (
     <span role="radiogroup" aria-label={label} className="pick">
       {options.map(([v, words]) => (
-        <button type="button" key={v} role="radio" aria-checked={value === v} className={`chip${value === v ? " on" : ""}`} onClick={() => onChange(value === v ? "" : v)}>{words}</button>
+        <label key={v} className={`chip${value === v ? " on" : ""}`}>
+          <input type="radio" className="sr" name={name} value={v} checked={value === v} onChange={() => onChange(v)} onClick={() => value === v && onChange("")}
+            onKeyDown={(e) => { if (e.key === " " && value === v) { e.preventDefault(); onChange(""); } }} />
+          {words}
+        </label>
       ))}
     </span>
   );

@@ -30,9 +30,10 @@ export function AllWorkflow() {
       <h1 className="page-title">All clients</h1>
       <p className="lead">Every active project across organizations. Open a project to make changes inside its organization.</p>
       {/* View switch between lanes and one board */}
-      <div className="tabs" role="tablist">
-        <a href="#lanes" role="tab" aria-selected={view === "lanes"} className={view === "lanes" ? "active" : ""} onClick={(e) => { e.preventDefault(); setView("lanes"); }}>By organization</a>
-        <a href="#board" role="tab" aria-selected={view === "board"} className={view === "board" ? "active" : ""} onClick={(e) => { e.preventDefault(); setView("board"); }}>One board</a>
+      {/* Plain toggle buttons styled as tabs: Tab reaches each, Enter or Space picks it */}
+      <div className="tabs" role="group" aria-label="View">
+        <button type="button" aria-pressed={view === "lanes"} className={view === "lanes" ? "active" : ""} onClick={() => setView("lanes")}>By organization</button>
+        <button type="button" aria-pressed={view === "board"} className={view === "board" ? "active" : ""} onClick={() => setView("board")}>One board</button>
       </div>
       <Stale reads={[all]} />
       {wait}

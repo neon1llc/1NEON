@@ -69,9 +69,10 @@ export function Projects() {
       {/* Title, the list or timeline switch, and New project for editors */}
       <div className="page-head">
         <h1 className="page-title">Projects</h1>
-        <div className="switch" role="tablist" aria-label="View">
-          <button role="tab" aria-selected={view === "list"} onClick={() => pick("list")}>List</button>
-          <button role="tab" aria-selected={view === "timeline"} onClick={() => pick("timeline")}>Timeline</button>
+        {/* Two plain toggle buttons: Tab reaches each, Enter or Space picks it, and the pressed one is announced */}
+        <div className="switch" role="group" aria-label="View">
+          <button type="button" aria-pressed={view === "list"} onClick={() => pick("list")}>List</button>
+          <button type="button" aria-pressed={view === "timeline"} onClick={() => pick("timeline")}>Timeline</button>
         </div>
         {canWrite && <Link className="btn btn-primary" data-tour="new-project" to={`/o/${summary.slug}/projects/new`}>New project</Link>}
       </div>
@@ -79,8 +80,8 @@ export function Projects() {
       <div className="filters">
         <input type="search" aria-label="Search projects" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="chips" role="group" aria-label="Layer">
-          <button className={`chip${layer === "all" ? " on" : ""}`} onClick={() => setLayer("all")}>All</button>
-          {LAYERS.map((l) => <button key={l} className={`chip${layer === l ? " on" : ""}`} onClick={() => setLayer(l)} title={layerName(l)}><LayerBadge layer={l} /> <span className="hide-sm">{layerName(l)}</span></button>)}
+          <button className={`chip${layer === "all" ? " on" : ""}`} aria-pressed={layer === "all"} onClick={() => setLayer("all")}>All</button>
+          {LAYERS.map((l) => <button key={l} className={`chip${layer === l ? " on" : ""}`} aria-pressed={layer === l} aria-label={layerName(l)} onClick={() => setLayer(l)} title={layerName(l)}><LayerBadge layer={l} /> <span className="hide-sm">{layerName(l)}</span></button>)}
         </div>
         {view === "list" && (
           <select aria-label="Sort by" value={sort} onChange={(e) => order(e.target.value as Sort)}>

@@ -3,8 +3,8 @@
 
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { Link, NavLink, Navigate, Outlet, useLocation, useParams } from "react-router";
 import { api, DEMO as IN_DEMO, LIVE as IN_LIVE, devUser, HttpError, pickPerson, resetDemo } from "../lib/api.ts";
 import { failureOf, read } from "../lib/reads.ts";
 import { passkeyAssertion } from "../lib/passkey.ts";
@@ -454,6 +454,23 @@ function DemoBar() {
   );
 }
 
+// Phones: the menu is a drawer at this width whatever the person chose (matches the stylesheet's 640px)
+const NARROW = "(max-width: 640px)";
+/** Whether a media query matches now, re-rendering when that changes */
+function useMedia(query: string) {
+  return useSyncExternalStore(
+    (changed) => {
+      const m = matchMedia(query);
+      m.addEventListener("change", changed);
+      return () => m.removeEventListener("change", changed);
+    },
+    () => matchMedia(query).matches,
+  );
+}
+// What can take focus inside the menu, for moving focus into it when it opens
+const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled])";
+
+
 // The frame itself, inside the help context so the ? button and search can use it
 function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?: boolean; reads?: Read[]; children: ReactNode }) {
   const me = useSession();
@@ -472,17 +489,42 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
   // The full menu closes after navigating, and on Escape
   useEffect(() => setOpen(false), [loc.pathname]);
   useEffect(() => {
+    if (!open) return;
     const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     addEventListener("keydown", esc);
     return () => removeEventListener("keydown", esc);
-  }, []);
+  }, [open]);
+  // Offscreen means out of the focus order: the menu is inert while it's tucked away (behind the menu
+  // button, or a phone's drawer), and while it's open as an overlay the page behind it is inert instead
+  const narrow = useMedia(NARROW);
+  const tucked = !open && (!rail || narrow);
+  const side = useRef<HTMLElement>(null);
+  const trigger = useRef<HTMLElement | null>(null);
+  // Opening moves focus into the menu (to the page in view, or its first control) unless it's already
+  // there; closing puts focus back on whatever opened it, if focus would otherwise be lost
+  useEffect(() => {
+    const el = side.current;
+    if (!el) return;
+    if (open) {
+      trigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      if (!el.contains(document.activeElement)) (el.querySelector<HTMLElement>("a[aria-current='page']") ?? el.querySelector<HTMLElement>(FOCUSABLE))?.focus();
+      return;
+    }
+    const back = trigger.current;
+    trigger.current = null;
+    const lost = !document.activeElement || document.activeElement === document.body || el.contains(document.activeElement);
+    if (back?.isConnected && !back.closest("[inert]") && lost) back.focus();
+  }, [open]);
   const base = org ? `/o/${org.slug}` : "";
   return (
     <div className={`shell${rail ? " has-rail" : ""}`}>
+      {/* First stop for the keyboard: straight to the page, past the menu and top bar. Focus moves in
+          code, so the address never gains a #main that pages would read as a link to an item */}
+      <a className="skip" href="#main" onClick={(e) => { e.preventDefault(); document.getElementById("main")?.focus(); }}>Skip to content</a>
       {IN_DEMO && !IN_LIVE && <DemoBar />}
       {/* Scrim behind the full menu; a tap outside closes it */}
       {open && <div className="scrim" onClick={() => setOpen(false)} aria-hidden="true" />}
-      <aside className={`side${open ? " open" : ""}`} aria-label="Menu">
+      <aside ref={side} className={`side${open ? " open" : ""}`} aria-label="Menu" inert={tucked}>
         <button className="brand" type="button" onClick={() => setOpen(!open)} aria-expanded={open} title={open ? "Close the menu" : "Open the menu"}>
           <span className="ico mark" aria-hidden="true">
             <Rings />
@@ -529,7 +571,7 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
           <span className="lbl">{me.user.name || me.user.email}</span>
         </NavLink>
       </aside>
-      <div className="main">
+      <div className="main" inert={open}>
         {/* All clients is read only; say so on every screen of it */}
         {all && (
           <div className="readonly-bar" role="status">
@@ -550,14 +592,14 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
           <button className="icon-btn help-btn" onClick={help.open} data-tour="help" aria-label="Help for this page" title="Help for this page">?</button>
         </header>
         <Crumbs.Provider value={setTop}>
-          <main className="content" id="main">
+          <main className="content" id="main" tabIndex={-1}>
             <Stale reads={[meRead, ...reads]} />
             <div className="page-in" key={section}>{children}</div>
           </main>
         </Crumbs.Provider>
       </div>
       {/* Phones: the main places as a tab bar at the bottom, within thumb reach */}
-      <nav className="tabbar" aria-label="Main">
+      <nav className="tabbar" aria-label="Main" inert={open}>
         {org ? (
           <>
             <NavLink to={`${base}/workspace`} data-tour="nav-home"><HomeIcon size={20} aria-hidden="true" /><span>Home</span></NavLink>
@@ -577,46 +619,70 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
 }
 
 
-/** The organization switcher at the top of the sidebar */
+/** The organization switcher at the top of the sidebar: a button that shows a short list of links.
+ * Tab and Enter work as everywhere; arrow keys move through the list, Escape closes it and returns
+ * focus to the button, and focus leaving the chooser closes it */
 function OrgChooser({ current, all }: { current?: OrgSummary; all?: boolean }) {
   const me = useSession();
-  const nav = useNavigate();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  const toggle = useRef<HTMLButtonElement>(null);
   // Close the menu on any click outside it
   useEffect(() => {
     const close = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
     addEventListener("mousedown", close);
     return () => removeEventListener("mousedown", close);
   }, []);
+  // Opening puts focus on the search box, or the current organization, or the first entry
+  useEffect(() => {
+    if (!open) return;
+    const list = ref.current?.querySelector(".menu");
+    (list?.querySelector<HTMLElement>("input") ?? list?.querySelector<HTMLElement>("[aria-current='true']") ?? list?.querySelector<HTMLElement>("a"))?.focus();
+  }, [open]);
+  // Arrow keys step through the entries; Escape closes without leaving the frame's menu
+  const keys = (e: ReactKeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      e.nativeEvent.stopImmediatePropagation();
+      setOpen(false);
+      toggle.current?.focus();
+      return;
+    }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const items = [...(ref.current?.querySelectorAll<HTMLElement>(".menu a") ?? [])];
+    if (!items.length) return;
+    e.preventDefault();
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    items[(at + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
+  };
   // People in one organization see its name, not a chooser
   const many = me.operator || me.orgs.length > 1;
   const label = all ? "All clients" : current?.name ?? "Choose";
   const sub = all ? "read only" : current?.clientId ?? "";
   const list = me.orgs.filter((o) => (o.name + o.clientId).toLowerCase().includes(q.toLowerCase()));
   return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <button className={`org${all ? " all" : ""}`} onClick={() => many && setOpen(!open)} aria-haspopup={many ? "listbox" : undefined} aria-expanded={open} disabled={!many && !current}>
+    <div ref={ref} style={{ position: "relative" }} onKeyDown={keys} onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && e.relatedTarget && setOpen(false)}>
+      <button ref={toggle} className={`org${all ? " all" : ""}`} onClick={() => many && setOpen(!open)} aria-expanded={many ? open : undefined} aria-controls={many ? "org-list" : undefined} disabled={!many && !current}>
         <b>{label}{many && <span aria-hidden="true">▾</span>}</b>
         <small>{sub}</small>
       </button>
       {open && (
-        <div className="menu" role="listbox" style={{ top: "calc(100% + 6px)", left: 0, right: 0 }}>
-          {me.orgs.length > 6 && <input aria-label="Search organizations" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 6 }} autoFocus />}
+        <div className="menu" id="org-list" style={{ top: "calc(100% + 6px)", left: 0, right: 0 }}>
+          {me.orgs.length > 6 && <input aria-label="Search organizations" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 6 }} />}
           {/* The operator can always jump to All clients */}
           {me.operator && (
             <>
-              <button role="option" aria-selected={all} onClick={() => { setOpen(false); nav("/all/workflow"); }}>
+              <Link to="/all/workflow" aria-current={all ? "true" : undefined} onClick={() => setOpen(false)}>
                 All clients <small>read only</small>
-              </button>
+              </Link>
               <hr />
             </>
           )}
           {list.map((o) => (
-            <button key={o.id} role="option" aria-selected={o.id === current?.id} onClick={() => { setOpen(false); nav(`/o/${o.slug}/workspace`); }}>
+            <Link key={o.id} to={`/o/${o.slug}/workspace`} aria-current={o.id === current?.id ? "true" : undefined} onClick={() => setOpen(false)}>
               {o.name} <small>{o.clientId}</small>
-            </button>
+            </Link>
           ))}
         </div>
       )}
