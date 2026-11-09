@@ -9,20 +9,14 @@ import {
   Project as ProjectSchema,
   Tenant as TenantSchema,
   type User,
-  UpdateMeInput,
-  type Member,
-  type Tenant,
-  CreateTenantInput,
-  DEFAULT_STAGES,
-  can,
-  formatClientId,
-  newId,
-  slugify,
   Stage,
   canApprove,
+  type Tenant,
   groupOf,
   InviteInput,
   UpdateMemberInput,
+  newId,
+  type Member,
   CreateProjectInput,
   MoveProjectInput,
   UpdateProjectInput,
@@ -42,18 +36,17 @@ import {
 import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { ConflictError, StoreBusyError, type Row } from "./store/types.ts";
-import { REASONS, fail, who, type Env, body, defined, now, check, actorId, need, MAX_TRANSACTION, byRank, label, validateFields } from "./lib/http.ts";
-import { assurance } from "./lib/assurance.ts";
+import { REASONS, fail, who, type Env, actorId, body, need, now, defined, MAX_TRANSACTION, byRank, check, label, validateFields } from "./lib/http.ts";
 import { kit, type Deps } from "./lib/kit.ts";
 import { installOutbox } from "./lib/transactions.ts";
-import { e164, codeText, hashCode, smsAfterSave, smsFactorOn, smsState, confirmText, smsReady } from "./sms.ts";
+import { authRoutes } from "./routes/auth.ts";
+import { factorRoutes } from "./routes/factors.ts";
+import { meRoutes } from "./routes/me.ts";
+import { orgRoutes } from "./routes/orgs.ts";
+import { e164 } from "./sms.ts";
 import { z } from "zod";
-import type { Verified } from "./auth.ts";
-import { factorInventory } from "./factors.ts";
-import { factorRemovedEmail, passkeyEmail } from "./emails.ts";
-import { PENDING_TOTP_MS, PENDING_TOTP_TRIES, keys } from "./store/repo.ts";
-import { checkTotp, newTotp } from "./totp.ts";
 import { outboxOp } from "./outbox.ts";
+import { keys } from "./store/repo.ts";
 import { settleFile, unwatchOp, watchOp } from "./files.ts";
 import { MemoryStorage } from "./local.ts";
 
@@ -87,7 +80,6 @@ export function createApp(d: Deps) {
   // Shared services and tenant guards handed to every route module
   const k = kit(d, drainNow);
   const { project, deciderChange, activeMembers, audit, allDocs } = k;
-  const { tokenOf, mayChangeFactors, refreshEnrolled, factorChanged, notice, textCode, countPhoneTry, useTotpCode } = assurance(k);
 
   // Known errors keep their status. A version conflict returns the newer record only when the public
   // conflict policy allows that kind of record, and only its schema's fields; anything else (sign-in
@@ -135,62 +127,7 @@ export function createApp(d: Deps) {
   app.get("/health", (c) => c.json({ ok: true, env: cfg.env, version: (typeof process === "undefined" ? undefined : process.env.APP_VERSION) ?? "dev" }));
 
   // --- Sign-in (Cognito) -------------------------------------------------
-  /** After any sign-in: invite check, link the Cognito identity, refresh strong sign-in */
-  async function admit(r: Verified | undefined): Promise<"ok" | "failed" | "not_invited"> {
-    if (!r || !r.emailVerified) return "failed";
-    // Invite only: a verified email must already belong to an invited person
-    const uid = await repo.userIdForEmail(r.email);
-    if (!uid) return "not_invited";
-    // Remember which Cognito identity (email code, passkey, or Google) maps to this person
-    await repo.linkSubject(r.sub, uid);
-    // Admin actions trust this session only if it signed in with a passkey, and only for a while
-    if (r.jti) await repo.saveSession(r.jti, uid, r.method === "passkey");
-    const user = await repo.getUser(uid);
-    // Refresh the profile's display hint of enrolled factors. An unknown lookup keeps what we knew,
-    // and the app's own authenticator always counts, so an email sign-in can't erase enrollment
-    if (user) await refreshEnrolled(user, await factorInventory(repo, d.directory, user, r.accessToken)).catch(() => undefined);
-    return "ok";
-  }
-
-  // Managed Login: Google goes straight to Google; anything else is the auth.neon1.tech fallback
-  app.get("/auth/login", async (c) => {
-    // Local dev has no Cognito; the demo account buttons stand in for sign-in
-    if (!d.auth) return c.redirect("/1NEON/");
-    const provider = c.req.query("provider") === "google" ? "Google" : undefined;
-    return d.auth.login(c, c.req.query("email"), provider);
-  });
-
-  app.get("/auth/callback", async (c) => {
-    if (!d.auth) return c.redirect("/1NEON/");
-    const result = await admit(await d.auth.callback(c));
-    return c.redirect(result === "ok" ? "/1NEON/" : `/1NEON/?signin=${result}`);
-  });
-
-  // On-page sign-in: each call returns the next step; "done" means the cookies are set
-  const SignInBody = z.discriminatedUnion("op", [
-    z.object({ op: z.literal("start"), email: z.string().trim().toLowerCase().email().max(254), remember: z.boolean().default(true), prefer: z.enum(["passkey"]).optional() }),
-    z.object({ op: z.literal("choose"), method: z.enum(["code", "passkey"]) }),
-    z.object({ op: z.literal("answer"), kind: z.enum(["code", "totp", "passkey"]), value: z.string().min(1).max(20000) }),
-  ]);
-  app.post("/auth/step", async (c) => {
-    if (!d.auth) fail(404, "not_found", "Sign-in runs through the demo accounts locally.");
-    const b = await body(c, SignInBody);
-    const r = b.op === "start" ? await d.auth.start(c, b.email, b.remember, b.prefer) : b.op === "choose" ? await d.auth.choose(c, b.method) : await d.auth.answer(c, b.kind, b.value);
-    if (r.next.step !== "done") return c.json({ ...r.next, wrong: "wrong" in r ? r.wrong : undefined });
-    const result = await admit("verified" in r ? r.verified : undefined);
-    // Not invited: drop the cookies Cognito's tokens just set
-    if (result !== "ok") await d.auth.logout(c);
-    return c.json(result === "ok" ? { step: "done" } : { step: result });
-  });
-
-  // Revoke the refresh token, clear cookies, and send the browser to Cognito's logout
-  app.post("/auth/logout", async (c) => {
-    // Forget this session's admin assurance first; its last access token may still be valid for minutes
-    const ident = d.auth ? await d.auth.identify(c).catch(() => undefined) : undefined;
-    if (ident?.jti) await repo.deleteSession(ident.jti).catch(() => undefined);
-    const url = d.auth ? await d.auth.logout(c) : "/1NEON/";
-    return c.json({ redirect: url });
-  });
+  authRoutes(app, k);
 
   // --- Identity: every route below needs a signed-in, invited person ------
 
@@ -227,286 +164,11 @@ export function createApp(d: Deps) {
   }
 
   // --- The signed-in person: profile, number check, and second steps -------
-  // Me: the person, their organizations (all of them for the operator), and the join bookkeeping
-  app.get("/me", async (c) => {
-    const { user, actor } = who(c);
-    const memberships = await repo.membershipsOf(user.id);
-    // First visit after an invite: mark joined. Every visit: last seen
-    const t = now();
-    for (const m of memberships) {
-      if (m.status === "deactivated") continue;
-      const joined = m.status === "invited";
-      const stale = !m.lastSeenAt || Date.parse(t) - Date.parse(m.lastSeenAt) > 5 * 60 * 1000;
-      if (joined || stale) {
-        const next: Member = { ...m, status: "joined", joinedAt: m.joinedAt ?? t, lastSeenAt: t, version: m.version + 1, updatedAt: t, updatedBy: user.id };
-        await repo.saveMember(next, { version: m.version }).catch(() => undefined);
-        if (joined) await repo.table.write([repo.auditOp({ tenantId: m.tenantId, actorId: user.id, action: "member.joined", target: user.id, summary: `${user.name || user.email} joined` })]);
-        // A first visit after two hours away counts as signing in, for anyone who wants to know
-        else if (!m.lastSeenAt || Date.parse(t) - Date.parse(m.lastSeenAt) > 2 * 60 * 60 * 1000) await repo.table.write([repo.auditOp({ tenantId: m.tenantId, actorId: user.id, action: "member.signedin", target: user.id, summary: `${user.name || user.email} signed in` })]);
-      }
-    }
-    const active = memberships.filter((m) => m.status !== "deactivated");
-    // The operator sees every active organization; everyone else sees their own
-    const tenants = actor.operator ? await repo.listTenants() : (await Promise.all(active.map((m) => repo.getTenant(m.tenantId)))).filter(Boolean) as Tenant[];
-    const accessBy = new Map(active.map((m) => [m.tenantId, m.access] as const));
-    const totp = Boolean((await repo.getTotp(user.id))?.confirmed);
-    return c.json({
-      user,
-      operator: actor.operator,
-      // Whether this session is confirmed with a passkey, authenticator, or texted code, which admin actions need
-      strongSession: actor.strongSession,
-      // Which second steps the person has set up: the app's own authenticator is read live, text codes
-      // from the profile, and passkeys from the profile's hint (refreshed at each sign-in)
-      factors: { totp, sms: smsFactorOn(user), passkey: Boolean(user.passkey), any: totp || smsFactorOn(user) || Boolean(user.passkey) || user.strongAuth },
-      // Where texts stand: unavailable (no sending number yet), no number, not agreed, opted out, unverified, or ready
-      sms: { state: smsState(user, Boolean(d.texter)) },
-      orgs: tenants
-        .filter((t) => t.status === "active")
-        .map((t) => ({ id: t.id, slug: t.slug, name: t.name, clientId: t.clientId, access: actor.operator ? "admin" : accessBy.get(t.id) }))
-        .sort((a, b) => a.clientId.localeCompare(b.clientId)),
-    });
-  });
-
-  // People edit only their own profile; operator and strong sign-in can't be set here
-  app.patch("/me", async (c) => {
-    const { user, actor } = who(c);
-    const input = await body(c, UpdateMeInput);
-    const { version, smsConsent, ...patch } = input;
-    // With text codes on, a new number or a no to texts would switch off a second step; like any
-    // factor change, that needs a confirmed session, so an email-only session can't swap in its own
-    const offNumber = patch.phone !== undefined && e164(patch.phone) !== e164(user.phone);
-    if (smsFactorOn(user) && (offNumber || smsConsent === false) && !actor.strongSession) fail(403, "strong_auth_required", "Text codes are on for this number. Confirm it's you before changing it or turning texts off.");
-    // Agreeing to texts is recorded with its time and wording version, as carriers expect. A new
-    // number clears consent and verification, so nothing goes to it until its holder proves it
-    const sms = smsAfterSave(user, patch.phone, smsConsent);
-    const next: User = { ...user, ...defined(patch), ...sms, version: user.version + 1, updatedAt: now(), updatedBy: user.id };
-    await repo.saveUser(next, version);
-    return c.json(next);
-  });
-
-  // --- Text verification ---------------------------------------------------
-  // Agreeing to texts isn't enough: a code sent to the number proves its holder is the person, and
-  // only then do notices go there. Codes are hashed, short-lived, limited in tries, and rate limited
-
-  // Send a code to the profile's number
-  app.post("/me/phone/verify", async (c) => {
-    const { user } = who(c);
-    if (!d.texter) fail(503, "texts_unavailable", "Texts aren't available yet. Email notices still work.");
-    const to = e164(user.phone);
-    if (!to) fail(400, "no_number", "Add a mobile number to your profile first.");
-    if (!user.smsConsentAt) fail(400, "not_agreed", "Agree to texts on your profile first.");
-    await textCode(user, "SMSVERIFY", to, codeText);
-    return c.json({ ok: true });
-  });
-
-  // Check the code; a match at the same number marks it verified
-  app.post("/me/phone/confirm", async (c) => {
-    const { user } = who(c);
-    const { code } = await body(c, z.object({ code: z.string().min(6).max(12) }));
-    const k = { PK: `USER#${user.id}`, SK: "SMSVERIFY" };
-    const row = await countPhoneTry(k);
-    if (row.hash !== (await hashCode(user.id, code)) || row.phone !== e164(user.phone)) fail(400, "wrong_code", "That code didn't match. Check the newest text.");
-    const fresh = (await repo.getUser(user.id))!;
-    await repo.saveUser({ ...fresh, smsPhone: String(row.phone), smsVerifiedAt: now(), version: fresh.version + 1, updatedAt: now(), updatedBy: user.id }, fresh.version);
-    await repo.table.write([{ delete: k }]);
-    return c.json({ ok: true });
-  });
-  // Add a passkey, under the rule above, so someone who only got into the email can't plant their own
-  app.post("/me/passkey/start", async (c) => {
-    await mayChangeFactors(c);
-    return c.json({ options: await d.directory.startPasskey(tokenOf(c)) });
-  });
-
-  app.post("/me/passkey/finish", async (c) => {
-    const { user } = who(c);
-    await mayChangeFactors(c);
-    const { credential } = await body(c, z.object({ credential: z.record(z.string(), z.unknown()) }));
-    await d.directory.finishPasskey(tokenOf(c), credential);
-    // The hint may lose a race with another profile save; the passkey itself is already in Cognito
-    await repo.saveUser({ ...user, strongAuth: true, passkey: true, version: user.version + 1, updatedAt: now(), updatedBy: user.id }, user.version).catch((e) => {
-      if (!(e instanceof ConflictError)) throw e;
-    });
-    await repo.securityEvent(user.id, "passkey.added", "A passkey was added");
-    // Tell the person by email, so a passkey they didn't add doesn't go unnoticed
-    await notice(user, passkeyEmail({ url: `${cfg.publicUrl}/1NEON/me` }));
-    return c.json({ ok: true });
-  });
-
-  // Authenticator app: start setup with a fresh secret and its QR code. The secret is kept as a
-  // pending setup for this session only; the active authenticator, if any, keeps working until a
-  // code from the new one proves it
-  app.post("/me/totp/start", async (c) => {
-    const { user, jti } = who(c);
-    await mayChangeFactors(c);
-    const prev = await repo.getPendingTotp(user.id);
-    const t = await newTotp(user.email);
-    const pending = { secret: t.secret, jti: jti ?? "dev", expiresAt: new Date(Date.now() + PENDING_TOTP_MS).toISOString(), attempts: 0, version: (prev?.version ?? 0) + 1 };
-    try {
-      await repo.savePendingTotp(user.id, pending, prev ? { version: prev.version } : { create: true });
-    } catch (e) {
-      if (e instanceof ConflictError) fail(409, "setup_busy", "Another setup started at the same moment. Start again.");
-      throw e;
-    }
-    return c.json({ qr: t.qr, uri: t.uri, secret: t.secret });
-  });
-
-  // Finish setup with the first code the app shows. Each try is counted before its answer is
-  // given, the new authenticator replaces any old one in the same write that ends the setup, and
-  // this session counts as confirmed from then on
-  app.post("/me/totp/confirm", async (c) => {
-    const { user, jti } = who(c);
-    const { code } = await body(c, z.object({ code: z.string().min(6).max(12) }));
-    for (let tries = 0; tries < 5; tries++) {
-      const p = await repo.getPendingTotp(user.id);
-      // Only the session that started this setup may finish it
-      if (!p || p.jti !== (jti ?? "dev")) fail(409, "no_setup", "Start authenticator setup again.");
-      if (p.attempts >= PENDING_TOTP_TRIES) fail(429, "locked", "Too many wrong codes. Start authenticator setup again.");
-      // Re-check the rule: a replacement still needs this session to be confirmed
-      await mayChangeFactors(c);
-      const step = checkTotp(p.secret, code);
-      try {
-        if (step === undefined) {
-          await repo.savePendingTotp(user.id, { ...p, attempts: p.attempts + 1, version: p.version + 1 }, { version: p.version });
-          fail(400, "wrong_code", "That code didn't match. Check the time on your phone and try the newest code.");
-        }
-        const active = await repo.getTotp(user.id);
-        await repo.activateTotp(user.id, p, { secret: p.secret, confirmed: true, lastCounter: step, fails: 0, version: (active?.version ?? 0) + 1 }, active ? { version: active.version } : { create: true });
-        const replaced = Boolean(active?.confirmed);
-        // This session proved the new authenticator; a replacement then ends every other session's proof
-        if (jti) await repo.saveSession(jti, user.id, true);
-        if (replaced) await factorChanged(c, "totp.replaced", "The authenticator app was replaced");
-        else await repo.securityEvent(user.id, "totp.added", "An authenticator app was added");
-        await refreshEnrolled(user, { totp: true, sms: smsFactorOn(user), passkey: user.passkey ?? "unknown", cognitoTotp: "unknown", any: true }).catch(() => undefined);
-        await notice(user, replaced ? factorRemovedEmail({ url: `${cfg.publicUrl}/1NEON/me`, what: "Your authenticator app", how: "replaced" }) : passkeyEmail({ url: `${cfg.publicUrl}/1NEON/me`, what: "An authenticator app" }));
-        return c.json({ ok: true });
-      } catch (e) {
-        // Someone else's try or setup landed first: read again and decide afresh, never echo a row
-        if (e instanceof ConflictError) continue;
-        throw e;
-      }
-    }
-    fail(429, "busy", "Too many tries at once. Wait a moment and try again.");
-  });
-
-  // Text-message codes: a code texted to the verified number confirms it's you, with the same standing
-  // as a passkey or authenticator app. Turning them on follows the rule above; the number must
-  // already be proved with a texted code, so nobody can point them at a number they don't hold
-  app.post("/me/text-factor", async (c) => {
-    const { user } = who(c);
-    if (!d.texter) fail(503, "texts_unavailable", "Texts aren't available yet. Email notices still work.");
-    if (!smsReady(user)) fail(409, "number_unverified", "Confirm your number with a texted code first, under Notifications.");
-    if (smsFactorOn(user)) return c.json({ ok: true });
-    await mayChangeFactors(c);
-    const fresh = (await repo.getUser(user.id))!;
-    await repo.saveUser({ ...fresh, smsFactorAt: now(), strongAuth: true, version: fresh.version + 1, updatedAt: now(), updatedBy: user.id }, fresh.version);
-    await repo.securityEvent(user.id, "sms.added", "Text-message codes were turned on");
-    await notice(user, passkeyEmail({ url: `${cfg.publicUrl}/1NEON/me`, what: "Text-message confirmation" }));
-    return c.json({ ok: true });
-  });
-
-  // Turn text codes off; needs a confirmed session, and other sessions lose their confirmation
-  app.delete("/me/text-factor", async (c) => {
-    const { user, actor } = who(c);
-    if (!actor.strongSession) fail(403, "strong_auth_required", "Confirm it's you first.");
-    const fresh = (await repo.getUser(user.id))!;
-    await repo.saveUser({ ...fresh, smsFactorAt: undefined, version: fresh.version + 1, updatedAt: now(), updatedBy: user.id }, fresh.version);
-    await factorChanged(c, "sms.removed", "Text-message codes were turned off");
-    const after = (await repo.getUser(user.id))!;
-    await refreshEnrolled(after, await factorInventory(repo, d.directory, after, tokenOf(c))).catch(() => undefined);
-    await notice(user, factorRemovedEmail({ url: `${cfg.publicUrl}/1NEON/me`, what: "Text-message confirmation", how: "removed" }));
-    return c.json({ ok: true });
-  });
-
-  // Text a code to confirm it's you
-  app.post("/me/confirm/text", async (c) => {
-    const { user } = who(c);
-    if (!smsFactorOn(user)) fail(409, "no_text_factor", "Turn on text codes on your profile first.");
-    await textCode(user, "SMSCONFIRM", user.smsPhone!, confirmText);
-    return c.json({ ok: true });
-  });
-
-  // Confirm it's you with an authenticator code, or with a texted code (via: "text"): this session
-  // can then use admin actions. Five wrong app codes lock it for 15 minutes, and a code can't be used
-  // twice; a texted code has five tries and ten minutes, and is used up by a match
-  app.post("/me/confirm", async (c) => {
-    const { user, jti } = who(c);
-    const { code, via } = await body(c, z.object({ code: z.string().min(6).max(12), via: z.enum(["app", "text"]).default("app") }));
-    if (via === "text") {
-      if (!smsFactorOn(user)) fail(409, "no_text_factor", "Turn on text codes on your profile first.");
-      const k = { PK: `USER#${user.id}`, SK: "SMSCONFIRM" };
-      const row = await countPhoneTry(k);
-      if (row.hash !== (await hashCode(user.id, code)) || row.phone !== user.smsPhone) fail(400, "wrong_code", "That code didn't match. Check the newest text.");
-      await repo.table.write([{ delete: k }]);
-      if (jti) await repo.saveSession(jti, user.id, true);
-      return c.json({ ok: true });
-    }
-    const verdict = await useTotpCode(user.id, code);
-    if (verdict === "none") fail(409, "no_totp", "Set up an authenticator app on your profile first.");
-    if (verdict === "locked") fail(429, "locked", "Too many wrong codes. Try again in 15 minutes.");
-    if (verdict === "busy") fail(429, "busy", "Too many tries at once. Wait a moment and try again.");
-    if (verdict !== "ok") fail(400, "wrong_code", verdict === "wrong" ? "That code didn't match. Try the newest one." : "That code was already used. Wait for the next one.");
-    if (jti) await repo.saveSession(jti, user.id, true);
-    return c.json({ ok: true });
-  });
-
-  // Remove the authenticator app; needs a confirmed session. Other sessions lose their confirmation
-  app.delete("/me/totp", async (c) => {
-    const { user, actor } = who(c);
-    if (!actor.strongSession) fail(403, "strong_auth_required", "Confirm it's you first.");
-    await repo.deleteTotp(user.id);
-    await factorChanged(c, "totp.removed", "The authenticator app was removed");
-    await refreshEnrolled(user, await factorInventory(repo, d.directory, user, tokenOf(c))).catch(() => undefined);
-    await notice(user, factorRemovedEmail({ url: `${cfg.publicUrl}/1NEON/me`, what: "Your authenticator app", how: "removed" }));
-    return c.json({ ok: true });
-  });
+  meRoutes(app, k);
+  factorRoutes(app, k);
 
   // --- Operator: organizations and the All clients view --------------------
-  // Create an organization with the default stages and the next client ID
-  app.post("/orgs", async (c) => {
-    const { actor, user } = who(c);
-    check(can(actor, "manage_orgs", undefined));
-    const input = await body(c, CreateTenantInput);
-    const n = await repo.nextClientNumber();
-    const t = now();
-    const tenant: Tenant = {
-      id: newId("t"),
-      slug: input.slug ?? slugify(input.name),
-      clientId: formatClientId(n),
-      name: input.name,
-      status: "active",
-      stages: DEFAULT_STAGES,
-      version: 1,
-      createdAt: t,
-      updatedAt: t,
-      updatedBy: user.id,
-    };
-    try {
-      await repo.createTenant(tenant);
-    } catch (e) {
-      if (e instanceof ConflictError) fail(409, "slug_taken", `The address "${tenant.slug}" is taken. Choose another.`);
-      throw e;
-    }
-    await repo.table.write([repo.auditOp({ tenantId: tenant.id, actorId: user.id, action: "org.created", target: tenant.id, summary: `Created ${tenant.name} (${tenant.clientId})` })]);
-    return c.json(tenant, 201);
-  });
-
-  // All clients: every active project across organizations, read only
-  app.get("/all/projects", async (c) => {
-    check(can(who(c).actor, "read", undefined, "all"));
-    const [tenants, projects] = await Promise.all([repo.listTenants(), repo.listAllProjects()]);
-    const byId = new Map(tenants.map((t) => [t.id, t]));
-    return c.json({
-      orgs: tenants.map((t) => ({ id: t.id, slug: t.slug, name: t.name, clientId: t.clientId, stages: t.stages })),
-      projects: projects.filter((p) => byId.get(p.tenantId)?.status === "active" && !p.archived),
-      stages: DEFAULT_STAGES,
-    });
-  });
-
-  // Any write under /all is refused outright: the aggregate is a view, never a place to edit
-  app.on(["POST", "PUT", "PATCH", "DELETE"], "/all/*", (c) => {
-    check(can(who(c).actor, "write", undefined, "all"));
-    return c.notFound();
-  });
+  orgRoutes(app, k);
 
   // --- Inside one organization ---------------------------------------------
 
