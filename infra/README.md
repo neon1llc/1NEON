@@ -31,4 +31,7 @@ envs/prod/        state at s3://neon1-tfstate/1neon/prod/terraform.tfstate
 
 - Lambda code ships through `.github/workflows/deploy.yml`, not Terraform; Terraform ignores code changes on the functions.
 - Cognito can't require MFA in a pool whose first factor is an email code, so the API requires a passkey or authenticator app for admin actions instead.
-- Text messages (SMS codes) are left off: they need an origination number and US carrier registration first.
+- Text notices come from the `sms` module: a toll-free number and its opt-out list (AWS handles STOP and HELP replies). The number exists, but US carriers deliver nothing until its toll-free registration is approved, so `texts_live` stays false until then: the API gets no sending number and the profile says texts aren't available. Set it to true once registration is approved. People confirm their number with a texted code before any notice goes to it.
+- Notifications and invitations are queued in the table and sent by the API function on a once-a-minute EventBridge schedule (`modules/api`), which also finishes file uploads whose malware scan completed. The `outbox-age` and `outbox-failed` alarms cover a stuck queue and messages that gave up.
+- The authenticator app's secret keys are created by the API and stored in the table (encrypted at rest), not in Cognito; the privacy policy says so.
+- `malware_scan` is on in production, so the documents bucket refuses reads of any object until GuardDuty tags it clean.

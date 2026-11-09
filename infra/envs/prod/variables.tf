@@ -52,3 +52,12 @@ variable "malware_scan" {
   type        = bool
   default     = true
 }
+
+
+# Turn on once the toll-free number's registration is approved (and for the registration's own
+# approved testing). While off, the profile says texts aren't available and nothing is sent
+variable "texts_live" {
+  description = "Offer text notices in the portal."
+  type        = bool
+  default     = false
+}

@@ -78,6 +78,7 @@ module "api" {
   user_pool_arn         = module.auth.user_pool_arn
   client_id             = module.auth.client_id
   sms_number_arn        = module.sms.number_arn
+  texts_live            = var.texts_live
 }
 
 

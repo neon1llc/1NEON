@@ -21,6 +21,12 @@ variable "user_pool_arn" { type = string }
 variable "client_id" { type = string }
 # The toll-free number texts come from (its ARN)
 variable "sms_number_arn" { type = string }
+# Whether the API offers texts. Off until the number's toll-free registration is approved, so the
+# profile says texts aren't available instead of sending codes carriers will drop
+variable "texts_live" {
+  type    = bool
+  default = false
+}
 variable "log_retention_days" {
   type    = number
   default = 90
@@ -183,7 +189,7 @@ resource "aws_lambda_function" "api" {
       AUTH_DOMAIN                         = var.auth_domain
       PUBLIC_URL                          = var.public_url
       MAIL_FROM                           = var.mail_from
-      SMS_FROM                            = var.sms_number_arn
+      SMS_FROM                            = var.texts_live ? var.sms_number_arn : ""
       OPERATOR_EMAILS                     = var.operator_emails
       NODE_OPTIONS                        = "--enable-source-maps"
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
