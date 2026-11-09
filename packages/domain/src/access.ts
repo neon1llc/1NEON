@@ -32,7 +32,8 @@ const STRONG_AUTH: ReadonlySet<Action> = new Set(["delete", "manage_people", "ma
 export interface Actor {
   userId: string;
   operator: boolean;
-  strongAuth: boolean;
+  // This sign-in session proved a passkey or authenticator recently (session assurance, not enrollment)
+  strongSession: boolean;
 }
 
 
@@ -58,14 +59,14 @@ export function can(
   // Creating and archiving organizations is neon1's job, not any client admin's
   if (action === "manage_orgs") {
     if (!actor.operator) return { ok: false, reason: "forbidden" };
-    return actor.strongAuth ? { ok: true } : { ok: false, reason: "strong_auth_required" };
+    return actor.strongSession ? { ok: true } : { ok: false, reason: "strong_auth_required" };
   }
   // The operator acts as an admin inside every organization
   const level: AccessLevel | undefined = actor.operator ? "admin" : access;
   // Not a member: the API answers 404 so outsiders can't tell an organization exists
   if (!level) return { ok: false, reason: "not_member" };
   if (!LEVEL_ACTIONS[level].has(action)) return { ok: false, reason: "forbidden" };
-  if (STRONG_AUTH.has(action) && !actor.strongAuth) return { ok: false, reason: "strong_auth_required" };
+  if (STRONG_AUTH.has(action) && !actor.strongSession) return { ok: false, reason: "strong_auth_required" };
   return { ok: true };
 }
 

@@ -22,8 +22,9 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 export interface Directory {
   /** Create a passwordless user for an invited email; no-op if they already exist */
   ensureUser(email: string): Promise<void>;
-  /** Has the user set up a passkey or an authenticator app? */
-  hasStrongAuth(accessToken: string): Promise<boolean>;
+  /** The strong factors Cognito holds for this person. Throws when it can't tell, so callers can
+   * treat the answer as unknown instead of as "none" */
+  factors(accessToken: string): Promise<{ totp: boolean; passkeys: number }>;
   /** Begin adding a passkey: the browser's creation options */
   startPasskey(accessToken: string): Promise<unknown>;
   /** Finish adding a passkey with the browser's signed credential */
@@ -137,14 +138,14 @@ export class CognitoDirectory implements Directory {
     }
   }
 
-  // Strong sign-in means an authenticator app (TOTP) or at least one passkey
-  async hasStrongAuth(accessToken: string) {
+  // Cognito's own authenticator setting and passkeys. Both lookups must answer: a failed passkey
+  // list is "don't know", never "no passkeys", so it can't make an enrolled account look unenrolled
+  async factors(accessToken: string) {
     const [user, keys] = await Promise.all([
       this.idp.send(new GetUserCommand({ AccessToken: accessToken })),
-      this.idp.send(new ListWebAuthnCredentialsCommand({ AccessToken: accessToken })).catch(() => undefined),
+      this.idp.send(new ListWebAuthnCredentialsCommand({ AccessToken: accessToken, MaxResults: 20 })),
     ]);
-    const totp = (user.UserMFASettingList ?? []).includes("SOFTWARE_TOKEN_MFA");
-    return totp || (keys?.Credentials?.length ?? 0) > 0;
+    return { totp: (user.UserMFASettingList ?? []).includes("SOFTWARE_TOKEN_MFA"), passkeys: keys.Credentials?.length ?? 0 };
   }
 
   // Passkey registration runs on the person's own access token; no admin rights involved

@@ -22,6 +22,12 @@ export const keys = {
   session: (jti: string) => ({ PK: `SESSION#${jti}`, SK: "META" }),
   // A person's authenticator app secret, kept apart from the profile so it never leaves the API
   totp: (uid: string) => ({ PK: `USER#${uid}`, SK: "TOTP" }),
+  // An authenticator being set up: its own row, so starting (or abandoning) setup never touches the active one
+  totpPending: (uid: string) => ({ PK: `USER#${uid}`, SK: "TOTP#PENDING" }),
+  // The earliest proof that still counts for this person; raised when a factor is removed or replaced
+  assurance: (uid: string) => ({ PK: `USER#${uid}`, SK: "ASSURANCE" }),
+  // Security events about one person's sign-in methods, newest last
+  security: (uid: string, at: string, id: string) => ({ PK: `USER#${uid}`, SK: `SEC#${at}#${id}` }),
   // Inside one tenant
   member: (tid: string, uid: string) => ({ PK: `T#${tid}`, SK: `MEMBER#${uid}` }),
   project: (tid: string, pid: string) => ({ PK: `T#${tid}`, SK: `PROJ#${pid}` }),
@@ -71,6 +77,23 @@ export interface TotpRecord {
   lockedUntil?: string;
   version: number;
 }
+
+
+/** An authenticator setup in progress: bound to the session that started it, short-lived, and
+ * limited in tries. It becomes the active record only through activateTotp */
+export interface PendingTotp {
+  secret: string;
+  // The origin_jti of the session that started setup ("dev" locally)
+  jti: string;
+  expiresAt: string;
+  attempts: number;
+  version: number;
+}
+
+
+// Setup must finish within ten minutes, in five tries
+export const PENDING_TOTP_MS = 10 * 60 * 1000;
+export const PENDING_TOTP_TRIES = 5;
 
 
 /** "Dana is editing this": advisory only; saves are still guarded by version */
@@ -148,20 +171,40 @@ export class Repo {
   }
 
   // A session's assurance. The row lives as long as its refresh token (30 days), but a passkey or
-  // authenticator check only counts for STEP_UP_MS; after that admin actions ask again
-  async saveSession(jti: string, userId: string, strong: boolean) {
+  // authenticator check only counts for STEP_UP_MS; after that admin actions ask again. `strongAt`
+  // is when the proof happened, compared with the person's assurance floor
+  async saveSession(jti: string, userId: string, strong: boolean, opts: { strongAt?: string; strongUntil?: string } = {}) {
     const ttl = Math.floor(Date.now() / 1000) + 30 * 24 * 3600;
-    const strongUntil = strong ? new Date(Date.now() + STEP_UP_MS).toISOString() : undefined;
-    await this.table.write([{ put: { ...keys.session(jti), userId, strong, strongUntil, ttl }, guard: { always: true } }]);
+    const strongAt = strong ? opts.strongAt ?? new Date().toISOString() : undefined;
+    const strongUntil = strong ? opts.strongUntil ?? new Date(Date.now() + STEP_UP_MS).toISOString() : undefined;
+    await this.table.write([{ put: { ...keys.session(jti), userId, strong, strongAt, strongUntil, ttl }, guard: { always: true } }]);
   }
 
-  // Strong only when this very session proved a passkey or authenticator, for this person, recently.
-  // Rows without an expiry (written before the time limit) read as not strong, so this fails closed
+  // The session row itself, for keeping its expiry when a factor change re-stamps it
+  async getSession(jti: string) {
+    const row = await this.table.get(keys.session(jti).PK, "META");
+    return row && { userId: String(row.userId), strong: row.strong === true, strongAt: row.strongAt as string | undefined, strongUntil: row.strongUntil as string | undefined };
+  }
+
+  // Strong only when this very session proved a passkey or authenticator, for this person, recently,
+  // and after the person's last factor removal or replacement. Rows without an expiry (written
+  // before the time limit) read as not strong, so this fails closed
   async sessionStrong(jti: string | undefined, userId: string) {
     if (!jti) return false;
     const row = await this.table.get(keys.session(jti).PK, "META");
     const until = typeof row?.strongUntil === "string" ? Date.parse(row.strongUntil) : NaN;
-    return row?.userId === userId && row?.strong === true && until > Date.now();
+    if (!(row?.userId === userId && row?.strong === true && until > Date.now())) return false;
+    // Only strong sessions pay for the second read
+    const floor = await this.table.get(keys.assurance(userId).PK, keys.assurance(userId).SK);
+    if (typeof floor?.notBefore !== "string") return true;
+    const at = typeof row.strongAt === "string" ? Date.parse(row.strongAt) : NaN;
+    // Strictly after: a proof in the same millisecond as the change doesn't survive it
+    return at > Date.parse(floor.notBefore);
+  }
+
+  // Every proof made before `at` stops counting, for every session of this person
+  async raiseAssuranceFloor(userId: string, at: string) {
+    await this.table.write([{ put: { ...keys.assurance(userId), notBefore: at }, guard: { always: true } }]);
   }
 
   // Sign-out forgets the session's assurance at once, even while its last access token lives
@@ -180,9 +223,39 @@ export class Repo {
     await this.table.write([{ put: { ...keys.totp(uid), ...t }, guard }]);
   }
 
-  // Remove the authenticator app
+  // Remove the authenticator app and any setup in progress, together
   async deleteTotp(uid: string) {
-    await this.table.write([{ delete: keys.totp(uid) }]);
+    await this.table.write([{ delete: keys.totp(uid) }, { delete: keys.totpPending(uid) }]);
+  }
+
+  // The setup in progress, if it hasn't expired (its TTL hides it once it has)
+  async getPendingTotp(uid: string): Promise<PendingTotp | undefined> {
+    const k = keys.totpPending(uid);
+    const row = await this.table.get(k.PK, k.SK);
+    return row ? { secret: String(row.secret), jti: String(row.jti), expiresAt: String(row.expiresAt), attempts: Number(row.attempts ?? 0), version: Number(row.version ?? 0) } : undefined;
+  }
+
+  // Start or count a try on a setup; the TTL removes an abandoned one on its own
+  async savePendingTotp(uid: string, p: PendingTotp, guard: Guard) {
+    await this.table.write([{ put: { ...keys.totpPending(uid), ...p, ttl: Math.ceil(Date.parse(p.expiresAt) / 1000) }, guard }]);
+  }
+
+  // Finish setup: the new active record and the end of the pending one land together or not at all
+  async activateTotp(uid: string, pending: PendingTotp, active: TotpRecord, guard: Guard) {
+    await this.table.write([{ put: { ...keys.totp(uid), ...active }, guard }, { delete: keys.totpPending(uid), guard: { version: pending.version } }]);
+  }
+
+  // A record that a sign-in method changed; kept three years, never shown to other people
+  async securityEvent(uid: string, action: string, summary: string) {
+    const at = new Date().toISOString();
+    const id = newId();
+    const ttl = Math.floor(Date.now() / 1000) + 3 * 365 * 24 * 3600;
+    await this.table.write([{ put: { ...keys.security(uid, at, id), type: "security", action, summary, at, ttl }, guard: { always: true } }]);
+  }
+
+  // A person's security events, oldest first
+  async listSecurityEvents(uid: string) {
+    return (await this.table.query(`USER#${uid}`, "SEC#")).map((r) => ({ action: String(r.action), summary: String(r.summary), at: String(r.at) }));
   }
 
   // User and email claim land together, so an email maps to exactly one person

@@ -60,6 +60,32 @@ export function passkeyEmail(opts: { url: string; what?: string; at?: Date }) {
 }
 
 
+/** Notice that a sign-in method was removed or replaced; it goes out even when the person did it */
+export function factorRemovedEmail(opts: { url: string; what: string; how: "removed" | "replaced"; at?: Date }) {
+  const at = opts.at ?? new Date();
+  const subject = `${opts.what} was ${opts.how} on your 1NEON account`;
+  const after = opts.how === "replaced" ? "Codes from the old one no longer work." : "It can no longer be used to confirm it's you.";
+  const text = [
+    `${opts.what} was just ${opts.how} on your 1NEON account. ${after} Other signed-in sessions will need to confirm it's you again before admin actions.`,
+    "",
+    `If this wasn't you, reply to this email right away. Your profile: ${opts.url}`,
+    "",
+    "neon1 · 1 is glad to be of service.",
+    sentAt(at),
+  ].join("\n");
+  const html = branded({
+    label: "a sign-in method changed",
+    preheader: `${opts.what} was just ${opts.how}.`,
+    heading: `${opts.what} was ${opts.how}`,
+    body: `<p style="margin:0">${esc(opts.what)} was just ${opts.how} on your 1NEON account. ${esc(after)} Other signed-in sessions will need to confirm it's you again before admin actions.</p>`,
+    button: { label: "Open your profile", url: opts.url },
+    note: "If this wasn't you, reply to this email right away.",
+    at,
+  });
+  return { subject, text, html };
+}
+
+
 /** A notification by email: who did what, where, with a link to look */
 export function noticeEmail(opts: { orgName: string; by: string; summary: string; url: string; important?: boolean; at?: Date }) {
   const at = opts.at ?? new Date();

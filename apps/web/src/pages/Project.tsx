@@ -112,7 +112,7 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
   const me = useSession();
   const members = useMembers(org.id);
   const names = new Map(members.data?.map((m) => [m.userId, m.name || m.email]) ?? []);
-  const actor = { userId: me.user.id, operator: me.operator, strongAuth: false };
+  const actor = { userId: me.user.id, operator: me.operator, strongSession: false };
   // Once an option is approved, the others stop asking for a decision
   const decided = items.some((i) => i.kind === "option" && i.status === "approved");
   const proposed = decided ? [] : items.filter((i) => i.kind === "option" && i.status === "proposed");
@@ -649,7 +649,7 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
   const members = useMembers(org.id);
   const names = new Map(members.data?.map((m) => [m.userId, m.name || m.email]) ?? []);
   // Only the named decision maker (or, with none named, a client admin) sees Approve
-  const decider = canApprove({ userId: me.user.id, operator: me.operator, strongAuth: false }, access, project.people).ok;
+  const decider = canApprove({ userId: me.user.id, operator: me.operator, strongSession: false }, access, project.people).ok;
   const deciders = project.people.filter((x) => x.role === "decision_maker").map((x) => names.get(x.userId) ?? "the decision maker");
   const toast = useToast();
   const refresh = useRefresh(org.id);

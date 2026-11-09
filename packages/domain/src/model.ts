@@ -86,6 +86,8 @@ export const User = z.object({
   title: z.string().trim().max(80).default(""),
   phone: z.string().trim().max(32).default(""),
   operator: z.boolean().default(false),
+  // Whether a passkey or authenticator is enrolled, as last seen: a display hint only. Nothing is
+  // authorized from it; factor changes read the live inventory and admin actions read the session
   strongAuth: z.boolean().default(false),
   theme: Theme.default("awake"),
   // "rail" keeps a slim icon menu on screen; "hidden" gives pages the full width behind a menu button

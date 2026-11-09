@@ -41,12 +41,22 @@ export type WriteOp =
   | { delete: { PK: string; SK: string }; guard?: Guard };
 
 
-/** A guard failed: someone else saved first, or the record already exists */
+/** A guard failed: someone else saved first, or the record already exists. `current` is for the
+ * server's own use; what reaches a browser is decided by the API's public conflict policy */
 export class ConflictError extends Error {
   constructor(
     readonly current: Row | undefined,
     message = "This record changed since you opened it.",
   ) {
     super(message);
+  }
+}
+
+
+/** The table was too busy or the transaction collided with another one; nothing was written, and
+ * trying again shortly is safe. Kept apart from ConflictError so it never reads as an edit conflict */
+export class StoreBusyError extends Error {
+  constructor(readonly reason: string) {
+    super("The database is busy. Try again in a moment.");
   }
 }

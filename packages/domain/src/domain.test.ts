@@ -11,9 +11,9 @@ import { LAYER_NAMES } from "./defaults.ts";
 
 
 // Actors: a plain member, the same member with strong sign-in, and the operator
-const member = { userId: "u1", operator: false, strongAuth: false };
-const strong = { ...member, strongAuth: true };
-const operator = { userId: "op", operator: true, strongAuth: true };
+const member = { userId: "u1", operator: false, strongSession: false };
+const strong = { ...member, strongSession: true };
+const operator = { userId: "op", operator: true, strongSession: true };
 
 
 // The permission table, level by level
@@ -134,7 +134,7 @@ describe("layer names", () => {
 
 // Approval on one project: the named decision maker, else the client's own admins
 describe("canApprove", () => {
-  const person = (userId: string, operator = false) => ({ userId, operator, strongAuth: false });
+  const person = (userId: string, operator = false) => ({ userId, operator, strongSession: false });
   const people = [{ userId: "u_raj", role: "decision_maker" }];
 
   it("lets only a named decision maker approve", () => {

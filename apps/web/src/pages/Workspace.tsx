@@ -42,7 +42,7 @@ export function WorkspacePage() {
     { done: me.user.tour === "done", label: "Take the 1-minute tour", act: <button className="link" onClick={help.welcomeTour}>Start</button> },
     ...(canWrite ? [{ done: (c?.projects ?? 0) > 0, label: "Start your first project", act: <Link to={`${base}/projects/new`}>Start</Link> }] : []),
     ...(canAdmin ? [{ done: (c?.people ?? 0) > 1, label: "Invite your team", act: <Link to={`${base}/people`}>Invite</Link> }] : []),
-    ...(canAdmin ? [{ done: me.user.strongAuth, label: "Add a passkey for admin actions", act: <Link to="/me">Add</Link> }] : []),
+    ...(canAdmin ? [{ done: Boolean(me.factors?.any), label: "Add a passkey for admin actions", act: <Link to="/me">Add</Link> }] : []),
   ];
   const setupLeft = steps.filter((s) => !s.done).length;
   const n = ws.data?.waiting.length ?? 0;

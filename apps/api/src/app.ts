@@ -35,8 +35,11 @@ import {
   type Action,
   type Actor,
   type Member,
+  Member as MemberSchema,
   type Project,
+  Project as ProjectSchema,
   type Tenant,
+  Tenant as TenantSchema,
   type User,
 } from "@1neon/domain";
 import { Hono, type Context } from "hono";
@@ -45,11 +48,12 @@ import { z } from "zod";
 import { CognitoAuth, type Verified } from "./auth.ts";
 import type { Config } from "./config.ts";
 import type { Directory, Mailer, Storage, Texter } from "./services.ts";
-import { inviteEmail, noticeEmail, passkeyEmail } from "./emails.ts";
+import { factorRemovedEmail, inviteEmail, noticeEmail, passkeyEmail } from "./emails.ts";
+import { factorInventory, type FactorInventory } from "./factors.ts";
 import { MemoryStorage } from "./local.ts";
 import { checkTotp, newTotp } from "./totp.ts";
-import { keys, Repo } from "./store/repo.ts";
-import { ConflictError } from "./store/types.ts";
+import { keys, PENDING_TOTP_MS, PENDING_TOTP_TRIES, Repo } from "./store/repo.ts";
+import { ConflictError, StoreBusyError, type Row } from "./store/types.ts";
 
 
 /** Everything the app needs from outside; tests and local dev pass in-memory versions */
@@ -85,7 +89,7 @@ const EDIT_MS = 2 * 60 * 1000;
 
 
 /** Stop the request with a JSON error the web app can show as written */
-function fail(status: 400 | 401 | 403 | 404 | 409 | 410 | 412 | 428 | 429, error: string, message: string, current?: unknown): never {
+function fail(status: 400 | 401 | 403 | 404 | 409 | 410 | 412 | 428 | 429 | 503, error: string, message: string, current?: unknown): never {
   throw new HTTPException(status, { res: Response.json({ error, message, current }, { status }) });
 }
 
@@ -144,11 +148,20 @@ export function createApp(d: Deps) {
     }
   }
 
-  // Known errors keep their status; a version conflict returns the current record for the conflict dialog
+  // Known errors keep their status. A version conflict returns the newer record only when the public
+  // conflict policy allows that kind of record, and only its schema's fields; anything else (sign-in
+  // and security rows above all) answers without it
   app.onError((err, c) => {
     if (err instanceof HTTPException) return err.getResponse();
     if (err instanceof ConflictError) {
-      return c.json({ error: "conflict", message: err.message, current: strip(err.current) }, 409);
+      const current = publicConflict(err.current);
+      return c.json(current === undefined ? { error: "conflict", message: err.message } : { error: "conflict", message: err.message, current }, 409);
+    }
+    // A busy table wrote nothing; say so plainly instead of calling it a conflict
+    if (err instanceof StoreBusyError || BUSY_ERRORS.has((err as Error).name)) {
+      console.error(JSON.stringify({ level: "warn", message: "store busy", reason: err instanceof StoreBusyError ? err.reason : (err as Error).name }));
+      c.header("retry-after", "2");
+      return c.json({ error: "busy", message: "1NEON is busy for a moment. Nothing was saved; please try again." }, 503);
     }
     // Anything else is logged in full for us and shown to people as a plain apology
     console.error(JSON.stringify({ level: "error", message: String(err), stack: (err as Error).stack }));
@@ -193,11 +206,9 @@ export function createApp(d: Deps) {
     // Admin actions trust this session only if it signed in with a passkey, and only for a while
     if (r.jti) await repo.saveSession(r.jti, uid, r.method === "passkey");
     const user = await repo.getUser(uid);
-    if (user) {
-      // Refresh strong sign-in on every sign-in, so removing a passkey or authenticator takes effect
-      const strongAuth = await d.directory.hasStrongAuth(r.accessToken).catch(() => user.strongAuth);
-      if (strongAuth !== user.strongAuth) await repo.saveUser({ ...user, strongAuth, version: user.version + 1, updatedAt: now() }, user.version);
-    }
+    // Refresh the profile's display hint of enrolled factors. An unknown lookup keeps what we knew,
+    // and the app's own authenticator always counts, so an email sign-in can't erase enrollment
+    if (user) await refreshEnrolled(user, await factorInventory(repo, d.directory, user, r.accessToken)).catch(() => undefined);
     return "ok";
   }
 
@@ -251,8 +262,8 @@ export function createApp(d: Deps) {
     const operator = cfg.operatorEmails.includes(user.email);
     // Strong means this session proved a passkey or authenticator within the step-up window; a failed
     // lookup throws and fails the request rather than granting anything. Locally the seeded flag stands in
-    const strongAuth = cfg.devAuth ? user.strongAuth || operator : await repo.sessionStrong(jti, user.id);
-    c.set("who", { user, actor: { userId: user.id, operator, strongAuth }, jti });
+    const strongSession = cfg.devAuth ? user.strongAuth || operator : await repo.sessionStrong(jti, user.id);
+    c.set("who", { user, actor: { userId: user.id, operator, strongSession }, jti });
     await next();
   });
 
@@ -297,13 +308,15 @@ export function createApp(d: Deps) {
     // The operator sees every active organization; everyone else sees their own
     const tenants = actor.operator ? await repo.listTenants() : (await Promise.all(active.map((m) => repo.getTenant(m.tenantId)))).filter(Boolean) as Tenant[];
     const accessBy = new Map(active.map((m) => [m.tenantId, m.access] as const));
+    const totp = Boolean((await repo.getTotp(user.id))?.confirmed);
     return c.json({
       user,
       operator: actor.operator,
       // Whether this session is confirmed with a passkey or authenticator, which admin actions need
-      strongSession: actor.strongAuth,
-      // Which second steps the person has set up
-      factors: { totp: Boolean((await repo.getTotp(user.id))?.confirmed), passkey: Boolean(user.passkey), any: user.strongAuth },
+      strongSession: actor.strongSession,
+      // Which second steps the person has set up: the app's own authenticator is read live, and
+      // passkeys come from the profile's hint (refreshed at each sign-in)
+      factors: { totp, passkey: Boolean(user.passkey), any: totp || Boolean(user.passkey) || user.strongAuth },
       orgs: tenants
         .filter((t) => t.status === "active")
         .map((t) => ({ id: t.id, slug: t.slug, name: t.name, clientId: t.clientId, access: actor.operator ? "admin" : accessBy.get(t.id) }))
@@ -323,52 +336,124 @@ export function createApp(d: Deps) {
     return c.json(next);
   });
 
-  // Add a passkey. The first can be added from any session; another needs a passkey session already,
-  // so someone who only got into the email can't plant their own
-  app.post("/me/passkey/start", async (c) => {
+  // --- Sign-in methods ------------------------------------------------------
+  // Rule for every add, replace, or remove: an account that already has a passkey or authenticator
+  // (or whose methods we can't check right now) needs this session to have proved one recently.
+  // Only a genuinely unenrolled account, such as a new invitee, may add its first from an email session
+
+  /** The access token Cognito lookups use; "local" in dev and tests */
+  const tokenOf = (c: Context<Env>) => d.auth?.accessToken(c) ?? "local";
+
+  /** Refuse a factor change the rule above doesn't allow; returns the inventory it read */
+  async function mayChangeFactors(c: Context<Env>): Promise<FactorInventory> {
     const { user, actor } = who(c);
-    if (user.strongAuth && !actor.strongAuth) fail(403, "strong_auth_required", "Sign in with your passkey to add another one.");
-    const token = d.auth?.accessToken(c) ?? "local";
-    return c.json({ options: await d.directory.startPasskey(token) });
+    const inv = await factorInventory(repo, d.directory, user, tokenOf(c));
+    if (inv.any === "unknown" && !actor.strongSession) fail(503, "factors_unknown", "We couldn't check your sign-in methods just now. Confirm it's you, or try again in a minute.");
+    if (inv.any === true && !actor.strongSession) fail(403, "strong_auth_required", "Confirm it's you with a passkey or authenticator you already have, then try again.");
+    return inv;
+  }
+
+  /** Keep the profile's display hints in step with a known inventory (never with an unknown one) */
+  async function refreshEnrolled(user: User, inv: FactorInventory) {
+    if (inv.any === "unknown") return;
+    const passkey = inv.passkey === "unknown" ? user.passkey : inv.passkey;
+    if (inv.any === user.strongAuth && Boolean(passkey) === Boolean(user.passkey)) return;
+    await repo.saveUser({ ...user, strongAuth: inv.any, passkey, version: user.version + 1, updatedAt: now() }, user.version);
+  }
+
+  /**
+   * After a factor is removed or replaced: every other session's earlier proof stops counting, this
+   * session keeps its own (it just made the change), and the event is recorded and emailed
+   */
+  async function factorChanged(c: Context<Env>, action: string, summary: string) {
+    const { user, jti } = who(c);
+    const at = now();
+    await repo.raiseAssuranceFloor(user.id, at);
+    const mine = jti ? await repo.getSession(jti) : undefined;
+    if (jti && mine?.strong) await repo.saveSession(jti, user.id, true, { strongAt: new Date(Date.parse(at) + 1).toISOString(), strongUntil: mine.strongUntil });
+    await repo.securityEvent(user.id, action, summary);
+  }
+
+  /** Mail a security notice; a mail failure never undoes the change, but it is logged */
+  async function notice(user: User, mail: { subject: string; text: string; html: string }) {
+    await d.mailer.send(user.email, mail.subject, mail.text, mail.html).catch((e) => console.error(JSON.stringify({ level: "error", message: `security notice: ${String(e)}` })));
+  }
+
+  // Add a passkey, under the rule above, so someone who only got into the email can't plant their own
+  app.post("/me/passkey/start", async (c) => {
+    await mayChangeFactors(c);
+    return c.json({ options: await d.directory.startPasskey(tokenOf(c)) });
   });
 
   app.post("/me/passkey/finish", async (c) => {
-    const { user, actor } = who(c);
-    if (user.strongAuth && !actor.strongAuth) fail(403, "strong_auth_required", "Sign in with your passkey to add another one.");
+    const { user } = who(c);
+    await mayChangeFactors(c);
     const { credential } = await body(c, z.object({ credential: z.record(z.string(), z.unknown()) }));
-    await d.directory.finishPasskey(d.auth?.accessToken(c) ?? "local", credential);
-    const next: User = { ...user, strongAuth: true, passkey: true, version: user.version + 1, updatedAt: now(), updatedBy: user.id };
-    await repo.saveUser(next, user.version);
+    await d.directory.finishPasskey(tokenOf(c), credential);
+    // The hint may lose a race with another profile save; the passkey itself is already in Cognito
+    await repo.saveUser({ ...user, strongAuth: true, passkey: true, version: user.version + 1, updatedAt: now(), updatedBy: user.id }, user.version).catch((e) => {
+      if (!(e instanceof ConflictError)) throw e;
+    });
+    await repo.securityEvent(user.id, "passkey.added", "A passkey was added");
     // Tell the person by email, so a passkey they didn't add doesn't go unnoticed
-    const mail = passkeyEmail({ url: `${cfg.publicUrl}/1NEON/me` });
-    await d.mailer.send(user.email, mail.subject, mail.text, mail.html).catch(() => undefined);
+    await notice(user, passkeyEmail({ url: `${cfg.publicUrl}/1NEON/me` }));
     return c.json({ ok: true });
   });
 
-  // Authenticator app: start setup with a fresh secret and its QR code. Replacing one needs a confirmed session
+  // Authenticator app: start setup with a fresh secret and its QR code. The secret is kept as a
+  // pending setup for this session only; the active authenticator, if any, keeps working until a
+  // code from the new one proves it
   app.post("/me/totp/start", async (c) => {
-    const { user, actor } = who(c);
-    if (user.strongAuth && !actor.strongAuth) fail(403, "strong_auth_required", "Confirm it's you first, then add an authenticator app.");
-    const existing = await repo.getTotp(user.id);
+    const { user, jti } = who(c);
+    await mayChangeFactors(c);
+    const prev = await repo.getPendingTotp(user.id);
     const t = await newTotp(user.email);
-    await repo.saveTotp(user.id, { secret: t.secret, confirmed: false, lastCounter: -1, fails: 0, version: (existing?.version ?? 0) + 1 }, existing ? { version: existing.version } : { create: true });
+    const pending = { secret: t.secret, jti: jti ?? "dev", expiresAt: new Date(Date.now() + PENDING_TOTP_MS).toISOString(), attempts: 0, version: (prev?.version ?? 0) + 1 };
+    try {
+      await repo.savePendingTotp(user.id, pending, prev ? { version: prev.version } : { create: true });
+    } catch (e) {
+      if (e instanceof ConflictError) fail(409, "setup_busy", "Another setup started at the same moment. Start again.");
+      throw e;
+    }
     return c.json({ qr: t.qr, uri: t.uri, secret: t.secret });
   });
 
-  // Finish setup with the first code the app shows; this session counts as confirmed from then on
+  // Finish setup with the first code the app shows. Each try is counted before its answer is
+  // given, the new authenticator replaces any old one in the same write that ends the setup, and
+  // this session counts as confirmed from then on
   app.post("/me/totp/confirm", async (c) => {
     const { user, jti } = who(c);
     const { code } = await body(c, z.object({ code: z.string().min(6).max(12) }));
-    const t = await repo.getTotp(user.id);
-    if (!t || t.confirmed) fail(409, "no_setup", "Start authenticator setup again.");
-    const step = checkTotp(t.secret, code);
-    if (step === undefined) fail(400, "wrong_code", "That code didn't match. Check the time on your phone and try the newest code.");
-    await repo.saveTotp(user.id, { ...t, confirmed: true, lastCounter: step, fails: 0, version: t.version + 1 }, { version: t.version });
-    if (!user.strongAuth) await repo.saveUser({ ...user, strongAuth: true, version: user.version + 1, updatedAt: now(), updatedBy: user.id }, user.version);
-    if (jti) await repo.saveSession(jti, user.id, true);
-    const mail = passkeyEmail({ url: `${cfg.publicUrl}/1NEON/me`, what: "An authenticator app" });
-    await d.mailer.send(user.email, mail.subject, mail.text, mail.html).catch(() => undefined);
-    return c.json({ ok: true });
+    for (let tries = 0; tries < 5; tries++) {
+      const p = await repo.getPendingTotp(user.id);
+      // Only the session that started this setup may finish it
+      if (!p || p.jti !== (jti ?? "dev")) fail(409, "no_setup", "Start authenticator setup again.");
+      if (p.attempts >= PENDING_TOTP_TRIES) fail(429, "locked", "Too many wrong codes. Start authenticator setup again.");
+      // Re-check the rule: a replacement still needs this session to be confirmed
+      await mayChangeFactors(c);
+      const step = checkTotp(p.secret, code);
+      try {
+        if (step === undefined) {
+          await repo.savePendingTotp(user.id, { ...p, attempts: p.attempts + 1, version: p.version + 1 }, { version: p.version });
+          fail(400, "wrong_code", "That code didn't match. Check the time on your phone and try the newest code.");
+        }
+        const active = await repo.getTotp(user.id);
+        await repo.activateTotp(user.id, p, { secret: p.secret, confirmed: true, lastCounter: step, fails: 0, version: (active?.version ?? 0) + 1 }, active ? { version: active.version } : { create: true });
+        const replaced = Boolean(active?.confirmed);
+        // This session proved the new authenticator; a replacement then ends every other session's proof
+        if (jti) await repo.saveSession(jti, user.id, true);
+        if (replaced) await factorChanged(c, "totp.replaced", "The authenticator app was replaced");
+        else await repo.securityEvent(user.id, "totp.added", "An authenticator app was added");
+        await refreshEnrolled(user, { totp: true, passkey: user.passkey ?? "unknown", cognitoTotp: "unknown", any: true }).catch(() => undefined);
+        await notice(user, replaced ? factorRemovedEmail({ url: `${cfg.publicUrl}/1NEON/me`, what: "Your authenticator app", how: "replaced" }) : passkeyEmail({ url: `${cfg.publicUrl}/1NEON/me`, what: "An authenticator app" }));
+        return c.json({ ok: true });
+      } catch (e) {
+        // Someone else's try or setup landed first: read again and decide afresh, never echo a row
+        if (e instanceof ConflictError) continue;
+        throw e;
+      }
+    }
+    fail(429, "busy", "Too many tries at once. Wait a moment and try again.");
   });
 
   // Confirm it's you with an authenticator code: this session can then use admin actions.
@@ -376,25 +461,50 @@ export function createApp(d: Deps) {
   app.post("/me/confirm", async (c) => {
     const { user, jti } = who(c);
     const { code } = await body(c, z.object({ code: z.string().min(6).max(12) }));
-    const t = await repo.getTotp(user.id);
-    if (!t?.confirmed) fail(409, "no_totp", "Set up an authenticator app on your profile first.");
-    if (t.lockedUntil && Date.parse(t.lockedUntil) > Date.now()) fail(429, "locked", "Too many wrong codes. Try again in 15 minutes.");
-    const step = checkTotp(t.secret, code);
-    if (step === undefined || step <= t.lastCounter) {
-      const fails = t.fails + 1;
-      await repo.saveTotp(user.id, { ...t, fails: fails >= 5 ? 0 : fails, lockedUntil: fails >= 5 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : t.lockedUntil, version: t.version + 1 }, { version: t.version });
-      fail(400, "wrong_code", step === undefined ? "That code didn't match. Try the newest one." : "That code was already used. Wait for the next one.");
-    }
-    await repo.saveTotp(user.id, { ...t, lastCounter: step, fails: 0, lockedUntil: undefined, version: t.version + 1 }, { version: t.version });
+    const verdict = await useTotpCode(user.id, code);
+    if (verdict === "none") fail(409, "no_totp", "Set up an authenticator app on your profile first.");
+    if (verdict === "locked") fail(429, "locked", "Too many wrong codes. Try again in 15 minutes.");
+    if (verdict === "busy") fail(429, "busy", "Too many tries at once. Wait a moment and try again.");
+    if (verdict !== "ok") fail(400, "wrong_code", verdict === "wrong" ? "That code didn't match. Try the newest one." : "That code was already used. Wait for the next one.");
     if (jti) await repo.saveSession(jti, user.id, true);
     return c.json({ ok: true });
   });
 
-  // Remove the authenticator app; needs a confirmed session
+  /**
+   * Check one code against the active authenticator. A verdict is returned only after the write that
+   * counts it (a wrong try, or the used time step) has landed; a write that loses a race is read
+   * again and decided afresh, so concurrent tries can't skip the count or reuse a code
+   */
+  async function useTotpCode(uid: string, code: string): Promise<"ok" | "wrong" | "used" | "locked" | "none" | "busy"> {
+    for (let tries = 0; tries < 5; tries++) {
+      const t = await repo.getTotp(uid);
+      if (!t?.confirmed) return "none";
+      if (t.lockedUntil && Date.parse(t.lockedUntil) > Date.now()) return "locked";
+      const step = checkTotp(t.secret, code);
+      const ok = step !== undefined && step > t.lastCounter;
+      const fails = t.fails + 1;
+      const next = ok
+        ? { ...t, lastCounter: step, fails: 0, lockedUntil: undefined, version: t.version + 1 }
+        : { ...t, fails: fails >= 5 ? 0 : fails, lockedUntil: fails >= 5 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : t.lockedUntil, version: t.version + 1 };
+      try {
+        await repo.saveTotp(uid, next, { version: t.version });
+      } catch (e) {
+        if (e instanceof ConflictError) continue;
+        throw e;
+      }
+      return ok ? "ok" : step === undefined ? "wrong" : "used";
+    }
+    return "busy";
+  }
+
+  // Remove the authenticator app; needs a confirmed session. Other sessions lose their confirmation
   app.delete("/me/totp", async (c) => {
     const { user, actor } = who(c);
-    if (!actor.strongAuth) fail(403, "strong_auth_required", "Confirm it's you first.");
+    if (!actor.strongSession) fail(403, "strong_auth_required", "Confirm it's you first.");
     await repo.deleteTotp(user.id);
+    await factorChanged(c, "totp.removed", "The authenticator app was removed");
+    await refreshEnrolled(user, await factorInventory(repo, d.directory, user, tokenOf(c))).catch(() => undefined);
+    await notice(user, factorRemovedEmail({ url: `${cfg.publicUrl}/1NEON/me`, what: "Your authenticator app", how: "removed" }));
     return c.json({ ok: true });
   });
 
@@ -1168,9 +1278,26 @@ function label(kind: Item["kind"]) {
 }
 
 
-/** Remove storage keys before a record leaves the API */
-function strip(row: unknown) {
-  if (!row || typeof row !== "object") return row;
-  const { PK: _a, SK: _b, GSI1PK: _c, GSI1SK: _d, GSI2PK: _e, GSI2SK: _f, ttl: _g, type: _h, ...rest } = row as Record<string, unknown>;
-  return rest;
+// AWS SDK error names that mean "throttled or temporarily unavailable", not a failed guard
+const BUSY_ERRORS = new Set(["ProvisionedThroughputExceededException", "ThrottlingException", "RequestLimitExceeded", "TransactionInProgressException", "InternalServerError"]);
+
+
+// The public conflict policy: the only record kinds whose newer copy may go back to the browser, each
+// projected through its own schema so only declared fields leave (zod drops everything else). A new
+// kind, or a new field that isn't in the schema, stays private until it's added here on purpose
+const CONFLICT_VIEWS: Record<string, { safeParse(v: unknown): { success: boolean; data?: unknown } }> = {
+  project: ProjectSchema,
+  item: Item,
+  doc: DocumentRecord,
+  member: MemberSchema,
+  tenant: TenantSchema,
+};
+
+
+/** The newer record for a conflict dialog, or undefined when this kind of row never leaves the API */
+function publicConflict(row: Row | undefined) {
+  const view = typeof row?.type === "string" ? CONFLICT_VIEWS[row.type] : undefined;
+  if (!view) return undefined;
+  const r = view.safeParse(row);
+  return r.success ? r.data : undefined;
 }

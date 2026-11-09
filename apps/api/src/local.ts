@@ -35,15 +35,21 @@ export class MemoryDirectory implements Directory {
   async ensureUser(email: string) {
     this.users.add(email);
   }
-  // Local and test users count as strongly signed in, so admin actions can be exercised
-  async hasStrongAuth() {
-    return true;
+  // Passkeys "added" here, and whether the factor lookup should fail, for tests to arrange
+  passkeys = 0;
+  failLookup = false;
+  // Locally nobody has Cognito factors until a passkey is added; tests can make the lookup fail
+  async factors() {
+    if (this.failLookup) throw new Error("factor lookup unavailable");
+    return { totp: false, passkeys: this.passkeys };
   }
   // Passkeys can't be made without a browser; local runs return fixed options and accept anything
   async startPasskey() {
     return { challenge: "bG9jYWw", rp: { id: "localhost", name: "1NEON" }, user: { id: "bG9jYWw", name: "local", displayName: "local" }, pubKeyCredParams: [{ type: "public-key", alg: -7 }] };
   }
-  async finishPasskey() {}
+  async finishPasskey() {
+    this.passkeys++;
+  }
 }
 
 

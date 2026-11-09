@@ -13,7 +13,7 @@ import {
   UpdateCommand,
   type QueryCommandInput,
 } from "@aws-sdk/lib-dynamodb";
-import { ConflictError, type Guard, type Row, type TableStore, type WriteOp } from "./types.ts";
+import { ConflictError, StoreBusyError, type Guard, type Row, type TableStore, type WriteOp } from "./types.ts";
 
 
 // The condition parts of a write request
@@ -83,7 +83,7 @@ export class DynamoTable implements TableStore {
     });
   }
 
-  // Guarded writes; a failed guard surfaces as ConflictError with the current row
+  // Guarded writes; a failed guard surfaces as ConflictError with the current row (for server use only)
   async write(ops: WriteOp[]) {
     // One write: a plain conditional put or delete, cheaper than a transaction
     if (ops.length === 1) {
@@ -114,11 +114,13 @@ export class DynamoTable implements TableStore {
       );
     } catch (e) {
       if (e instanceof TransactionCanceledException) {
-        // Find which guard failed and return that row as the conflict
+        // Only a failed guard is a conflict; a collision or throttle cancels the whole transaction
+        // without any guard failing, and that is "try again", not "someone else saved first"
         const i = e.CancellationReasons?.findIndex((r) => r.Code === "ConditionalCheckFailed") ?? -1;
         const op = ops[i];
-        const key = op && ("put" in op ? op.put : op.delete);
-        throw new ConflictError(key ? await this.get(key.PK, key.SK) : undefined);
+        if (!op) throw new StoreBusyError((e.CancellationReasons ?? []).map((r) => r.Code ?? "None").join(","));
+        const key = "put" in op ? op.put : op.delete;
+        throw new ConflictError(await this.get(key.PK, key.SK));
       }
       throw e;
     }
