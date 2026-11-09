@@ -8,10 +8,10 @@ Short answers about using 1NEON. Signed in? Tap **?** at the top right of any pa
 The portal where you and I run your projects together. Each project keeps what you need, the work, the results, and the handover in one place.
 
 ### Can I try it first?
-Yes. [The demo](/1NEON/demo/) is a working copy of 1NEON with made-up clients. Pick who to be, and everything you change stays in your browser. [The example](/1NEON/example) walks one made-up project from start to finish, and [the live playback](/1NEON/live) plays one out on screen, step by step, with controls to pause or jump between sections.
+Yes. [The demo](/1NEON/demo/) is a working copy of 1NEON with made-up clients. Pick who to be, and everything you change stays in your browser. [The example](/1NEON/example) walks one made-up project from start to finish, and [the live playback](/1NEON/live) plays one out on screen, step by step, with controls to pause or jump between sections. Short ones show a single thing start to finish: [joining from an invitation](/1NEON/live?play=invite), [adding a passkey](/1NEON/live?play=passkey), [adding an authenticator app](/1NEON/live?play=authenticator), and [texts and text codes](/1NEON/live?play=texts).
 
 ### How do I get in?
-You need an invite. Open the link in your invite email, enter your email address, and type the code I send you. No password needed.
+You need an invite. Open the link in your invite email, enter your email address, and type the code I send you. No password needed. [Watch it happen](/1NEON/live?play=invite).
 
 ### I didn't get the sign-in code.
 Check your spam or promotions folder, then wait a minute and ask for a new code. Codes work for a few minutes, in the browser where you asked for them.
@@ -49,7 +49,7 @@ Every project as a card, in the stage it's in. Columns run left to right from th
 Choose **New project**, answer a few short questions, and the project starts with a checklist that fits. You can change everything later.
 
 ### What is Coming up on Home?
-The next three weeks as a strip of days. Each mark is something dated: a task's due date, a milestone, or a project's target. Below it the same things are listed by Overdue, This week, Next week, and Later.
+This week and the next two as a strip of days. Each mark is something dated: a task's due date, a milestone, or a project's target. Below it, everything dated in the next six weeks is listed by Overdue, This week, Next week, and Later.
 
 ### What is Insights?
 Charts made from your organization's own data: open and overdue work, how often things finish on time, days to a decision, work finished per week, activity by day, and where projects sit across the four layers.
@@ -85,16 +85,16 @@ Viewers read and comment. Editors also add and change work. Admins also invite p
 Admins go to **People** and choose **Invite people**. The person gets an email with a link. People shows whether each invitation email went out; if one didn't, or it got lost, choose **Resend**.
 
 ### Can 1NEON text me?
-Once texts are switched on, yes. Add your mobile number on your profile, agree to texts, save, then type the code 1NEON texts you. Texts only say that something new is waiting, with a link; they never name your organization, projects, or files. Reply STOP to any text to turn them off.
+Once texts are switched on, yes. Add your mobile number on your profile, agree to texts, save, then type the code 1NEON texts you. Texts only say that something new is waiting, with a link; they never name your organization, projects, or files. Reply STOP to any text to turn them off. [Watch it](/1NEON/live?play=texts).
 
 ### Why does it ask me to confirm it's me?
-Inviting people and changing settings need a second check, so a stolen email account isn't enough to make changes. Add a passkey or an authenticator app on your profile, then confirm with it when asked.
+Inviting people, changing access, and changing settings need a second check, so a stolen email account isn't enough to make changes. On your profile, under Two-step verification, add a passkey, an authenticator app, or text-message codes, then confirm with it when asked. Any one works, and a second is a backup if you lose the first. Once confirmed, you won't be asked again for 12 hours in that sign-in.
 
 ### Can I use an authenticator app?
-Yes. On your profile, choose **Set up** next to Authenticator app, scan the code with Google Authenticator, Microsoft Authenticator, 1Password, Authy, or similar, and type the 6-digit code it shows.
+Yes. On your profile, choose **Set up** next to Authenticator app, scan the code with Google Authenticator, Microsoft Authenticator, 1Password, Authy, or similar, and type the 6-digit code it shows. [Watch it](/1NEON/live?play=authenticator).
 
 ### What's a passkey?
-A sign-in that uses your face, fingerprint, or device PIN instead of a code. It's faster and can't be phished.
+A sign-in that uses your face, fingerprint, or device PIN instead of a code. It's faster and can't be phished. Add one on your profile under Two-step verification; next time you sign in, 1NEON offers it first. [Watch it](/1NEON/live?play=passkey).
 
 ## Your account
 

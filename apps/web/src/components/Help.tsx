@@ -42,10 +42,10 @@ export const GUIDES: Record<PageKey, Guide> = {
   home: {
     title: "Home",
     purpose: "Your starting point: what needs you, and what changed lately.",
-    howto: ["Work through Needs you, top to bottom.", "Coming up shows what's due in the next three weeks.", "Insights in the menu has charts of how work is going."],
+    howto: ["Work through Needs you, top to bottom.", "Coming up shows what's due in the next six weeks.", "Insights in the menu has charts of how work is going."],
     tour: [
       { at: "needs-you", title: "Needs you", text: "Things waiting on you: approvals, tasks, and files to send. Open one to act on it." },
-      { at: "coming-up", title: "Coming up", text: "The next three weeks at a glance: due dates, milestones, and targets. Overdue things are flagged." },
+      { at: "coming-up", title: "Coming up", text: "This week and the next two at a glance, then a list of everything due in the next six weeks. Overdue things are flagged." },
       { at: "get-started", title: "Get started", text: "A short setup checklist. It disappears once everything is done." },
       { at: "activity", title: "Recent activity", text: "What people did lately, newest first." },
     ],

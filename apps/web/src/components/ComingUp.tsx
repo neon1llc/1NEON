@@ -1,4 +1,4 @@
-// apps/web/src/components/ComingUp.tsx - Coming up on Home: the next three weeks as a strip of days with
+// apps/web/src/components/ComingUp.tsx - Coming up on Home: this week and the next two as a strip of days, with
 // a mark for each dated thing (due work, milestones, project targets), then the same things as an
 // agenda grouped into Overdue, This week, Next week, and Later.
 
@@ -59,7 +59,7 @@ export function ComingUp({ tid, base }: { tid: string; base: string }) {
         {overdue.length > 0 && <span className="tag warn">{overdue.length} overdue</span>}
       </div>
       {/* The strip: three weeks of days, today outlined, a mark per dated thing */}
-      <div className="strip" role="img" aria-label={`Next three weeks: ${events.filter((e) => !e.overdue).length} dated things`}>
+      <div className="strip" role="img" aria-label={`This week and the next two: ${days.reduce((n, d) => n + on(d).length, 0)} dated things`}>
         {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => <span key={i} className="dow" aria-hidden="true">{d}</span>)}
         {days.map((d) => {
           const list = on(d);
