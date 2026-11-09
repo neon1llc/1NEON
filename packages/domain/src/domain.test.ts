@@ -146,6 +146,8 @@ describe("canApprove", () => {
     expect(canApprove(person("u_raj"), "admin", []).ok).toBe(true);
     expect(canApprove(person("u_dana"), "editor", []).ok).toBe(false);
     expect(canApprove(person("u_op", true), "admin", []).ok).toBe(false);
+    // In neon1's own organization the operator is the client, so with no decider named it approves
+    expect(canApprove(person("u_op", true), "admin", [], true).ok).toBe(true);
   });
 });
 
@@ -160,6 +162,11 @@ describe("canNameDecider", () => {
     expect(canNameDecider(actor(false, false), "admin")).toEqual({ ok: false, reason: "strong_auth_required" });
     expect(canNameDecider(actor(false, true), "editor")).toEqual({ ok: false, reason: "decider_admin_only" });
     expect(canNameDecider(actor(true, true), "admin")).toEqual({ ok: false, reason: "decider_admin_only" });
+  });
+
+  it("lets the operator name it in neon1's own organization, where neon1 is the client", () => {
+    expect(canNameDecider(actor(true, true), "admin", true).ok).toBe(true);
+    expect(canNameDecider(actor(true, false), "admin", true)).toEqual({ ok: false, reason: "strong_auth_required" });
   });
 
   it("compares decision makers as a set", () => {

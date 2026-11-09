@@ -2,7 +2,7 @@
 // its workflow stages, the workspace landing, Coming up, Insights, and the audit trail.
 
 
-import { Stage, canApprove, type Tenant } from "@1neon/domain";
+import { Stage, canApprove, isOwnOrg, type Tenant } from "@1neon/domain";
 import { z } from "zod";
 import { actorId, body, fail, need, now, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
@@ -49,7 +49,7 @@ export function workspaceRoutes(app: App, k: Kit) {
     for (const p of live) {
       const items = await repo.listItems(t.id, p.id);
       // A project with an approved option no longer asks anyone to approve the others
-      const decider = canApprove(actor, c.get("access"), p.people).ok && !items.some((i) => i.kind === "option" && i.status === "approved");
+      const decider = canApprove(actor, c.get("access"), p.people, isOwnOrg(t.slug)).ok && !items.some((i) => i.kind === "option" && i.status === "approved");
       const options = decider ? items.filter((i) => i.kind === "option" && i.status === "proposed").sort((a, b) => a.title.localeCompare(b.title)) : [];
       if (options.length) waiting.push({ projectId: p.id, projectKey: p.key, projectName: p.name, itemId: options[0]!.id, title: "Choose an option", kind: "option", action: "choose", count: options.length });
       for (const i of items) {

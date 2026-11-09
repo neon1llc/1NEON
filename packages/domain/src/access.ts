@@ -71,18 +71,27 @@ export function can(
 }
 
 
+/** neon1's own organization (made by bootstrap). There neon1 is also the client, so the rules that keep
+ * the proposer from approving don't apply: its operators decide and name deciders like a client admin */
+export const NEON1_SLUG = "neon1";
+export const isOwnOrg = (slug: string | undefined) => slug === NEON1_SLUG;
+
+
 /** Who may approve on one project: a named decision maker; with none named, an admin member of the client */
 export function canApprove(
   actor: Actor,
   access: AccessLevel | undefined,
   people: readonly { userId: string; role: string }[],
+  ownOrg = false,
 ): Decision {
   const base = can(actor, "approve", access);
   if (!base.ok) return base;
   const deciders = people.filter((p) => p.role === "decision_maker").map((p) => p.userId);
   if (deciders.length) return deciders.includes(actor.userId) ? { ok: true } : { ok: false, reason: "not_decider" };
-  // No one named: the organization's own admins decide; neon1 proposes, so the operator role alone never approves
-  return access === "admin" && !actor.operator ? { ok: true } : { ok: false, reason: "not_decider" };
+  // No one named: the organization's own admins decide; neon1 proposes, so the operator role alone never
+  // approves, except in neon1's own organization, where it is the client
+  if (actor.operator) return ownOrg ? { ok: true } : { ok: false, reason: "not_decider" };
+  return access === "admin" ? { ok: true } : { ok: false, reason: "not_decider" };
 }
 
 
@@ -90,10 +99,12 @@ export function canApprove(
  * Who may name or change a project's decision maker (owner policy, 2026-11-09): only an admin member
  * of the client, in a confirmed session. Editors still edit the work and its other people, but an
  * approval commits the client to scope and cost, so whoever proposes can't appoint who approves.
- * neon1's operator role proposes and never delegates the client's authority.
+ * neon1's operator role proposes and never delegates the client's authority, except in neon1's own
+ * organization (ownOrg), where neon1 is the client.
  */
-export function canNameDecider(actor: Actor, access: AccessLevel | undefined): Decision {
-  if (actor.operator || access !== "admin") return { ok: false, reason: "decider_admin_only" };
+export function canNameDecider(actor: Actor, access: AccessLevel | undefined, ownOrg = false): Decision {
+  const admin = actor.operator ? ownOrg : access === "admin";
+  if (!admin) return { ok: false, reason: "decider_admin_only" };
   return actor.strongSession ? { ok: true } : { ok: false, reason: "strong_auth_required" };
 }
 

@@ -2,7 +2,7 @@
 // Execute, Observe, Normalize).
 
 
-import { betterWhen, canApprove, KIND_LAYER, metricProgress, MetricFields, OptionFields, ProjectRole, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
+import { betterWhen, canApprove, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, ProjectRole, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
 import { ArrowRight, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
@@ -130,7 +130,7 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
   // The most pressing step first: a decision, then files, then the caller's own work, then the stage's goal
   let text: ReactNode;
   let action: { to: string; label: string } | undefined;
-  if (proposed.length && canApprove(actor, access, p.people).ok) {
+  if (proposed.length && canApprove(actor, access, p.people, isOwnOrg(org.slug)).ok) {
     text = <>Choose an option: {proposed.length} {proposed.length === 1 ? "is" : "are"} ready for your approval.</>;
     action = { to: `${base}/needs#options`, label: "Compare options" };
   } else if (proposed.length) {
@@ -303,7 +303,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
         </div>
         {/* Project roles, with a fallback for people who left the organization */}
         <h2 className="section-h">People {canWrite && <button className="link small" onClick={() => setPeopleOpen(true)}>Edit</button>}</h2>
-        {!p.people.some((x) => x.role === "decision_maker") && <p className="notice small">No decision maker yet. An admin of your organization can approve options{access === "admin" && !me.operator ? ", or name a decision maker under People" : ""}.</p>}
+        {!p.people.some((x) => x.role === "decision_maker") && <p className="notice small">No decision maker yet. An admin of your organization can approve options{(me.operator ? isOwnOrg(org.slug) : access === "admin") ? ", or name a decision maker under People" : ""}.</p>}
         {p.people.length === 0 ? <p className="muted small">No one on this project yet.</p> : (
           <div className="rows">
             {p.people.map((x) => (
@@ -376,8 +376,9 @@ function PeopleDialog({ open, onClose, people, version, onSave }: { open: boolea
   const { org, access } = useOrg();
   const me = useSession();
   // Owner policy: only a client admin names or changes the decision maker (the API also asks them to
-  // confirm it's them); everyone else edits the other roles around it
-  const mayName = access === "admin" && !me.operator;
+  // confirm it's them); everyone else edits the other roles around it. In neon1's own organization
+  // neon1 is the client, so its operators name the decision maker there too
+  const mayName = me.operator ? isOwnOrg(org.slug) : access === "admin";
   const members = useMembers(org.id);
   const [base, setBase] = useState({ people, version });
   const [draft, setDraft] = useState(people);
@@ -765,7 +766,7 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
   const members = useMembers(org.id);
   const names = new Map(members.data?.map((m) => [m.userId, m.name || m.email]) ?? []);
   // Only the named decision maker (or, with none named, a client admin) sees Approve
-  const decider = canApprove({ userId: me.user.id, operator: me.operator, strongSession: false }, access, project.people).ok;
+  const decider = canApprove({ userId: me.user.id, operator: me.operator, strongSession: false }, access, project.people, isOwnOrg(org.slug)).ok;
   const deciders = project.people.filter((x) => x.role === "decision_maker").map((x) => names.get(x.userId) ?? "the decision maker");
   const toast = useToast();
   const refresh = useRefresh(org.id);

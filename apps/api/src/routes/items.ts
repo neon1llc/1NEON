@@ -2,7 +2,7 @@
 // approving an option into an immutable decision, and the advisory edit markers.
 
 
-import { ApproveInput, CreateItemInput, DecisionFields, Item, OptionFields, UpdateItemInput, canApprove, newId, rankBetween, settableStatus, type Project } from "@1neon/domain";
+import { ApproveInput, CreateItemInput, DecisionFields, Item, OptionFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, type Project } from "@1neon/domain";
 import { z } from "zod";
 import { actorId, body, byRank, check, defined, fail, label, need, now, validateFields, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
@@ -101,7 +101,7 @@ export function itemRoutes(app: App, k: Kit) {
   app.post("/t/:tid/projects/:pid/items/:iid/approve", async (c) => {
     const p = await project(c);
     // Only a named decision maker approves (or, with none named, the client's own admins)
-    check(canApprove(who(c).actor, c.get("access"), p.people));
+    check(canApprove(who(c).actor, c.get("access"), p.people, isOwnOrg(c.get("tenant").slug)));
     const option = await repo.getItem(p.tenantId, p.id, c.req.param("iid"));
     if (!option || option.kind !== "option") fail(404, "not_found", "That option no longer exists.");
     if (option.status !== "proposed") fail(409, "not_proposed", option.status === "approved" ? "This option is already approved." : "Only an option shared for approval can be approved.");

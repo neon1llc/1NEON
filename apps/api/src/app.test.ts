@@ -691,6 +691,12 @@ describe("naming the decision maker", () => {
     expect((await call(raj, "PATCH", path, { version: p.version, people: [{ userId: u.op, role: "decision_maker" }] })).json.error).toBe("operator_decider");
   });
 
+  it("lets the operator name the decision maker in neon1's own organization, itself included", async () => {
+    const u = await ids();
+    const r = await call(OP, "POST", `/t/${s.neon1.id}/projects`, { name: "Own work", people: [{ userId: u.op, role: "decision_maker" }] });
+    expect(r.status).toBe(201);
+  });
+
   it("lets a confirmed client admin change it, and records old and new", async () => {
     const u = await ids();
     const { p, path } = await flow1();

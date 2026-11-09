@@ -2,7 +2,7 @@
 // tenant-scoped lookups and guards that several features share.
 
 
-import { canNameDecider, deciderIds, fileState, type Project } from "@1neon/domain";
+import { canNameDecider, deciderIds, isOwnOrg, fileState, type Project } from "@1neon/domain";
 import type { Context, Hono } from "hono";
 import type { CognitoAuth } from "../auth.ts";
 import type { Config } from "../config.ts";
@@ -54,9 +54,11 @@ export function kit(d: Deps, drainNow: (queued: WriteOp[]) => Promise<void>) {
     const was = deciderIds(before);
     const now_ = deciderIds(after);
     if (was.join() === now_.join()) return undefined;
-    check(canNameDecider(who(c).actor, c.get("access")));
+    const own = isOwnOrg(c.get("tenant").slug);
+    check(canNameDecider(who(c).actor, c.get("access"), own));
     const users = new Map((await Promise.all([...new Set([...was, ...now_])].map((id) => repo.getUser(id)))).filter((u) => u).map((u) => [u!.id, u!]));
-    if (now_.some((id) => cfg.operatorEmails.includes(users.get(id)?.email ?? ""))) fail(400, "operator_decider", "neon1 proposes the options, so it can't be this organization's decision maker. Name someone from the organization.");
+    // A client's decider can't be neon1, which proposes; in neon1's own organization it can
+    if (!own && now_.some((id) => cfg.operatorEmails.includes(users.get(id)?.email ?? ""))) fail(400, "operator_decider", "neon1 proposes the options, so it can't be this organization's decision maker. Name someone from the organization.");
     const list = (ids: string[]) => ids.map((id) => users.get(id)?.name || users.get(id)?.email || id).join(", ") || "nobody";
     return `${list(was)} → ${list(now_)}`;
   }
