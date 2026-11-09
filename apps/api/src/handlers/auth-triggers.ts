@@ -4,6 +4,7 @@
 
 
 import type { CustomMessageTriggerEvent, PreSignUpTriggerEvent } from "aws-lambda";
+import { signInCodeEmail } from "../emails.ts";
 import { branded, link } from "../mail.ts";
 import { DynamoTable } from "../store/dynamo.ts";
 import { Repo } from "../store/repo.ts";
@@ -36,6 +37,13 @@ const CODES: Record<string, { subject: string; label: string; heading: string; l
 export function message(event: CustomMessageTriggerEvent, at = new Date()) {
   const kind = CODES[event.triggerSource];
   if (!kind) return event;
+  // Sign-in codes share their template with the browser demo
+  if ((event.triggerSource as string) === "CustomMessage_Authentication") {
+    const mail = signInCodeEmail({ code: (event as CustomMessageTriggerEvent).request.codeParameter, portal: PORTAL, at });
+    event.response.emailSubject = mail.subject;
+    event.response.emailMessage = mail.html;
+    return event;
+  }
   event.response.emailSubject = kind.subject;
   event.response.emailMessage = branded({
     label: kind.label,
@@ -43,12 +51,7 @@ export function message(event: CustomMessageTriggerEvent, at = new Date()) {
     heading: kind.heading,
     body: `<p style="margin:0">${kind.lead}</p>`,
     code: event.request.codeParameter,
-    // Sign-in codes also come as a link that finishes sign-in; the code rides in the fragment,
-    // which browsers never send to a server, and only works where sign-in started
-    button: event.triggerSource === "CustomMessage_Authentication" ? { label: "Sign in with this code", url: `${PORTAL}#code=${event.request.codeParameter}` } : undefined,
-    note: event.triggerSource === "CustomMessage_Authentication"
-      ? "The link works in the browser where you asked for the code. Either way, the code works for a few minutes. If you didn't ask for it, you can ignore this email."
-      : "It works for a few minutes. If you didn't ask for it, you can ignore this email.",
+    note: "It works for a few minutes. If you didn't ask for it, you can ignore this email.",
     at,
   });
   return event;

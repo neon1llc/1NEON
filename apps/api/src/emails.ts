@@ -34,6 +34,26 @@ export function inviteEmail(opts: { orgName: string; inviter: string; url: strin
 }
 
 
+/** The sign-in code email Cognito sends through the custom message trigger. `code` may be Cognito's
+ * {####} placeholder; the browser demo passes a real one */
+export function signInCodeEmail(opts: { code: string; portal: string; at?: Date }) {
+  const subject = "Your portal sign-in code";
+  const html = branded({
+    label: "your sign-in code",
+    preheader: "Your sign-in code: it works for a few minutes.",
+    heading: "Your sign-in code",
+    body: `<p style="margin:0">Use this code to sign in to ${link("1NEON", opts.portal)}.</p>`,
+    code: opts.code,
+    // The code also comes as a link that finishes sign-in; it rides in the fragment, which browsers
+    // never send to a server, and only works where sign-in started
+    button: { label: "Sign in with this code", url: `${opts.portal}#code=${opts.code}` },
+    note: "The link works in the browser where you asked for the code. Either way, the code works for a few minutes. If you didn't ask for it, you can ignore this email.",
+    at: opts.at,
+  });
+  return { subject, text: `Your 1NEON sign-in code is ${opts.code}. It works for a few minutes.`, html };
+}
+
+
 /** Notice that a passkey was added, with where to check */
 export function passkeyEmail(opts: { url: string; what?: string; at?: Date }) {
   const at = opts.at ?? new Date();
