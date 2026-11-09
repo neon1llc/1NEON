@@ -3,125 +3,67 @@
 
 
 import {
-  ApproveInput,
-  CreateDocInput,
-  CreateItemInput,
-  CreateProjectInput,
-  CreateTenantInput,
-  DEFAULT_STAGES,
-  DecisionFields,
   DocumentRecord,
-  OptionFields,
-  InviteInput,
   Item,
-  KIND_LAYER,
-  MoveProjectInput,
-  Stage,
-  UpdateItemInput,
-  UpdateMeInput,
-  UpdateMemberInput,
-  UpdateProjectInput,
-  can,
-  canApprove,
-  canNameDecider,
-  deciderIds,
-  fileState,
-  formatClientId,
-  groupOf,
-  settableStatus,
-  type FileProblem,
-  itemFields,
-  newId,
-  rankBetween,
-  slugify,
-  templateById,
-  type AccessLevel,
-  type Action,
-  type Actor,
-  type Member,
   Member as MemberSchema,
-  type Project,
   Project as ProjectSchema,
-  type Tenant,
   Tenant as TenantSchema,
   type User,
+  UpdateMeInput,
+  type Member,
+  type Tenant,
+  CreateTenantInput,
+  DEFAULT_STAGES,
+  can,
+  formatClientId,
+  newId,
+  slugify,
+  Stage,
+  canApprove,
+  groupOf,
+  InviteInput,
+  UpdateMemberInput,
+  CreateProjectInput,
+  MoveProjectInput,
+  UpdateProjectInput,
+  rankBetween,
+  templateById,
+  type Project,
+  ApproveInput,
+  CreateItemInput,
+  DecisionFields,
+  OptionFields,
+  UpdateItemInput,
+  settableStatus,
+  CreateDocInput,
+  fileState,
+  type FileProblem,
 } from "@1neon/domain";
 import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { ConflictError, StoreBusyError, type Row } from "./store/types.ts";
+import { REASONS, fail, who, type Env, body, defined, now, check, actorId, need, MAX_TRANSACTION, byRank, label, validateFields } from "./lib/http.ts";
+import { assurance } from "./lib/assurance.ts";
+import { kit, type Deps } from "./lib/kit.ts";
+import { installOutbox } from "./lib/transactions.ts";
+import { e164, codeText, hashCode, smsAfterSave, smsFactorOn, smsState, confirmText, smsReady } from "./sms.ts";
 import { z } from "zod";
-import { CognitoAuth, type Verified } from "./auth.ts";
-import type { Config } from "./config.ts";
-import type { Directory, Mailer, Storage, Texter } from "./services.ts";
+import type { Verified } from "./auth.ts";
+import { factorInventory } from "./factors.ts";
 import { factorRemovedEmail, passkeyEmail } from "./emails.ts";
-import { factorInventory, type FactorInventory } from "./factors.ts";
-import { MemoryStorage } from "./local.ts";
+import { PENDING_TOTP_MS, PENDING_TOTP_TRIES, keys } from "./store/repo.ts";
 import { checkTotp, newTotp } from "./totp.ts";
-import { keys, PENDING_TOTP_MS, PENDING_TOTP_TRIES, Repo } from "./store/repo.ts";
-import { ConflictError, StoreBusyError, type Row, type WriteOp } from "./store/types.ts";
-import { drainOutbox, outboxForAudit, outboxOp, withTimeout } from "./outbox.ts";
+import { outboxOp } from "./outbox.ts";
 import { settleFile, unwatchOp, watchOp } from "./files.ts";
-import { accountAllows, isOptOut, CODE_MS, CODE_TRIES, CODES_PER_HOUR, codeText, confirmText, e164, hashCode, newCode, smsAfterSave, smsFactorOn, smsReady, smsState } from "./sms.ts";
+import { MemoryStorage } from "./local.ts";
 
 
-/** Everything the app needs from outside; tests and local dev pass in-memory versions */
-export interface Deps {
-  cfg: Config;
-  repo: Repo;
-  directory: Directory;
-  mailer: Mailer;
-  storage: Storage;
-  // Optional: without it, nobody gets texts
-  texter?: Texter;
-  auth?: CognitoAuth;
-  // "worker": a scheduled worker sends queued messages (production). "inline" (the default): sent
-  // right after the change, for local runs, tests, and the browser demo
-  outbox?: "inline" | "worker";
-}
+// The app's dependencies; defined beside the route kit, re-exported for existing importers
+export type { Deps };
 
 
-/** The signed-in person and the actor that permission checks use */
-interface Who {
-  user: User;
-  actor: Actor;
-  // The sign-in session, for marking it strong after a passkey or authenticator check
-  jti?: string;
-}
-
-
-// Per-request values set by middleware: who is calling, and the tenant a /t/:tid route resolved
-type Env = { Variables: { who: Who; tenant: Tenant; access: AccessLevel | undefined } };
-
-
-// Timestamps are ISO strings in UTC, as the schemas expect
-const now = () => new Date().toISOString();
 // Edit markers last two minutes; the editor's browser renews them while the form is open
 const EDIT_MS = 2 * 60 * 1000;
-
-
-/** Stop the request with a JSON error the web app can show as written */
-function fail(status: 400 | 401 | 403 | 404 | 409 | 410 | 412 | 428 | 429 | 503, error: string, message: string, current?: unknown): never {
-  throw new HTTPException(status, { res: Response.json({ error, message, current }, { status }) });
-}
-
-
-/** Parse and validate a JSON body; validation messages name the field that failed */
-async function body<S extends z.ZodType>(c: Context, schema: S): Promise<z.infer<S>> {
-  const raw = await c.req.json().catch(() => fail(400, "bad_json", "The request body isn't valid JSON."));
-  const r = schema.safeParse(raw);
-  if (!r.success) fail(400, "invalid", r.error.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; "));
-  return r.data;
-}
-
-
-// Status and wording for each permission refusal from can()
-const REASONS = {
-  not_member: [404, "not_found", "That organization doesn't exist, or you don't have access to it."],
-  forbidden: [403, "forbidden", "Your access level doesn't allow that."],
-  strong_auth_required: [403, "strong_auth_required", "Confirm it's you with your passkey, authenticator app, or a texted code (or set one up on your profile), then try again."],
-  read_only_view: [403, "read_only", "All clients is read only. Open the organization to make changes."],
-  not_decider: [403, "not_decider", "Only this project's decision maker can approve. An admin can name one on the project."],
-  decider_admin_only: [403, "decider_admin_only", "Only an admin of this organization can name or change the decision maker."],
-} as const;
 
 
 // Why a failed file can't be downloaded, in words; the codes are defined in the domain model
@@ -134,32 +76,18 @@ const FILE_PROBLEM: Record<FileProblem, string> = {
 };
 
 
-// Each table's own write, before any app wrapped it
-const rawWrites = new WeakMap<object, (ops: WriteOp[]) => Promise<void>>();
-
-
 /** Build the API. Order matters: errors, CSRF, public routes, identity, then tenant routes */
 export function createApp(d: Deps) {
   const { repo, cfg } = d;
   const app = new Hono<Env>().basePath("/1NEON/api");
 
-  // Notifications ride on the audit trail: every write that records audit events also writes their
-  // outbox rows in the same transaction, so a committed change always has its messages queued. The
-  // worker sends them outside the request; locally, in tests, and in the demo they're sent right after
-  // The raw write is kept once per table, so a second app built on the same table (tests, the demo)
-  // replaces the wrapper instead of stacking on it with the first app's stale services
-  const write = rawWrites.get(repo.table) ?? repo.table.write.bind(repo.table);
-  rawWrites.set(repo.table, write);
-  repo.table.write = async (ops) => {
-    const queued = outboxForAudit(ops);
-    await write([...ops, ...queued]);
-    if (queued.length && (d.outbox ?? "inline") === "inline") await drainNow(queued);
-  };
-  /** Inline mode: send the rows just written; a failure stays queued and is logged, never thrown */
-  async function drainNow(queued: WriteOp[]) {
-    const ids = queued.flatMap((o) => ("put" in o ? [o.put.SK] : []));
-    await drainOutbox({ repo, mailer: d.mailer, texter: d.texter, cfg }, { ids }).catch((e) => console.error(JSON.stringify({ level: "error", message: `outbox: ${(e as Error).name}` })));
-  }
+  // Notifications ride on the audit trail: from here on, every table write queues the outbox rows for
+  // its audit events in the same transaction (see lib/transactions.ts)
+  const drainNow = installOutbox(d);
+  // Shared services and tenant guards handed to every route module
+  const k = kit(d, drainNow);
+  const { project, deciderChange, activeMembers, audit, allDocs } = k;
+  const { tokenOf, mayChangeFactors, refreshEnrolled, factorChanged, notice, textCode, countPhoneTry, useTotpCode } = assurance(k);
 
   // Known errors keep their status. A version conflict returns the newer record only when the public
   // conflict policy allows that kind of record, and only its schema's fields; anything else (sign-in
@@ -207,7 +135,6 @@ export function createApp(d: Deps) {
   app.get("/health", (c) => c.json({ ok: true, env: cfg.env, version: (typeof process === "undefined" ? undefined : process.env.APP_VERSION) ?? "dev" }));
 
   // --- Sign-in (Cognito) -------------------------------------------------
-
   /** After any sign-in: invite check, link the Cognito identity, refresh strong sign-in */
   async function admit(r: Verified | undefined): Promise<"ok" | "failed" | "not_invited"> {
     if (!r || !r.emailVerified) return "failed";
@@ -299,9 +226,7 @@ export function createApp(d: Deps) {
     return user && { user, jti: ident.jti };
   }
 
-  // The caller set by the identity middleware
-  const who = (c: Context<Env>) => c.get("who");
-
+  // --- The signed-in person: profile, number check, and second steps -------
   // Me: the person, their organizations (all of them for the operator), and the join bookkeeping
   app.get("/me", async (c) => {
     const { user, actor } = who(c);
@@ -374,31 +299,6 @@ export function createApp(d: Deps) {
     return c.json({ ok: true });
   });
 
-  /**
-   * Text one code to a number and keep only its hash under this person's key, with the hourly limit
-   * per person and the account's daily budget. Shared by number checks and confirming it's you
-   */
-  async function textCode(user: User, sk: string, to: string, words: (code: string) => string) {
-    const texter = d.texter;
-    if (!texter) fail(503, "texts_unavailable", "Texts aren't available yet. Email notices still work.");
-    const k = { PK: `USER#${user.id}`, SK: sk };
-    const prev = await repo.table.get(k.PK, k.SK);
-    const recent = ((prev?.sentAt as string[] | undefined) ?? []).filter((t) => Date.now() - Date.parse(t) < 3600_000);
-    if (recent.length >= CODES_PER_HOUR) fail(429, "too_many_codes", "Too many codes this hour. Try again later.");
-    if (!(await accountAllows(repo))) fail(429, "texts_busy", "Texts are paused for today. Try again tomorrow.");
-    const { code, hash } = await newCode(user.id);
-    const at = now();
-    const version = Number(prev?.version ?? 0) + 1;
-    await repo.table.write([{ put: { ...k, hash, phone: to, expiresAt: new Date(Date.now() + CODE_MS).toISOString(), attempts: 0, sentAt: [...recent, at], version, ttl: Math.floor(Date.now() / 1000) + 3600 }, guard: prev ? { version: Number(prev.version) } : { create: true } }]);
-    // The person waits for this one, so it gets the same time limit as queued sends
-    try {
-      await withTimeout(texter.send(to, words(code)), 5_000);
-    } catch (e) {
-      if (isOptOut(e)) fail(409, "carrier_opted_out", "This number replied STOP earlier. Text START to the number 1NEON texts come from, then ask for a code again.");
-      throw e;
-    }
-  }
-
   // Check the code; a match at the same number marks it verified
   app.post("/me/phone/confirm", async (c) => {
     const { user } = who(c);
@@ -411,70 +311,6 @@ export function createApp(d: Deps) {
     await repo.table.write([{ delete: k }]);
     return c.json({ ok: true });
   });
-
-  /**
-   * Count one try at the phone code before any verdict. A write that loses a race is read again and
-   * counted afresh, so parallel guesses can't slip past the limit; still contended after five reads
-   * is answered as busy rather than judged uncounted
-   */
-  async function countPhoneTry(k: { PK: string; SK: string }): Promise<Row> {
-    for (let tries = 0; tries < 5; tries++) {
-      const row = await repo.table.get(k.PK, k.SK);
-      if (!row?.hash || Date.parse(String(row.expiresAt)) < Date.now()) fail(409, "no_code", "Ask for a new code.");
-      if (Number(row.attempts) >= CODE_TRIES) fail(429, "locked", "Too many wrong codes. Ask for a new one.");
-      try {
-        await repo.table.write([{ put: { ...row, attempts: Number(row.attempts) + 1, version: Number(row.version) + 1 }, guard: { version: Number(row.version) } }]);
-        return row;
-      } catch (e) {
-        if (!(e instanceof ConflictError)) throw e;
-      }
-    }
-    fail(429, "busy", "Too many tries at once. Wait a moment and try again.");
-  }
-
-  // --- Sign-in methods ------------------------------------------------------
-  // Rule for every add, replace, or remove: an account that already has a passkey, authenticator, or text codes
-  // (or whose methods we can't check right now) needs this session to have proved one recently.
-  // Only a genuinely unenrolled account, such as a new invitee, may add its first from an email session
-
-  /** The access token Cognito lookups use; "local" in dev and tests */
-  const tokenOf = (c: Context<Env>) => d.auth?.accessToken(c) ?? "local";
-
-  /** Refuse a factor change the rule above doesn't allow; returns the inventory it read */
-  async function mayChangeFactors(c: Context<Env>): Promise<FactorInventory> {
-    const { user, actor } = who(c);
-    const inv = await factorInventory(repo, d.directory, user, tokenOf(c));
-    if (inv.any === "unknown" && !actor.strongSession) fail(503, "factors_unknown", "We couldn't check your sign-in methods just now. Confirm it's you, or try again in a minute.");
-    if (inv.any === true && !actor.strongSession) fail(403, "strong_auth_required", "Confirm it's you with a passkey, authenticator app, or text code you already have, then try again.");
-    return inv;
-  }
-
-  /** Keep the profile's display hints in step with a known inventory (never with an unknown one) */
-  async function refreshEnrolled(user: User, inv: FactorInventory) {
-    if (inv.any === "unknown") return;
-    const passkey = inv.passkey === "unknown" ? user.passkey : inv.passkey;
-    if (inv.any === user.strongAuth && Boolean(passkey) === Boolean(user.passkey)) return;
-    await repo.saveUser({ ...user, strongAuth: inv.any, passkey, version: user.version + 1, updatedAt: now() }, user.version);
-  }
-
-  /**
-   * After a factor is removed or replaced: every other session's earlier proof stops counting, this
-   * session keeps its own (it just made the change), and the event is recorded and emailed
-   */
-  async function factorChanged(c: Context<Env>, action: string, summary: string) {
-    const { user, jti } = who(c);
-    const at = now();
-    await repo.raiseAssuranceFloor(user.id, at);
-    const mine = jti ? await repo.getSession(jti) : undefined;
-    if (jti && mine?.strong) await repo.saveSession(jti, user.id, true, { strongAt: new Date(Date.parse(at) + 1).toISOString(), strongUntil: mine.strongUntil });
-    await repo.securityEvent(user.id, action, summary);
-  }
-
-  /** Mail a security notice; a mail failure never undoes the change, but it is logged */
-  async function notice(user: User, mail: { subject: string; text: string; html: string }) {
-    await d.mailer.send(user.email, mail.subject, mail.text, mail.html).catch((e) => console.error(JSON.stringify({ level: "error", message: `security notice: ${String(e)}` })));
-  }
-
   // Add a passkey, under the rule above, so someone who only got into the email can't plant their own
   app.post("/me/passkey/start", async (c) => {
     await mayChangeFactors(c);
@@ -613,33 +449,6 @@ export function createApp(d: Deps) {
     return c.json({ ok: true });
   });
 
-  /**
-   * Check one code against the active authenticator. A verdict is returned only after the write that
-   * counts it (a wrong try, or the used time step) has landed; a write that loses a race is read
-   * again and decided afresh, so concurrent tries can't skip the count or reuse a code
-   */
-  async function useTotpCode(uid: string, code: string): Promise<"ok" | "wrong" | "used" | "locked" | "none" | "busy"> {
-    for (let tries = 0; tries < 5; tries++) {
-      const t = await repo.getTotp(uid);
-      if (!t?.confirmed) return "none";
-      if (t.lockedUntil && Date.parse(t.lockedUntil) > Date.now()) return "locked";
-      const step = checkTotp(t.secret, code);
-      const ok = step !== undefined && step > t.lastCounter;
-      const fails = t.fails + 1;
-      const next = ok
-        ? { ...t, lastCounter: step, fails: 0, lockedUntil: undefined, version: t.version + 1 }
-        : { ...t, fails: fails >= 5 ? 0 : fails, lockedUntil: fails >= 5 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : t.lockedUntil, version: t.version + 1 };
-      try {
-        await repo.saveTotp(uid, next, { version: t.version });
-      } catch (e) {
-        if (e instanceof ConflictError) continue;
-        throw e;
-      }
-      return ok ? "ok" : step === undefined ? "wrong" : "used";
-    }
-    return "busy";
-  }
-
   // Remove the authenticator app; needs a confirmed session. Other sessions lose their confirmation
   app.delete("/me/totp", async (c) => {
     const { user, actor } = who(c);
@@ -652,7 +461,6 @@ export function createApp(d: Deps) {
   });
 
   // --- Operator: organizations and the All clients view --------------------
-
   // Create an organization with the default stages and the next client ID
   app.post("/orgs", async (c) => {
     const { actor, user } = who(c);
@@ -717,11 +525,8 @@ export function createApp(d: Deps) {
     await next();
   }
 
-  // Shorthand for a permission check inside a tenant route
-  const need = (c: Context<Env>, action: Action) => check(can(who(c).actor, action, c.get("access")));
-  // Who to record in updatedBy and the audit log
-  const actorId = (c: Context<Env>) => who(c).user.id;
-
+  // Tenant routes, in their original order: overview, notifications, people, projects, items,
+  // comments, edit markers, documents
   // The organization and the caller's access, for the web app's frame
   app.get("/t/:tid", (c) => {
     need(c, "read");
@@ -885,7 +690,6 @@ export function createApp(d: Deps) {
     need(c, "read");
     return c.json(await repo.listAudit(c.get("tenant").id, 100));
   });
-
   // Notifications: what others did here lately, each with its group and importance, and when the
   // caller last looked. Info-level events (sign-ins) show in the list but never count as new
   app.get("/t/:tid/notifications", async (c) => {
@@ -910,9 +714,6 @@ export function createApp(d: Deps) {
     if (m) await repo.saveMember({ ...m, seenAt: now(), version: m.version + 1, updatedAt: now(), updatedBy: actorId(c) }, { version: m.version });
     return c.body(null, 204);
   });
-
-  // People
-
   // Members with their current profile details
   app.get("/t/:tid/members", async (c) => {
     need(c, "read");
@@ -963,6 +764,7 @@ export function createApp(d: Deps) {
       // The membership and its invitation email are queued together; the email's state shows on People
       const invite = inviteOutbox(t, m, inviter);
       m.invite = { state: "queued", queuedAt: invite.at };
+      // One transaction: membership, membership revision, invitation outbox row, and audit event
       await repo.table.write([repo.memberOp(m, existing ? { version: existing.version } : { create: true }), repo.membershipRevOp(t.id, rev), invite.op, repo.auditOp({ tenantId: t.id, actorId: inviter.id, action: "member.invited", target: uid, summary: `Invited ${p.email} as ${p.access}` })]);
       if ((d.outbox ?? "inline") === "inline") await drainNow([invite.op]);
       out.push((await repo.getMember(t.id, uid)) ?? m);
@@ -986,6 +788,7 @@ export function createApp(d: Deps) {
     if (m.invite && m.invite.state !== "failed" && Date.now() - Date.parse(m.invite.queuedAt) < 10 * 60 * 1000) fail(429, "resend_soon", "The invitation was sent in the last ten minutes. Give it a little longer.");
     const invite = inviteOutbox(t, m, who(c).user);
     const next: Member = { ...m, invite: { state: "queued", queuedAt: invite.at }, version: m.version + 1, updatedAt: now(), updatedBy: actorId(c) };
+    // One transaction: the membership's invite state and the new outbox row
     await repo.table.write([repo.memberOp(next, { version: m.version }), invite.op]);
     if ((d.outbox ?? "inline") === "inline") await drainNow([invite.op]);
     return c.json((await repo.getMember(t.id, m.userId)) ?? next);
@@ -1016,9 +819,6 @@ export function createApp(d: Deps) {
     }
     return c.json(next);
   });
-
-  // Projects
-
   app.get("/t/:tid/projects", async (c) => {
     need(c, "read");
     return c.json(await repo.listProjects(c.get("tenant").id));
@@ -1123,6 +923,7 @@ export function createApp(d: Deps) {
     const { version, targetDate, ...patch } = input;
     const next: Project = { ...p, ...defined(patch), version: p.version + 1, updatedAt: now(), updatedBy: actorId(c) };
     if (targetDate !== undefined) next.targetDate = targetDate ?? undefined;
+    // One transaction: the project, its update event, and (when who decides changed) that event too
     await repo.table.write([
       repo.projectOp(next, { version }),
       repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: "project.updated", target: p.id, summary: `Updated ${p.key}` }),
@@ -1165,7 +966,6 @@ export function createApp(d: Deps) {
     await repo.table.write([repo.projectOp(next, { version: input.version }), repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: "project.trashed", target: p.id, summary: `Moved ${p.key} to Trash` })]);
     return c.json({ ok: true });
   });
-
   // Layer items (Needs, Execute, Observe, Normalize)
 
   app.post("/t/:tid/projects/:pid/items", async (c) => {
@@ -1288,7 +1088,6 @@ export function createApp(d: Deps) {
     ]);
     return c.json({ decision, option: approved }, 201);
   });
-
   // Comments and history on one item. Anyone who can comment may add one; authors and admins remove them
   app.get("/t/:tid/projects/:pid/items/:iid/comments", async (c) => {
     need(c, "read");
@@ -1306,6 +1105,7 @@ export function createApp(d: Deps) {
     const { body: text } = await body(c, z.object({ body: z.string().trim().min(1).max(4000) }));
     const u = who(c).user;
     const comment = { tenantId: p.tenantId, projectId: p.id, itemId: item.id, id: newId("c"), at: now(), authorId: u.id, authorName: u.name || u.email, body: text };
+    // The comment and its audit event land in one transaction
     await repo.table.write([repo.commentOp(comment), repo.auditOp({ tenantId: p.tenantId, actorId: u.id, action: "comment.created", target: item.id, summary: `${p.key}: ${u.name || u.email} commented on "${item.title}"` })]);
     return c.json(comment, 201);
   });
@@ -1319,7 +1119,6 @@ export function createApp(d: Deps) {
     await repo.deleteComment(cm);
     return c.json({ ok: true });
   });
-
   // Edit markers: advisory "Dana is editing" hints that expire on their own
 
   app.post("/t/:tid/projects/:pid/edits", async (c) => {
@@ -1337,20 +1136,10 @@ export function createApp(d: Deps) {
     await repo.clearEditing(p.tenantId, p.id, c.req.param("recordId"), actorId(c));
     return c.json({ ok: true });
   });
-
   // --- Documents: general files and project files, filed by layer -------------
 
   // Where a file's bytes live: the organization's folder, then the project (or "_"), then the record
   const docKey = (x: DocumentRecord) => `t/${x.tenantId}/${x.projectId ?? "_"}/${x.id}/${x.name.replace(/[^\w.\- ]+/g, "_")}`;
-
-  /**
-   * Every file past its upload link in the organization: the general files and each live project's.
-   * Files still checking, or that failed, are listed with their state so nobody uploads twice
-   */
-  async function allDocs(tid: string, pids: string[]) {
-    const lists = await Promise.all([repo.listDocs(tid, undefined), ...pids.map((pid) => repo.listDocs(tid, pid))]);
-    return lists.flat().filter((x) => fileState(x) !== "receiving").sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }
 
   /** The record named by :did, in the project given as ?p= (none for general files); a trashed project's files are gone too */
   async function doc(c: Context<Env>) {
@@ -1417,49 +1206,10 @@ export function createApp(d: Deps) {
     if (x.updatedBy !== actorId(c)) need(c, "delete");
     else need(c, "comment");
     await d.storage.remove(x.key);
+    // One transaction: the record, its sweep watch, and the audit event
     await repo.table.write([{ delete: keys.doc(x.tenantId, x.projectId, x.id) }, unwatchOp(x), repo.auditOp({ tenantId: x.tenantId, actorId: actorId(c), action: "doc.deleted", target: x.id, summary: `Removed "${x.name}"` })]);
     return c.json({ ok: true });
   });
-
-  // --- helpers ---------------------------------------------------------------
-
-  /** The project in :pid within this tenant; trashed projects are gone as far as routes are concerned */
-  async function project(c: Context<Env>, allow: { archived?: boolean } = {}) {
-    const p = await repo.getProject(c.get("tenant").id, c.req.param("pid")!);
-    if (!p || p.deletedAt) fail(404, "not_found", "That project doesn't exist or was deleted.");
-    // Archived projects read as usual but refuse changes, except the routes that unarchive or trash them
-    const reading = c.req.method === "GET" || c.req.method === "HEAD";
-    if (p.archived && !reading && !allow.archived) fail(409, "archived", "This project is archived. Unarchive it to make changes.");
-    return p;
-  }
-
-  /**
-   * A change to who decides needs a confirmed client admin (canNameDecider), and the operator is never
-   * named. Returns "old → new" names for the audit record, or undefined when the decision makers stay
-   */
-  async function deciderChange(c: Context<Env>, before: Project["people"], after: Project["people"]) {
-    const was = deciderIds(before);
-    const now_ = deciderIds(after);
-    if (was.join() === now_.join()) return undefined;
-    check(canNameDecider(who(c).actor, c.get("access")));
-    const users = new Map((await Promise.all([...new Set([...was, ...now_])].map((id) => repo.getUser(id)))).filter((u) => u).map((u) => [u!.id, u!]));
-    if (now_.some((id) => cfg.operatorEmails.includes(users.get(id)?.email ?? ""))) fail(400, "operator_decider", "neon1 proposes the options, so it can't be this organization's decision maker. Name someone from the organization.");
-    const list = (ids: string[]) => ids.map((id) => users.get(id)?.name || users.get(id)?.email || id).join(", ") || "nobody";
-    return `${list(was)} → ${list(now_)}`;
-  }
-
-  /** Refuse anyone who isn't an active member of the organization (assignees, project people) */
-  async function activeMembers(tid: string, uids: string[]) {
-    for (const uid of new Set(uids)) {
-      const m = await repo.getMember(tid, uid);
-      if (!m || m.status === "deactivated") fail(400, "not_member", "Choose someone who is in this organization.");
-    }
-  }
-
-  /** Record an audit event on its own (most writes add theirs to the same transaction instead) */
-  async function audit(c: Context<Env>, action: string, target: string, summary: string) {
-    await repo.table.write([repo.auditOp({ tenantId: c.get("tenant").id, actorId: actorId(c), action, target, summary })]);
-  }
 
   return app;
 }
@@ -1467,45 +1217,6 @@ export function createApp(d: Deps) {
 
 // Phone numbers are read as E.164 by the text rules; re-exported for existing importers
 export { e164 };
-
-
-/** Turn a permission refusal into the matching HTTP error */
-function check(d: ReturnType<typeof can>) {
-  if (!d.ok) {
-    const [status, error, message] = REASONS[d.reason];
-    fail(status, error, message);
-  }
-}
-
-
-/** Validate kind-specific fields; kinds without a schema keep free-form fields */
-function validateFields(kind: Item["kind"], fields: Record<string, unknown>) {
-  const schema = itemFields[kind];
-  if (!schema) return fields;
-  const r = schema.safeParse(fields);
-  if (!r.success) fail(400, "invalid", r.error.issues.map((i) => `fields.${i.path.join(".")}: ${i.message}`).join("; "));
-  return r.data as Record<string, unknown>;
-}
-
-
-// Board and list order
-const byRank = (a: { rank: string }, b: { rank: string }) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0);
-
-
-/** Drop undefined values so a partial update never blanks a field */
-function defined<T extends object>(o: T): Partial<T> {
-  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
-}
-
-
-/** Readable item kind for audit summaries, such as "file request (needs)" */
-function label(kind: Item["kind"]) {
-  return `${kind.replace("_", " ")} (${KIND_LAYER[kind]})`;
-}
-
-
-// DynamoDB's limit on writes in one transaction
-const MAX_TRANSACTION = 100;
 
 
 // AWS SDK error names that mean "throttled or temporarily unavailable", not a failed guard
