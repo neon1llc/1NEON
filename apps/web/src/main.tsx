@@ -8,26 +8,20 @@ import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
 import { RouteError } from "./components/Reads.tsx";
 import { ToastProvider } from "./components/ui.tsx";
 import { AllLayout, OrgLayout, PlainLayout, Root } from "./components/Shell.tsx";
-import { AllWorkflow } from "./pages/AllWorkflow.tsx";
-import { Documents } from "./pages/Documents.tsx";
-import { Insights } from "./pages/Insights.tsx";
 import { Faqs } from "./pages/Faqs.tsx";
-import { LayerPage } from "./pages/LayerPage.tsx";
 import { Legal } from "./pages/Legal.tsx";
-import { MePage } from "./pages/Me.tsx";
-import { NewProject } from "./pages/NewProject.tsx";
 import { NotFound } from "./pages/NotFound.tsx";
-import { People } from "./pages/People.tsx";
-import { ProjectPage } from "./pages/Project.tsx";
-import { Projects } from "./pages/Projects.tsx";
-import { Settings } from "./pages/Settings.tsx";
-import { Workflow } from "./pages/Workflow.tsx";
-import { WorkspacePage } from "./pages/Workspace.tsx";
 import { BASE_PATH, DEMO, devUser, LIVE } from "./lib/api.ts";
 import { setCache, setNavigate } from "./lib/nav.ts";
 import { offline } from "./lib/reads.ts";
 import { Example } from "./pages/Example.tsx";
 import "./styles/app.css";
+
+
+// Signed-in pages load on first visit, so the sign-in screen and the public pages don't download the
+// whole app first. Each module is fetched once; while it loads, the page in view stays put
+const page = <K extends string>(load: () => Promise<Record<K, () => React.ReactNode>>, name: K) => () =>
+  load().then((m) => ({ Component: m[name] }));
 
 
 // Data stays fresh for 10 seconds. Only a dropped connection retries on its own (twice); an HTTP answer
@@ -60,21 +54,21 @@ const router = createBrowserRouter(
           element: <OrgLayout />,
           children: [{ errorElement: <RouteError inFrame />, children: [
             { index: true, element: <Navigate to="workspace" replace /> },
-            { path: "workspace", element: <WorkspacePage /> },
-            { path: "workflow", element: <Workflow /> },
-            { path: "projects", element: <Projects /> },
-            { path: "projects/new", element: <NewProject /> },
-            { path: "projects/:key", element: <ProjectPage /> },
-            { path: "projects/:key/:tab", element: <ProjectPage /> },
-            { path: "layer/:layer", element: <LayerPage /> },
-            { path: "people", element: <People /> },
-            { path: "documents", element: <Documents /> },
-            { path: "insights", element: <Insights /> },
-            { path: "settings", element: <Settings /> },
+            { path: "workspace", lazy: page(() => import("./pages/Workspace.tsx"), "WorkspacePage") },
+            { path: "workflow", lazy: page(() => import("./pages/Workflow.tsx"), "Workflow") },
+            { path: "projects", lazy: page(() => import("./pages/Projects.tsx"), "Projects") },
+            { path: "projects/new", lazy: page(() => import("./pages/NewProject.tsx"), "NewProject") },
+            { path: "projects/:key", lazy: page(() => import("./pages/Project.tsx"), "ProjectPage") },
+            { path: "projects/:key/:tab", lazy: page(() => import("./pages/Project.tsx"), "ProjectPage") },
+            { path: "layer/:layer", lazy: page(() => import("./pages/LayerPage.tsx"), "LayerPage") },
+            { path: "people", lazy: page(() => import("./pages/People.tsx"), "People") },
+            { path: "documents", lazy: page(() => import("./pages/Documents.tsx"), "Documents") },
+            { path: "insights", lazy: page(() => import("./pages/Insights.tsx"), "Insights") },
+            { path: "settings", lazy: page(() => import("./pages/Settings.tsx"), "Settings") },
           ] }],
         },
-        { path: "all", element: <AllLayout />, children: [{ errorElement: <RouteError inFrame />, children: [{ index: true, element: <Navigate to="workflow" replace /> }, { path: "workflow", element: <AllWorkflow /> }] }] },
-        { element: <PlainLayout />, children: [{ errorElement: <RouteError inFrame />, children: [{ path: "me", element: <MePage /> }] }] },
+        { path: "all", element: <AllLayout />, children: [{ errorElement: <RouteError inFrame />, children: [{ index: true, element: <Navigate to="workflow" replace /> }, { path: "workflow", lazy: page(() => import("./pages/AllWorkflow.tsx"), "AllWorkflow") }] }] },
+        { element: <PlainLayout />, children: [{ errorElement: <RouteError inFrame />, children: [{ path: "me", lazy: page(() => import("./pages/Me.tsx"), "MePage") }] }] },
         { path: "*", element: <NotFound /> },
       ],
     },
