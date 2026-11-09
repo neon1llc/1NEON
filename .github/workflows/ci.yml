@@ -15,6 +15,8 @@ permissions:
 jobs:
   # Full history, so a secret in any commit fails the run. The image is pinned by digest
   secrets:
+    # A name no other workflow uses, so branch rules can require exactly this check
+    name: ci-secrets
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -26,6 +28,8 @@ jobs:
 
   # Typecheck, test, and build the TypeScript workspaces
   app:
+    # A name no other workflow uses, so branch rules can require exactly this check
+    name: ci-app
     runs-on: ubuntu-latest
     steps:
       # Actions are pinned to commit SHAs; the checkout keeps no token
@@ -45,6 +49,8 @@ jobs:
 
   # Terraform checks without touching AWS
   terraform:
+    # A name no other workflow uses, so branch rules can require exactly this check
+    name: ci-terraform
     runs-on: ubuntu-latest
     steps:
       # Actions are pinned to commit SHAs; the checkout keeps no token
