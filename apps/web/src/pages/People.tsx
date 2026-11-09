@@ -69,13 +69,15 @@ export function People() {
         <table className="people" data-tour="people-list">
           <thead><tr><th>Name</th><th>Email</th><th>Access</th><th>Status</th></tr></thead>
           <tbody>
-            {list.map((m) => (
+            {list.map((m) => {
+              // Admins change others' access; nobody changes their own here, and neon1's access is neon1's to change
+              const editable = canAdmin && m.userId !== me.user.id && (!m.neon1 || me.operator);
+              return (
               <tr key={m.userId} style={m.status === "deactivated" ? { opacity: 0.55 } : undefined}>
                 <td><span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}><Avatar id={m.userId} name={m.name || m.email} /><span>{m.name || <span className="muted">{m.status === "invited" ? "Name comes when they join" : "No name yet"}</span>}<br /><span className="muted small">{m.title}</span></span></span></td>
-                <td className="mono small">{m.email}</td>
+                <td className="mono small">{m.email}{m.neon1 && <span className="tag client" style={{ marginLeft: 8 }} title="neon1's access is managed by neon1">neon1</span>}</td>
                 <td>
-                  {/* Admins change others' access; nobody changes their own here */}
-                  {canAdmin && m.userId !== me.user.id && m.status !== "deactivated" ? (
+                  {editable && m.status !== "deactivated" ? (
                     <select aria-label={`Access for ${m.email}`} value={m.access} onChange={(e) => void change(m, { access: e.target.value })} style={{ minHeight: 32, paddingTop: 2, paddingBottom: 2, paddingLeft: 8, maxWidth: 140 }}>
                       <option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option>
                     </select>
@@ -87,14 +89,15 @@ export function People() {
                   {m.status === "invited" && m.invite && <span className={`muted small invite-${m.invite.state}`} style={{ marginLeft: 8 }}>{INVITE_STATE[m.invite.state]}</span>}
                   {canAdmin && m.status === "invited" && <button className="linkish small" style={{ marginLeft: 10 }} onClick={() => void resend(m)}>Resend</button>}
                   {/* Deactivate keeps the person's history; reactivate restores their access */}
-                  {canAdmin && m.userId !== me.user.id && (
+                  {editable && (
                     <button className="linkish small" style={{ marginLeft: 10 }} onClick={() => void change(m, { status: m.status === "deactivated" ? "joined" : "deactivated" })}>
                       {m.status === "deactivated" ? "Reactivate" : "Deactivate"}
                     </button>
                   )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>}
@@ -142,7 +145,7 @@ function Invite() {
       {/* Addresses, then the access level they all get */}
       <div>
         <label htmlFor="emails">Email addresses</label>
-        <textarea id="emails" value={emails} onChange={(e) => setEmails(e.target.value)} placeholder="i.e. dana@example.com, lee@example.com" style={{ minHeight: 64 }} autoFocus />
+        <textarea id="emails" value={emails} onChange={(e) => setEmails(e.target.value)} placeholder="e.g. dana@example.com, lee@example.com" style={{ minHeight: 64 }} autoFocus />
         <p className="muted small" style={{ margin: "6px 0 0" }}>They get an email from neon1 with a link to sign in. Only invited emails can sign in.</p>
       </div>
       <div>

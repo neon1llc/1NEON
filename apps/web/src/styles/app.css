@@ -355,7 +355,7 @@ html.from-site, html.from-site body { background: var(--void); }
 .stage { display: grid; grid-template-columns: minmax(0, 1.2fr) 150px minmax(0, 2fr) 80px auto; grid-template-areas: "name layer exit limit ctl";
   gap: 10px; align-items: center; padding: 12px 4px; border-bottom: 1px solid var(--line); }
 .stage.off { opacity: .55; }
-.stage textarea { min-height: 40px; resize: none; field-sizing: content; }
+.stage textarea, textarea.title-line { min-height: 40px; resize: none; field-sizing: content; }
 .stage > :nth-child(1) { grid-area: name; } .stage > :nth-child(2) { grid-area: layer; } .stage > :nth-child(3) { grid-area: exit; }
 .stage > :nth-child(4) { grid-area: limit; } .stage .ctl { grid-area: ctl; display: flex; gap: 6px; align-items: center; }
 @media (max-width: 760px) {
@@ -734,6 +734,8 @@ details.history summary { cursor: pointer; font: 12px var(--mono); color: var(--
 .line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .line > span:first-child { font-size: 15px; min-width: 88px; }
 .line input { flex: 1 1 220px; min-height: 36px; }
+/* Longer answers wrap and grow instead of scrolling sideways */
+.line textarea { flex: 1 1 220px; min-height: 36px; padding-top: 6px; padding-bottom: 6px; resize: none; field-sizing: content; }
 .pick { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 .answer { display: grid; gap: 6px; margin-top: 6px; justify-items: start; }
 .answer textarea { width: 100%; min-height: 0; }

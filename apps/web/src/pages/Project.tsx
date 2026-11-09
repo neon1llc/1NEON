@@ -314,7 +314,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
               <option value="on_track">On track</option><option value="at_risk">At risk</option><option value="off_track">Off track</option><option value="not_started">Not started</option>
             </select>
           </div>
-          <div><label htmlFor="up-t">In a sentence</label><textarea id="up-t" rows={2} style={{ minHeight: 0 }} value={post.title} onChange={(e) => setPost({ ...post, title: e.target.value })} maxLength={160} placeholder="i.e. migration finished; testing starts Monday" /></div>
+          <div><label htmlFor="up-t">In a sentence</label><textarea id="up-t" rows={2} style={{ minHeight: 0 }} value={post.title} onChange={(e) => setPost({ ...post, title: e.target.value })} maxLength={160} placeholder="e.g. migration finished; testing starts Monday" /></div>
           <div className="actions"><button className="btn btn-primary" disabled={!post.title.trim() || sending}>{sending ? "Posting…" : "Post"}</button><button type="button" className="btn btn-ghost" onClick={() => setPosting(false)}>Cancel</button></div>
         </form>
       </Dialog>
@@ -651,7 +651,8 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
   return (
     <form className="card add-form" onSubmit={(e) => { e.preventDefault(); if (title.trim()) submit(); }}>
       {guide && <p className="small muted hint">{guide.hint}</p>}
-      <input aria-label={`${label} title`} placeholder={guide ? `i.e. ${guide.title}` : label} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} required autoFocus />
+      {/* The title wraps as it grows; Enter adds the item, as a one-line field would */}
+      <textarea rows={1} className="title-line" aria-label={`${label} title`} placeholder={guide ? `e.g. ${guide.title}` : label} value={title} onChange={(e) => setTitle(e.target.value.replace(/\n/g, " "))} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (title.trim()) submit(); } }} maxLength={160} required autoFocus />
       {guide && !title && <Starters kind={kind} taken={taken} onPick={setTitle} />}
       {/* Requirements: how much it matters, as three chips */}
       {kind === "requirement" && (
@@ -661,12 +662,12 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
       {/* Measures need a unit, a baseline, and a target; options need a cost */}
       {kind === "metric" && (
         <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr 1fr" }}>
-          <input aria-label="Unit" placeholder="Unit, i.e. hours" value={extra.unit} onChange={(e) => setExtra({ ...extra, unit: e.target.value })} />
+          <input aria-label="Unit" placeholder="Unit, e.g. hours" value={extra.unit} onChange={(e) => setExtra({ ...extra, unit: e.target.value })} />
           <input aria-label="Now" placeholder="Now" inputMode="decimal" value={extra.baseline} onChange={(e) => setExtra({ ...extra, baseline: e.target.value })} />
           <input aria-label="Target" placeholder="Target" inputMode="decimal" value={extra.target} onChange={(e) => setExtra({ ...extra, target: e.target.value })} />
         </div>
       )}
-      {kind === "option" && <input aria-label="Cost" placeholder="Cost, i.e. $4,800 fixed" value={extra.cost} onChange={(e) => setExtra({ ...extra, cost: e.target.value })} />}
+      {kind === "option" && <input aria-label="Cost" placeholder="Cost, e.g. $4,800 fixed" value={extra.cost} onChange={(e) => setExtra({ ...extra, cost: e.target.value })} />}
       <div style={{ display: "flex", gap: 8 }}>
         <button className="btn btn-primary" type="submit" disabled={!title.trim() || adding}>{adding ? "Adding…" : "Add"}</button>
         <button className="btn btn-ghost" type="button" onClick={() => setOpen(false)}>Cancel</button>
@@ -817,7 +818,7 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
         <h2>Approve "{approving?.title}"?</h2>
         <p className="muted small">This records a decision with a copy of this exact version's terms (title, description, cost, and timeline). Neither the decision nor the approved option can be edited afterwards; a change needs a new option and a new approval.</p>
         <label htmlFor="cond">Conditions (optional)</label>
-        <textarea id="cond" value={conditions} onChange={(e) => setConditions(e.target.value)} maxLength={2000} placeholder="i.e. only if the work happens after 6pm" />
+        <textarea id="cond" value={conditions} onChange={(e) => setConditions(e.target.value)} maxLength={2000} placeholder="e.g. only if the work happens after 6pm" />
         <div className="actions">
           <button className="btn btn-primary" onClick={() => void approve()}>Approve</button>
           <button className="btn btn-ghost" onClick={() => setApproving(undefined)}>Cancel</button>

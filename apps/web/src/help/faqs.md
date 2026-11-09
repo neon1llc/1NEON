@@ -14,7 +14,7 @@ Yes. [The demo](/1NEON/demo/) is a working copy of 1NEON with made-up clients. P
 You need an invite. Open the link in your invite email, enter your email address, and type the code I send you. No password needed. [Watch it happen](/1NEON/live?play=invite).
 
 ### I didn't get the sign-in code.
-Check your spam or promotions folder, then wait a minute and ask for a new code. Codes work for a few minutes, in the browser where you asked for them.
+Check your spam or promotions folder, then wait a minute and choose **Send a new code**. Codes work for a few minutes, in the browser where you asked for them.
 
 ### Is there a tour?
 Yes. It's offered the first time you sign in. Skip it or ask to be reminded next time, and replay it anytime from **?** at the top right or from your profile.
@@ -79,7 +79,7 @@ Every file is checked for viruses before anyone can download it, and stays priva
 ## People and access
 
 ### What can viewers, editors, and admins do?
-Viewers read and comment. Editors also add and change work. Admins also invite people and change settings.
+Viewers read and comment. Editors also add and change work. Admins also invite people, change their access, and change settings. neon1's own access is set by neon1, so it shows on People without a way to change it.
 
 ### How do I invite someone?
 Admins go to **People** and choose **Invite people**. The person gets an email with a link. People shows whether each invitation email went out; if one didn't, or it got lost, choose **Resend**.
@@ -99,7 +99,7 @@ A sign-in that uses your face, fingerprint, or device PIN instead of a code. It'
 ## Your account
 
 ### How do I change my name or the look?
-Open your profile from the menu. You can change your name, title, and theme there.
+Open your profile from the menu. You can change your name, title, theme, menu, and notifications there, then choose **Save**. Two-step verification and signing out work right away.
 
 ### How do I sign out?
 Open your profile and choose **Sign out**.

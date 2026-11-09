@@ -53,6 +53,15 @@ describe("approved terms", () => {
     expect((await call(OP, "PATCH", `${path}/items/${option.id}`, { version: option.version, status: "draft" })).status).toBe(200);
   });
 
+  it("lets a client admin manage their people, but only neon1 changes neon1's own membership", async () => {
+    await call(OP, "POST", `/t/${s.acme.id}/members/invite`, { people: [{ email: OP, access: "admin" }] });
+    const lead = (await call(s.raj.email, "GET", `/t/${s.acme.id}/members`)).json.find((m: { email: string }) => m.email === OP);
+    expect(lead.neon1).toBe(true);
+    const tried = await call(s.raj.email, "PATCH", `/t/${s.acme.id}/members/${lead.userId}`, { version: lead.version, status: "deactivated" });
+    expect([tried.status, tried.json.error]).toEqual([403, "neon1_only"]);
+    expect((await call(OP, "PATCH", `/t/${s.acme.id}/members/${lead.userId}`, { version: lead.version, access: "editor" })).status).toBe(200);
+  });
+
   it("copies the terms into the decision and keeps the approved option from changing or disappearing", async () => {
     const { option, path, p } = await flowOption();
     const approved = await call(s.raj.email, "POST", `${path}/items/${option.id}/approve`, { version: option.version });

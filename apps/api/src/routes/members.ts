@@ -18,7 +18,8 @@ export function memberRoutes(app: App, k: Kit) {
     const members = await repo.listMembers(c.get("tenant").id);
     const users = await Promise.all(members.map((m) => repo.getUser(m.userId)));
     // Phone numbers stay on the person's own profile; organizations they share don't see them
-    return c.json(members.map((m, i) => ({ ...m, name: users[i]?.name || m.name, title: users[i]?.title || m.title })));
+    // neon1's own people are marked, so the page can show their access as neon1's to change
+    return c.json(members.map((m, i) => ({ ...m, name: users[i]?.name || m.name, title: users[i]?.title || m.title, neon1: cfg.operatorEmails.includes(m.email.toLowerCase()) })));
   });
 
   // Invite: create the person if new, add the membership, create the Cognito user, and email the link
@@ -92,7 +93,7 @@ export function memberRoutes(app: App, k: Kit) {
     return c.json((await repo.getMember(t.id, m.userId)) ?? next);
   });
 
-  // Change access or deactivate. An organization always keeps at least one active admin: the check
+  // Change access or deactivate (never neon1's own membership, unless neon1 does it). An organization always keeps at least one active admin: the check
   // reads the membership revision first and the write bumps it, so a concurrent change to anyone
   // else's membership makes this write fail instead of both passing the count
   app.patch("/t/:tid/members/:uid", async (c) => {
@@ -101,6 +102,8 @@ export function memberRoutes(app: App, k: Kit) {
     const rev = await repo.membershipRev(t.id);
     const m = await repo.getMember(t.id, c.req.param("uid"));
     if (!m) fail(404, "not_found", "That person isn't in this organization.");
+    // Client admins manage their own people; neon1's access stays neon1's to change (Pradeep, 2026-11-09)
+    if (cfg.operatorEmails.includes(m.email.toLowerCase()) && !who(c).actor.operator) fail(403, "neon1_only", "neon1's access is managed by neon1. Write to hello@neon1.tech to change it.");
     const input = await body(c, UpdateMemberInput);
     const next: Member = { ...m, ...defined({ access: input.access, title: input.title, status: input.status }), version: m.version + 1, updatedAt: now(), updatedBy: actorId(c) };
     const isAdmin = (x: Member) => x.access === "admin" && x.status !== "deactivated";

@@ -74,7 +74,7 @@ export function Workflow() {
           }}
         >
           <label htmlFor="why">Reason</label>
-          <textarea id="why" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} required autoFocus placeholder="i.e. The client chose over the phone; the option will be approved here this week" />
+          <textarea id="why" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} required autoFocus placeholder="e.g. the client chose over the phone; the option will be approved here this week" />
           <div className="actions">
             <button className="btn btn-primary" type="submit">Move anyway</button>
             <button className="btn btn-ghost" type="button" onClick={() => setPending(undefined)}>Cancel</button>

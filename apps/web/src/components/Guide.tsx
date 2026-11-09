@@ -50,13 +50,13 @@ export const GUIDE: Partial<Record<ItemKind, KindGuide>> = {
     starters: [],
   },
   file_request: {
-    hint: "A file you need from the client, i.e. a form, a report, or an export.",
+    hint: "A file you need from the client, e.g. a form, a report, or an export.",
     title: "A blank copy of the current intake form",
     body: "Where to find it, if that helps",
     starters: ["A blank copy of the current form", "Last month's report", "A sample export (with names removed)", "The current vendor contract"],
   },
   task: { hint: "One piece of work someone can finish.", title: "Set up the upload page", body: "Done when…", starters: [] },
-  milestone: { hint: "A point everyone can see, i.e. a launch or a sign-off.", title: "Staff trial starts", body: "", starters: ["Kickoff", "First working version", "Staff trial", "Go live"] },
+  milestone: { hint: "A point everyone can see, e.g. a launch or a sign-off.", title: "Staff trial starts", body: "", starters: ["Kickoff", "First working version", "Staff trial", "Go live"] },
   change: { hint: "A change to what was agreed: what, why, and what it does to cost or dates.", title: "Add text-message reminders", body: "Why, and the effect on cost and dates", starters: [] },
   metric: { hint: "A number that shows it worked, with where it is now and where it should be.", title: "Hours a week on scheduling", body: "", starters: ["Hours a week on this work", "Mistakes per month", "Monthly cost", "Time to answer a customer"] },
   check: { hint: "Something to test before calling it done.", title: "Backups restored once as a test", body: "", starters: ["Backups restored once as a test", "Works on a phone", "Admin access confirmed", "Alerts reach the right person"] },
@@ -175,7 +175,7 @@ function Goals({ value, onChange }: { value: string[]; onChange: (v: string[]) =
       ))}
       {own.map((g) => <button type="button" key={g} aria-pressed className="chip on" onClick={() => toggle(g)} title="Tap to remove">{g} ×</button>)}
       {adding ? (
-        <input className="chip-input" aria-label="Your own action" autoFocus value={word} maxLength={40} placeholder="i.e. automate billing"
+        <input className="chip-input" aria-label="Your own action" autoFocus value={word} maxLength={40} placeholder="e.g. automate billing"
           onChange={(e) => setWord(e.target.value)} onBlur={add}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } if (e.key === "Escape") { setWord(""); setAdding(false); } }} />
       ) : (
@@ -207,8 +207,8 @@ export function RequestBuilder({ onSubmit, onCancel, busy }: { onSubmit: (d: Req
           )}
           {/* Each line reads as part of one sentence; blanks are chips or short fields */}
           <div className="line"><span>I'd like to</span><Goals value={n.goals} onChange={(goals) => set(i, { goals })} /></div>
-          <div className="line"><span>for</span><input aria-label="Who or what it's for" value={n.who} onChange={(e) => set(i, { who: e.target.value })} maxLength={80} placeholder="i.e. your workflow, system, or space" /></div>
-          <div className="line"><span>Currently,</span><input aria-label="What happens now" value={n.now} onChange={(e) => set(i, { now: e.target.value })} maxLength={300} placeholder="i.e. forms get retyped" /></div>
+          <div className="line"><span>for</span><input aria-label="Who or what it's for" value={n.who} onChange={(e) => set(i, { who: e.target.value })} maxLength={80} placeholder="your workflow, system, or space" /></div>
+          <div className="line"><span>Currently,</span><textarea rows={1} aria-label="What happens now" value={n.now} onChange={(e) => set(i, { now: e.target.value.replace(/\n/g, " ") })} maxLength={300} placeholder="e.g. forms get retyped" /></div>
           <div className="line"><span>It happens</span><Pick label="How often" options={OFTEN} value={n.often} onChange={(often) => set(i, { often })} /></div>
           <div className="line">
             <span>and it's due</span>

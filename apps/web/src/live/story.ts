@@ -185,7 +185,7 @@ export const STORY: Section[] = [
       await s.think("…and stop the typos too.");
       await s.click({ sel: `${one} button`, text: "stop mistakes" }, 300);
       await s.type(`${one} input[aria-label="Who or what it's for"]`, "the nightly order list");
-      await s.type(`${one} input[aria-label="What happens now"]`, "we retype about 40 orders from email each night");
+      await s.type(`${one} textarea[aria-label="What happens now"]`, "we retype about 40 orders from email each night");
       await s.think("It happens every day.");
       await s.click({ sel: `${one} .pick label`, text: "daily" }, 300);
       await s.think("And I'd like it in about a month.");
