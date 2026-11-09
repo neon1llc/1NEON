@@ -2,6 +2,7 @@
 
 
 import type { User } from "@1neon/domain";
+import type { SmsState } from "../lib/types.ts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -15,6 +16,17 @@ import { useHelp } from "../components/Help.tsx";
 import { askToConfirm, TotpSetup } from "../components/Confirm.tsx";
 
 
+// What the profile says under the text consent for each state
+const SMS_NOTE: Record<SmsState, string> = {
+  unavailable: "Texts aren't switched on for 1NEON yet. Email notices work now.",
+  no_number: "",
+  not_agreed: "",
+  opted_out: "You replied STOP, so texts are off. Tick the box and save to turn them back on.",
+  unverified: "One more step: we text a code to this number to make sure it's yours. Texts start after that.",
+  ready: "Texts are on for this number.",
+};
+
+
 // The signed-in person's own profile, outside any organization
 export function MePage() {
   const me = useSession();
@@ -26,12 +38,38 @@ export function MePage() {
   // Edits stay local until Save
   const [draft, setDraft] = useState({ name: me.user.name, title: me.user.title, phone: me.user.phone, theme: me.user.theme, menu: me.user.menu ?? "rail", notify: me.user.notify ?? {}, smsConsent: Boolean(me.user.smsConsentAt) });
   const [busy, setBusy] = useState(false);
+  // The phone check: a code is texted, then typed here
+  const [code, setCode] = useState<string | undefined>(undefined);
+  const sms = me.sms?.state ?? "unavailable";
+  // A saved change to the number or consent matters before a code makes sense
+  const smsDirty = draft.phone !== me.user.phone || draft.smsConsent !== Boolean(me.user.smsConsentAt);
+  const sendCode = async () => {
+    try {
+      await api("/me/phone/verify", { method: "POST", body: {} });
+      setCode("");
+      toast("Code sent. It's good for 10 minutes.");
+    } catch (e) {
+      toast(problem(e));
+    }
+  };
+  const checkCode = async () => {
+    try {
+      await api("/me/phone/confirm", { method: "POST", body: { code } });
+      setCode(undefined);
+      toast("Number confirmed. Texts are on.");
+      qc.invalidateQueries({ queryKey: ["me"] });
+    } catch (e) {
+      toast(problem(e));
+    }
+  };
   // Save the profile; the theme applies immediately and is kept with the account
   const save = async () => {
     setBusy(true);
     try {
       const user = await api<User>("/me", { method: "PATCH", body: { version: me.user.version, ...draft } });
       qc.setQueryData(["me"], { ...me, user });
+      // The text state depends on what was saved; read it back fresh
+      qc.invalidateQueries({ queryKey: ["me"] });
       toast("Saved");
     } catch (e) {
       toast(problem(e));
@@ -122,6 +160,19 @@ export function MePage() {
           ) : (
             <span className="muted">To get texts, add a phone number above.</span>
           )}
+          {/* Where texts stand once saved, and the code check that turns them on */}
+          {!smsDirty && SMS_NOTE[sms] && <span className={`muted sms-${sms}`} role="status">{SMS_NOTE[sms]}</span>}
+          {!smsDirty && sms === "unverified" && (code === undefined
+            ? <button className="btn btn-ghost btn-sm" type="button" onClick={() => void sendCode()}>Text me a code</button>
+            : (
+              <span className="sms-code">
+                <label htmlFor="smscode">Code from the text</label>
+                <input id="smscode" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (code.length === 6) void checkCode(); } }} />
+                <button className="btn btn-primary btn-sm" type="button" disabled={code.length !== 6} onClick={() => void checkCode()}>Confirm</button>
+                <button className="linkish small" type="button" onClick={() => void sendCode()}>Send another</button>
+              </span>
+            ))}
+          {smsDirty && (draft.smsConsent || draft.phone !== me.user.phone) && draft.phone.trim() && <span className="muted">Save first, then confirm the number with a texted code.</span>}
           <table className="notify-table">
             <thead><tr><th scope="col">When</th><th scope="col">Email</th><th scope="col">Text</th></tr></thead>
             <tbody>
@@ -164,7 +215,6 @@ export function MePage() {
             {me.strongSession ? "This session is confirmed. Admin actions are open." : me.factors?.any ? <>To use admin actions, <button type="button" className="link" onClick={askToConfirm}>confirm it's you</button>.</> : "Add one of these to use admin actions."}
           </span>
         </div>
-        <TotpSetup open={totpOpen} onClose={() => setTotpOpen(false)} onDone={() => { setTotpOpen(false); qc.invalidateQueries({ queryKey: ["me"] }); }} />
         {/* The tutorial: replay the welcome tour, or read the FAQs */}
         <div className="card small" style={{ display: "grid", gap: 8, justifyItems: "start" }}>
           <b>Tutorial</b>
@@ -180,6 +230,9 @@ export function MePage() {
           <button className="btn btn-ghost" type="button" onClick={() => void signOut()}>Sign out</button>
         </div>
       </form>
+      {/* The authenticator setup has its own form, so it lives outside the profile form: Enter there
+          checks the code instead of saving the profile */}
+      <TotpSetup open={totpOpen} onClose={() => setTotpOpen(false)} onDone={() => { setTotpOpen(false); qc.invalidateQueries({ queryKey: ["me"] }); }} />
     </div>
   );
 }

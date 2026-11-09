@@ -22,8 +22,14 @@ export interface Me {
   strongSession?: boolean;
   // Second steps set up: an authenticator app, a passkey added here, or any (including older ones)
   factors?: { totp: boolean; passkey: boolean; any: boolean };
+  // Where texts stand, so the profile can say what's next
+  sms?: { state: SmsState };
   orgs: OrgSummary[];
 }
+
+
+/** Texts: not offered yet, no number, not agreed, stopped by a STOP reply, waiting for a code, or on */
+export type SmsState = "unavailable" | "no_number" | "not_agreed" | "opted_out" | "unverified" | "ready";
 
 
 /** GET /t/:tid */

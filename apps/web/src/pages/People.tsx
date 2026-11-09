@@ -19,6 +19,10 @@ const ACCESS: Record<AccessLevel, string> = {
 };
 
 
+// How an invited person's email is doing, in plain words
+const INVITE_STATE = { queued: "email on its way", sent: "email sent", failed: "email didn't go out" } as const;
+
+
 // The member table for everyone; invites and access changes for admins
 export function People() {
   const { org, canAdmin } = useOrg();
@@ -33,6 +37,17 @@ export function People() {
     try {
       await api(`/t/${org.id}/members/${m.userId}`, { method: "PATCH", body: { version: m.version, ...patch } });
       toast("Saved");
+    } catch (e) {
+      toast(problem(e));
+    }
+    refresh();
+  };
+
+  // Send someone's invitation again; the API limits how often, and the row shows how it went
+  const resend = async (m: MemberRow) => {
+    try {
+      const r = await api<MemberRow>(`/t/${org.id}/members/${m.userId}/resend`, { method: "POST" });
+      toast(r.invite?.state === "sent" ? `Invitation sent again to ${m.email}` : `Invitation queued for ${m.email}`);
     } catch (e) {
       toast(problem(e));
     }
@@ -65,6 +80,9 @@ export function People() {
                 </td>
                 <td className="small">
                   {m.status === "invited" ? <span className="tag warn">invited {ago(m.invitedAt)}</span> : m.status === "deactivated" ? "deactivated" : <span className="muted">seen {ago(m.lastSeenAt)}</span>}
+                  {/* Whether the invitation email actually went out, and a way to send it again */}
+                  {m.status === "invited" && m.invite && <span className={`muted small invite-${m.invite.state}`} style={{ marginLeft: 8 }}>{INVITE_STATE[m.invite.state]}</span>}
+                  {canAdmin && m.status === "invited" && <button className="linkish small" style={{ marginLeft: 10 }} onClick={() => void resend(m)}>Resend</button>}
                   {/* Deactivate keeps the person's history; reactivate restores their access */}
                   {canAdmin && m.userId !== me.user.id && (
                     <button className="linkish small" style={{ marginLeft: 10 }} onClick={() => void change(m, { status: m.status === "deactivated" ? "joined" : "deactivated" })}>
@@ -104,8 +122,10 @@ function Invite() {
     setBusy(true);
     setError("");
     try {
-      await api(`/t/${org.id}/members/invite`, { method: "POST", body: { people: list.map((email) => ({ email, access })) } });
-      toast(list.length === 1 ? `Invitation sent to ${list[0]}` : `${list.length} invitations sent`);
+      // Say what actually happened: sent now, or queued to retry (People shows when it goes out)
+      const out = await api<MemberRow[]>(`/t/${org.id}/members/invite`, { method: "POST", body: { people: list.map((email) => ({ email, access })) } });
+      const sent = out.filter((m) => m.invite?.state === "sent").length;
+      toast(sent === out.length ? (out.length === 1 ? `Invitation sent to ${list[0]}` : `${out.length} invitations sent`) : `${out.length === 1 ? "Invitation" : "Invitations"} queued. People shows when ${out.length === 1 ? "it goes" : "they go"} out.`);
       setEmails("");
       setOpen(false);
     } catch (e) {
