@@ -57,13 +57,13 @@ Charts made from your organization's own data: open and overdue work, how often 
 ## Decisions and approvals
 
 ### How do I approve an option?
-Open the project's **Needs** layer, compare the options, and choose **Approve this option**. You can add conditions, such as "only after 6pm". The approval is recorded with your name and the time.
+Open the project's **Needs** layer, compare the options, and choose **Approve this option**. You can add conditions, such as "only after 6pm". The approval is recorded with your name, the time, and a copy of the option's terms (title, description, cost, and timeline) exactly as you saw them.
 
 ### Who can approve?
 The person named as the project's decision maker. If nobody is named, an admin of your organization can. An editor or admin can name one under **People** on the project's overview.
 
 ### Can an approval be changed?
-Not edited. To change course, a new option is proposed and approved, so the history stays clear.
+Not edited. Once approved, neither the decision nor the option it came from can be edited or removed. To change course, a new option is proposed and approved; the earlier decision stays on record, marked as replaced, so the history stays clear.
 
 ### What do Cost, Quality, and Effort mean?
 A quick comparison of each option, in plain words. Lowest cost, best quality, and lightest effort are the better ends.

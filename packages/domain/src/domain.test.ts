@@ -159,3 +159,31 @@ describe("betterWhen", () => {
     expect(betterWhen(MetricFields.parse({ direction: "down", readings: [] }))).toBe("down");
   });
 });
+
+
+// Every audit action the API emits belongs to exactly the group its preference row describes
+describe("notification groups", () => {
+  it("files each emitted action under its intended group", async () => {
+    const { groupOf, wants } = await import("./notify.ts");
+    const { KIND_LAYER } = await import("./model.ts");
+    const expected: Record<string, string> = {
+      "comment.created": "comments", "decision.approved": "decisions", "doc.uploaded": "files", "doc.deleted": "files",
+      "member.invited": "access", "member.joined": "access", "member.updated": "access", "member.signedin": "signins",
+      "org.created": "updates", "org.stages": "workflow", "project.created": "workflow", "project.moved": "workflow",
+      "project.trashed": "workflow", "project.updated": "updates",
+    };
+    for (const kind of Object.keys(KIND_LAYER)) {
+      for (const verb of ["created", "updated", "deleted"]) expected[`${kind}.${verb}`] = kind === "option" ? "decisions" : "updates";
+    }
+    for (const [action, group] of Object.entries(expected)) expect([action, groupOf(action).id]).toEqual([action, group]);
+    // Comments on, updates off: comments reach the person and item edits don't, in both channels
+    const prefs = { comments: { email: true, sms: true }, updates: { email: false, sms: false } };
+    expect(wants(prefs, "comment.created", "email")).toBe(true);
+    expect(wants(prefs, "comment.created", "sms")).toBe(true);
+    expect(wants(prefs, "task.updated", "email")).toBe(false);
+    // And the inverse
+    const inverse = { comments: { email: false, sms: false }, updates: { email: true, sms: true } };
+    expect(wants(inverse, "comment.created", "email")).toBe(false);
+    expect(wants(inverse, "comment.created", "sms")).toBe(false);
+  });
+});

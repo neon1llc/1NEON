@@ -43,6 +43,9 @@ export function NewProject() {
   const [metrics, setMetrics] = useState<MetricDraft[]>([{ title: "", unit: "", baseline: "", target: "" }]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // One key per visit to this page: if a reply is lost and the person presses Create again, the API
+  // returns the project it already made instead of a second one
+  const [requestKey] = useState(() => crypto.randomUUID().replace(/-/g, ""));
   useTopBar(<span><Link to={`/o/${summary.slug}/projects`}>Projects</Link> / New</span>, [summary.slug]);
 
   // Viewers can open the page by URL but can't create
@@ -62,6 +65,7 @@ export function NewProject() {
       const p = await api<Project>(`/t/${org.id}/projects`, {
         method: "POST",
         body: {
+          idempotencyKey: requestKey,
           name: name.trim(),
           template,
           summary: projectSummary,

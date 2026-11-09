@@ -48,11 +48,16 @@ for (const raw of emails) {
   }
   if (!(await repo.getMember(toId, uid))) {
     const m: Member = { ...old, tenantId: toId, version: 1, createdAt: now, updatedAt: now, updatedBy: actor };
-    await repo.table.write([repo.memberOp(m, { create: true }), repo.auditOp({ tenantId: toId, actorId: actor, action: "member.invited", target: uid, summary: `Moved ${email} here from ${fromSlug} as ${old.access}` })]);
+    // Membership changes bump each organization's membership revision, as the API's do (admin check)
+    await repo.table.write([repo.memberOp(m, { create: true }), repo.membershipRevOp(toId, await repo.membershipRev(toId)), repo.auditOp({ tenantId: toId, actorId: actor, action: "member.invited", target: uid, summary: `Moved ${email} here from ${fromSlug} as ${old.access}` })]);
   }
   if (old.status !== "deactivated") {
     const off: Member = { ...old, status: "deactivated", version: old.version + 1, updatedAt: now, updatedBy: actor };
-    await repo.table.write([repo.memberOp(off, { version: old.version }), repo.auditOp({ tenantId: fromId, actorId: actor, action: "member.updated", target: uid, summary: `Moved ${email} to ${toSlug}` })]);
+    // Leaving can't strand the old organization without an admin (revision read first, as in the API)
+    const rev = await repo.membershipRev(fromId);
+    const admins = (await repo.listMembers(fromId)).filter((x) => x.access === "admin" && x.status !== "deactivated");
+    if (old.access === "admin" && admins.length <= 1) throw new Error(`${email} is the last admin of ${fromSlug}; add another admin first`);
+    await repo.table.write([repo.memberOp(off, { version: old.version }), repo.membershipRevOp(fromId, rev), repo.auditOp({ tenantId: fromId, actorId: actor, action: "member.updated", target: uid, summary: `Moved ${email} to ${toSlug}` })]);
   }
   console.log(`moved ${email}`);
 }

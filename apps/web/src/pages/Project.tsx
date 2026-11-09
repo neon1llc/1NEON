@@ -215,15 +215,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
     <div className="two">
       {/* Main column: the decision banner, summary and outcome, and measures */}
       <section>
-        {decision && (
-          <div className="decision">
-            <b>{decision.title}</b>
-            <div className="small muted">
-              by {names.get(String(decision.fields.approvedBy)) ?? "a member"} · {ago(String(decision.fields.approvedAt))} · option version {String(decision.fields.optionVersion)}
-            </div>
-            {decision.body && <p className="small" style={{ margin: "6px 0 0" }}>Conditions: {decision.body}</p>}
-          </div>
-        )}
+        {decision && <DecisionCard d={decision} names={names} />}
         {/* Editors can change the summary and outcome in place */}
         {editing ? (
           <form className="form" onSubmit={(e) => { e.preventDefault(); void save(p.version, draft); }}>
@@ -427,7 +419,7 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
     <>
       {/* Approved decisions sit at the top of Needs as read-only banners */}
       {layer === "needs" && decisions.map((d) => (
-        <div className="decision" key={d.id}><b>{d.title}</b><div className="small muted">{ago(String(d.fields.approvedAt))} · option version {String(d.fields.optionVersion)}</div></div>
+        <DecisionCard key={d.id} d={d} superseded={decisions.some((x) => (x.fields.supersedes as string[] | undefined)?.includes(d.id))} />
       ))}
       {KINDS_IN(layer).map((kind) => {
         const list = items.filter((i) => i.kind === kind);
@@ -642,6 +634,32 @@ function Meter({ label, value }: { label: keyof typeof SCORE_WORDS; value: numbe
 }
 
 
+/**
+ * One decision as it was agreed: the terms copied at approval, who approved and when. Older decisions
+ * made before terms were copied say so plainly rather than showing today's option as the agreement
+ */
+function DecisionCard({ d, names, superseded }: { d: Item; names?: Map<string, string>; superseded?: boolean }) {
+  const f = d.fields as { approvedBy?: string; approvedAt?: string; optionVersion?: number; approverName?: string; terms?: { title: string; body?: string; cost?: string; timeline?: string } };
+  const by = f.approverName || names?.get(String(f.approvedBy)) || "a member";
+  return (
+    <div className={`decision${superseded ? " superseded" : ""}`}>
+      <b>{d.title}</b>
+      {superseded && <span className="tag" style={{ marginLeft: 8 }}>replaced by a later decision</span>}
+      <div className="small muted">by {by} · {ago(String(f.approvedAt))} · option version {String(f.optionVersion)}</div>
+      {f.terms ? (
+        <div className="small" style={{ margin: "6px 0 0" }}>
+          {(f.terms.cost || f.terms.timeline) && <div className="mono">Agreed: {[f.terms.cost, f.terms.timeline].filter(Boolean).join(" · ")}</div>}
+          {f.terms.body && <p style={{ margin: "4px 0 0", whiteSpace: "pre-wrap" }}>{f.terms.body}</p>}
+        </div>
+      ) : (
+        <p className="small muted" style={{ margin: "6px 0 0" }}>This decision was recorded before 1NEON kept a copy of the approved terms, so only the option and version are on record.</p>
+      )}
+      {d.body && <p className="small" style={{ margin: "6px 0 0" }}>Conditions: {d.body}</p>}
+    </div>
+  );
+}
+
+
 /** Options side by side: draft, shared for approval, approved; approving records a decision */
 function Options({ items, path, project }: { items: Item[]; path: string; project: Project }) {
   const { org, access, canWrite } = useOrg();
@@ -715,7 +733,7 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
       {/* Approval confirmation with optional conditions */}
       <Dialog open={Boolean(approving)} onClose={() => setApproving(undefined)} label="Approve option">
         <h2>Approve "{approving?.title}"?</h2>
-        <p className="muted small">This records a decision tied to this exact version of the option. It can't be edited afterwards; a later change needs a new approval.</p>
+        <p className="muted small">This records a decision with a copy of this exact version's terms (title, description, cost, and timeline). Neither the decision nor the approved option can be edited afterwards; a change needs a new option and a new approval.</p>
         <label htmlFor="cond">Conditions (optional)</label>
         <textarea id="cond" value={conditions} onChange={(e) => setConditions(e.target.value)} maxLength={2000} placeholder="i.e. only if the work happens after 6pm" />
         <div className="actions">

@@ -26,8 +26,9 @@ export const NOTIFY_GROUPS: NotifyGroup[] = [
   { id: "access", label: "People and access", hint: "Someone is invited, joins, or gets a different access level", level: "critical", email: true, match: (a) => a === "member.invited" || a === "member.joined" || a === "member.updated" },
   { id: "decisions", label: "Decisions and options", hint: "An option is proposed or approved", level: "critical", email: true, match: (a) => a === "decision.approved" || a.startsWith("option.") },
   { id: "workflow", label: "Workflow and stages", hint: "A project moves stage, or the board's stages change", level: "critical", email: true, match: (a) => a === "project.moved" || a === "org.stages" || a === "project.created" || a === "project.trashed" },
-  { id: "updates", label: "Updates and items", hint: "Status updates, requests, tasks, measures, and other items", level: "normal", email: false, match: (a) => /^[a-z_]+\.(created|updated|deleted)$/.test(a) || a === "project.updated" },
+  // Comments come before the item catch-all below, whose pattern would otherwise claim comment.created
   { id: "comments", label: "Comments", hint: "Someone comments on an item", level: "normal", email: false, match: (a) => a === "comment.created" },
+  { id: "updates", label: "Updates and items", hint: "Status updates, requests, tasks, measures, and other items", level: "normal", email: false, match: (a) => /^[a-z_]+\.(created|updated|deleted)$/.test(a) || a === "project.updated" },
   { id: "signins", label: "Sign-ins", hint: "Someone in the organization signs in", level: "info", email: false, match: (a) => a === "member.signedin" },
 ];
 

@@ -40,6 +40,8 @@ export const UpdateMemberInput = z.object({
 
 // Projects. Every update carries the version the client read, for conflict checks
 export const CreateProjectInput = z.object({
+  // Chosen once per submit by the browser, so a retry after a lost reply returns the same project
+  idempotencyKey: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
   name: z.string().trim().min(1).max(120),
   template: z.string().max(40).default("blank"),
   summary: z.string().max(500).default(""),

@@ -32,6 +32,11 @@ export const keys = {
   member: (tid: string, uid: string) => ({ PK: `T#${tid}`, SK: `MEMBER#${uid}` }),
   project: (tid: string, pid: string) => ({ PK: `T#${tid}`, SK: `PROJ#${pid}` }),
   projectCounter: (tid: string, prefix: string) => ({ PK: `T#${tid}`, SK: `COUNTER#${prefix}` }),
+  // One revision for the whole membership list: every change that could alter who is an admin bumps
+  // it in the same transaction, so two changes to different people can't both pass the admin check
+  membershipRev: (tid: string) => ({ PK: `T#${tid}`, SK: "MEMBERSHIP#REV" }),
+  // A create request's idempotency key, pointing at what it made (kept a day)
+  idempotency: (tid: string, key: string) => ({ PK: `T#${tid}`, SK: `IDEM#${key}` }),
   // Inside one project
   item: (tid: string, pid: string, iid: string) => ({ PK: `T#${tid}#P#${pid}`, SK: `ITEM#${iid}` }),
   // General files, with no project, share the "_" partition
@@ -293,6 +298,29 @@ export class Repo {
       put: { ...keys.member(m.tenantId, m.userId), type: "member", GSI1PK: `USER#${m.userId}`, GSI1SK: `T#${m.tenantId}`, ...m },
       guard,
     };
+  }
+
+  // The membership list's revision (0 when never written)
+  async membershipRev(tid: string) {
+    const k = keys.membershipRev(tid);
+    return Number((await this.table.get(k.PK, k.SK))?.version ?? 0);
+  }
+
+  // Bump the revision read before the change; a concurrent membership change makes this guard fail
+  membershipRevOp(tid: string, rev: number): WriteOp {
+    return { put: { ...keys.membershipRev(tid), version: rev + 1 }, guard: rev ? { version: rev } : { create: true } };
+  }
+
+  // What an earlier request with this key created, if anything
+  async idempotent(tid: string, key: string) {
+    const k = keys.idempotency(tid, key);
+    const row = await this.table.get(k.PK, k.SK);
+    return row && { userId: String(row.userId), projectId: String(row.projectId) };
+  }
+
+  // Claim a key in the same transaction as the create it names
+  idempotencyOp(tid: string, key: string, userId: string, projectId: string): WriteOp {
+    return { put: { ...keys.idempotency(tid, key), userId, projectId, ttl: Math.floor(Date.now() / 1000) + 24 * 3600 }, guard: { create: true } };
   }
 
   // Membership write on its own, outside a transaction

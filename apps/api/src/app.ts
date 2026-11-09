@@ -9,7 +9,9 @@ import {
   CreateProjectInput,
   CreateTenantInput,
   DEFAULT_STAGES,
+  DecisionFields,
   DocumentRecord,
+  OptionFields,
   InviteInput,
   Item,
   KIND_LAYER,
@@ -816,7 +818,8 @@ export function createApp(d: Deps) {
       };
       // The Cognito user exists before the email goes out, so the link works on first click
       await d.directory.ensureUser(p.email);
-      await repo.table.write([repo.memberOp(m, existing ? { version: existing.version } : { create: true }), repo.auditOp({ tenantId: t.id, actorId: inviter.id, action: "member.invited", target: uid, summary: `Invited ${p.email} as ${p.access}` })]);
+      const rev = await repo.membershipRev(t.id);
+      await repo.table.write([repo.memberOp(m, existing ? { version: existing.version } : { create: true }), repo.membershipRevOp(t.id, rev), repo.auditOp({ tenantId: t.id, actorId: inviter.id, action: "member.invited", target: uid, summary: `Invited ${p.email} as ${p.access}` })]);
       const mail = inviteEmail({ orgName: t.name, inviter: inviter.name || "neon1", url: `${cfg.publicUrl}/1NEON/?email=${encodeURIComponent(p.email)}` });
       await d.mailer.send(p.email, mail.subject, mail.text, mail.html);
       out.push(m);
@@ -824,20 +827,29 @@ export function createApp(d: Deps) {
     return c.json(out, 201);
   });
 
-  // Change access or deactivate. An organization always keeps at least one active admin
+  // Change access or deactivate. An organization always keeps at least one active admin: the check
+  // reads the membership revision first and the write bumps it, so a concurrent change to anyone
+  // else's membership makes this write fail instead of both passing the count
   app.patch("/t/:tid/members/:uid", async (c) => {
     need(c, "manage_people");
     const t = c.get("tenant");
+    const rev = await repo.membershipRev(t.id);
     const m = await repo.getMember(t.id, c.req.param("uid"));
     if (!m) fail(404, "not_found", "That person isn't in this organization.");
     const input = await body(c, UpdateMemberInput);
     const next: Member = { ...m, ...defined({ access: input.access, title: input.title, status: input.status }), version: m.version + 1, updatedAt: now(), updatedBy: actorId(c) };
-    if (m.access === "admin" && next.access !== "admin" || next.status === "deactivated" && m.access === "admin") {
-      const admins = (await repo.listMembers(t.id)).filter((x) => x.access === "admin" && x.status !== "deactivated");
+    const isAdmin = (x: Member) => x.access === "admin" && x.status !== "deactivated";
+    if (isAdmin(m) && !isAdmin(next)) {
+      const admins = (await repo.listMembers(t.id)).filter(isAdmin);
       if (admins.length <= 1) fail(400, "last_admin", "An organization needs at least one admin.");
     }
-    await repo.saveMember(next, { version: input.version });
-    await audit(c, "member.updated", m.userId, `Updated ${m.email}`);
+    try {
+      await repo.table.write([repo.memberOp(next, { version: input.version }), repo.membershipRevOp(t.id, rev), repo.auditOp({ tenantId: t.id, actorId: actorId(c), action: "member.updated", target: m.userId, summary: `Updated ${m.email}` })]);
+    } catch (e) {
+      // Someone changed this organization's people at the same moment; nothing was saved
+      if (e instanceof ConflictError) fail(409, "conflict", "Someone changed this organization's people at the same time. Reload and try again.");
+      throw e;
+    }
     return c.json(next);
   });
 
@@ -853,6 +865,15 @@ export function createApp(d: Deps) {
     need(c, "write");
     const t = c.get("tenant");
     const input = await body(c, CreateProjectInput);
+    // A retry of a create that already landed returns that project instead of making another
+    const replay = async () => {
+      const prior = input.idempotencyKey ? await repo.idempotent(t.id, input.idempotencyKey) : undefined;
+      if (!prior) return undefined;
+      if (prior.userId !== actorId(c)) fail(409, "idempotency_key_reused", "That request key was already used. Reload and try again.");
+      return repo.getProject(t.id, prior.projectId);
+    };
+    const earlier = await replay();
+    if (earlier) return c.json(earlier, 201);
     await activeMembers(t.id, input.people.map((p) => p.userId));
     const tpl = templateById(input.template);
     const n = await repo.nextProjectNumber(t.id, tpl.keyPrefix);
@@ -894,9 +915,24 @@ export function createApp(d: Deps) {
     else if (input.template !== "blank") push({ kind: "discovery", title: "One real example of how it works today" });
     for (const ti of tpl.items) push({ kind: ti.kind, title: ti.title, body: ti.body ?? "", fields: ti.fields ?? {} });
     for (const m of input.metrics) push({ kind: "metric", title: m.title, fields: { unit: m.unit, baseline: m.baseline, target: m.target, direction: m.baseline !== undefined && m.target !== undefined && m.target < m.baseline ? "down" : "up", baselineDate: m.baseline !== undefined ? ts.slice(0, 10) : undefined, readings: [] } });
-    // A project and its starter items land together, or not at all (in batches DynamoDB accepts)
-    await repo.table.write([repo.projectOp(project, { create: true }), repo.auditOp({ tenantId: t.id, actorId: by, action: "project.created", target: project.id, summary: `Created ${project.key} ${project.name}` })]);
-    for (let i = 0; i < items.length; i += 25) await repo.table.write(items.slice(i, i + 25).map((it) => repo.itemOp(it, { create: true })));
+    // A project, its starter items, its audit event, and its request key land in one transaction or
+    // not at all. The largest template (14 items) plus an example and 10 measures is 25 items, far
+    // inside DynamoDB's 100-item transaction limit; the check below keeps that true if templates grow
+    const ops = [
+      repo.projectOp(project, { create: true }),
+      ...items.map((it) => repo.itemOp(it, { create: true })),
+      repo.auditOp({ tenantId: t.id, actorId: by, action: "project.created", target: project.id, summary: `Created ${project.key} ${project.name}` }),
+      ...(input.idempotencyKey ? [repo.idempotencyOp(t.id, input.idempotencyKey, by, project.id)] : []),
+    ];
+    if (ops.length > MAX_TRANSACTION) fail(400, "too_large", "That template has too many starter items to create at once.");
+    try {
+      await repo.table.write(ops);
+    } catch (e) {
+      // The same key landed first from a concurrent retry: answer with that project
+      const raced = e instanceof ConflictError ? await replay() : undefined;
+      if (raced) return c.json(raced, 201);
+      throw e;
+    }
     return c.json(project, 201);
   });
 
@@ -1000,6 +1036,9 @@ export function createApp(d: Deps) {
     if (!item) fail(404, "not_found", "That item no longer exists.");
     if (item.kind === "decision") fail(400, "immutable", "Decisions can't be edited. Approve a new option to change the decision.");
     const input = await body(c, UpdateItemInput);
+    // An approved option is part of a decision's record: its terms and status don't change. A revised
+    // proposal is a new option, approved on its own
+    if (item.status === "approved" && (input.title !== undefined || input.body !== undefined || input.fields !== undefined)) fail(400, "immutable", "This option is approved. Propose a new option to change its terms.");
     // Statuses follow each kind's list; an approval is final and only the approve route grants it
     if (input.status !== undefined && input.status !== item.status) {
       if (item.status === "approved") fail(400, "immutable", "This option is approved. Propose a new option to change course.");
@@ -1023,6 +1062,7 @@ export function createApp(d: Deps) {
     const item = await repo.getItem(p.tenantId, p.id, c.req.param("iid"));
     if (!item) fail(404, "not_found", "That item no longer exists.");
     if (item.kind === "decision") fail(400, "immutable", "Decisions are kept as a permanent record.");
+    if (item.status === "approved") fail(400, "immutable", "An approved option is part of a decision's record and stays.");
     const version = Number(c.req.query("version"));
     if (!Number.isInteger(version)) fail(400, "invalid", "Send the version you last saw.");
     await repo.table.write([
@@ -1044,6 +1084,11 @@ export function createApp(d: Deps) {
     if (input.version !== option.version) fail(409, "conflict", "The option changed since you read it. Review it again before approving.", option);
     const ts = now();
     const by = actorId(c);
+    const approver = who(c).user;
+    // The terms exactly as approved travel with the decision, so it never depends on the option later
+    const of = OptionFields.parse(option.fields);
+    const terms = { title: option.title, body: option.body, cost: of.cost, timeline: of.timeline, costScore: of.costScore, qualityScore: of.qualityScore, effortScore: of.effortScore, recommended: of.recommended };
+    const earlier = (await repo.listItems(p.tenantId, p.id)).filter((i) => i.kind === "decision").map((i) => i.id);
     const decision = Item.parse({
       tenantId: p.tenantId,
       projectId: p.id,
@@ -1053,7 +1098,7 @@ export function createApp(d: Deps) {
       body: input.conditions,
       status: "approved",
       rank: ts,
-      fields: { optionId: option.id, optionVersion: option.version, approvedBy: by, approvedAt: ts, conditions: input.conditions },
+      fields: DecisionFields.parse({ optionId: option.id, optionVersion: option.version, approvedBy: by, approvedAt: ts, conditions: input.conditions, terms, approverName: approver.name || undefined, approverEmail: approver.email, supersedes: earlier.length ? earlier : undefined }),
       version: 1,
       createdAt: ts,
       updatedAt: ts,
@@ -1276,6 +1321,10 @@ function defined<T extends object>(o: T): Partial<T> {
 function label(kind: Item["kind"]) {
   return `${kind.replace("_", " ")} (${KIND_LAYER[kind]})`;
 }
+
+
+// DynamoDB's limit on writes in one transaction
+const MAX_TRANSACTION = 100;
 
 
 // AWS SDK error names that mean "throttled or temporarily unavailable", not a failed guard

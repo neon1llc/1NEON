@@ -261,13 +261,34 @@ export const OptionFields = z.object({
 });
 
 
-// Decisions point at the exact option version approved, so later edits can't change what was agreed
+// The material terms of an option exactly as approved, copied into the decision at approval time
+export const DecisionTerms = z.object({
+  title: z.string().max(160),
+  body: z.string().max(8000).default(""),
+  cost: z.string().max(80).default(""),
+  timeline: z.string().max(80).default(""),
+  costScore: Score.optional(),
+  qualityScore: Score.optional(),
+  effortScore: Score.optional(),
+  recommended: z.boolean().optional(),
+});
+export type DecisionTerms = z.infer<typeof DecisionTerms>;
+
+
+// A decision is its own record of what was agreed: the option and version it came from, who approved
+// and when (with their name and email as they were then), and a copy of the terms. Decisions made
+// before terms were copied have no `terms`; their exact wording wasn't kept and is never backfilled
 export const DecisionFields = z.object({
   optionId: id,
   optionVersion: z.number().int(),
   approvedBy: id,
   approvedAt: isoDate,
   conditions: z.string().max(2000).default(""),
+  terms: DecisionTerms.optional(),
+  approverName: z.string().max(80).optional(),
+  approverEmail: z.string().max(254).optional(),
+  // Earlier decisions on the same project that this one replaces; they stay readable as they were
+  supersedes: z.array(id).max(50).optional(),
 });
 
 
