@@ -19,6 +19,7 @@ import { kit, type Deps } from "./lib/kit.ts";
 import { installOutbox } from "./lib/transactions.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { commentRoutes } from "./routes/comments.ts";
+import { contactRoutes } from "./routes/contact.ts";
 import { devFileRoutes, docRoutes } from "./routes/docs.ts";
 import { factorRoutes } from "./routes/factors.ts";
 import { editRoutes, itemRoutes } from "./routes/items.ts";
@@ -83,6 +84,9 @@ export function createApp(d: Deps) {
 
   // --- Sign-in (Cognito) -------------------------------------------------
   authRoutes(app, k);
+
+  // --- The contact form on neon1.tech, public and rate limited -----------
+  contactRoutes(app, k);
 
   // --- Identity: every route below needs a signed-in, invited person ------
 

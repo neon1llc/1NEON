@@ -353,14 +353,18 @@ function KindFields({ kind, f, onChange }: { kind: ItemKind; f: Record<string, s
     <div className="props">
       <label>Cost<input value={f.cost ?? ""} onChange={(e) => set("cost", e.target.value)} placeholder="e.g. $4,800 fixed" maxLength={80} /></label>
       <label>Timeline<input value={f.timeline ?? ""} onChange={(e) => set("timeline", e.target.value)} placeholder="e.g. 3 weeks" maxLength={80} /></label>
-      {(["costScore", "qualityScore", "effortScore"] as const).map((k) => (
-        <label key={k}>{{ costScore: "Cost rating", qualityScore: "Quality rating", effortScore: "Effort rating" }[k]}
-          <select value={f[k]} onChange={(e) => set(k, e.target.value)}>
-            {SCORE_CHOICES[k]!.map((w, i) => <option key={w} value={String(i + 1)}>{w}</option>)}
-          </select>
-        </label>
-      ))}
       <label className="check"><input type="checkbox" checked={f.recommended === "yes"} onChange={(e) => set("recommended", e.target.checked ? "yes" : "")} /> Recommended</label>
+      {/* The three ratings read as one group, on one line at every width */}
+      <fieldset className="ratings">
+        <legend>Ratings</legend>
+        {(["costScore", "qualityScore", "effortScore"] as const).map((k) => (
+          <label key={k}>{{ costScore: "Cost", qualityScore: "Quality", effortScore: "Effort" }[k]}
+            <select value={f[k]} onChange={(e) => set(k, e.target.value)}>
+              {SCORE_CHOICES[k]!.map((w, i) => <option key={w} value={String(i + 1)}>{w}</option>)}
+            </select>
+          </label>
+        ))}
+      </fieldset>
     </div>
   );
   if (kind === "metric") return (

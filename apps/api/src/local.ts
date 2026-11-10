@@ -62,10 +62,10 @@ export class MemoryDirectory implements Directory {
 // Keeps sent mail in memory so tests can read invites
 export class MemoryMailer implements Mailer {
   // Every message sent, oldest first
-  readonly sent: { to: string; subject: string; text: string; html: string }[] = [];
+  readonly sent: { to: string; subject: string; text: string; html: string; replyTo?: string }[] = [];
   // Record the message instead of sending it
-  async send(to: string, subject: string, text: string, html: string) {
-    this.sent.push({ to, subject, text, html });
+  async send(to: string, subject: string, text: string, html: string, replyTo?: string) {
+    this.sent.push({ to, subject, text, html, replyTo });
   }
 }
 
