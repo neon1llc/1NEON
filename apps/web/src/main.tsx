@@ -12,6 +12,7 @@ import { Faqs } from "./pages/Faqs.tsx";
 import { Legal } from "./pages/Legal.tsx";
 import { NotFound } from "./pages/NotFound.tsx";
 import { BASE_PATH, DEMO, devUser, LIVE } from "./lib/api.ts";
+import { applyHead, headFor } from "./lib/head.ts";
 import { setCache, setNavigate } from "./lib/nav.ts";
 import { offline } from "./lib/reads.ts";
 import { Example } from "./pages/Example.tsx";
@@ -80,6 +81,12 @@ const router = createBrowserRouter(
 // Mount the app
 // The live playback always starts at the person picker, from a fresh story
 if (LIVE) devUser.set("");
+
+// Each route's title, description, and indexing intent (lib/head.ts, docs/routes.md), kept current
+// as the address changes
+const head = () => applyHead(headFor(location.pathname));
+head();
+router.subscribe(head);
 
 // Code outside React (the live playback) navigates through the same router
 setNavigate((to) => void router.navigate(to));
