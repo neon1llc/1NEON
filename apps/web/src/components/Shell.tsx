@@ -44,7 +44,22 @@ export const useSession = () => useContext(MeCtx)!;
 /** Apply a theme to the page; with no attribute the styles show awake */
 export function applyTheme(theme: string) {
   document.documentElement.setAttribute("data-theme", theme);
+  syncDark();
 }
+
+
+// Whether the page shows Matrix (dark) right now: chosen outright, or "device" on a device set to dark.
+// The html element carries it as the class n1-dark, so Neo's window can follow the same look as the
+// landing page (dark over the rain, light over awake pages) and repaint the moment either one changes
+const darkDevice = matchMedia("(prefers-color-scheme: dark)");
+export function isDark() {
+  const t = document.documentElement.getAttribute("data-theme");
+  return t === "matrix" || (t === "device" && darkDevice.matches);
+}
+function syncDark() {
+  document.documentElement.classList.toggle("n1-dark", isDark());
+}
+darkDevice.addEventListener?.("change", syncDark);
 
 
 // Set by /arrive.js when someone came from neon1.tech's 1NEON link; the first sign-in screen uses it up

@@ -113,14 +113,20 @@ createRoot(document.getElementById("root")!).render(
 
 
 // Neo, the site's assistant window, answered from neon1's public pages through /chat/api on this
-// origin. Dark on the sign-in screen, light in the app; optional: if the site's module can't
-// load, the portal works without it
+// origin. It takes the landing page's two looks: dark on the sign-in screen and in the Matrix theme
+// (chosen, or "device" on a dark device), light in Awake. The html element's n1-dark class and the
+// #root subtree are watched, so a theme change repaints it at once. Optional: if the site's module
+// can't load, the portal works without it
 const CHAT = "/shared/chat.js";
 type ChatOptions = { className?: string; light?: () => boolean; watch?: Element[] };
 // The demo makes no calls at all, so it leaves Neo out
 if (!DEMO) import(/* @vite-ignore */ CHAT)
   .then((m: { chat(opts: ChatOptions): unknown }) =>
-    m.chat({ className: "n1chat-portal n1chat-right", light: () => !document.querySelector(".signin"), watch: [document.getElementById("root")!] }),
+    m.chat({
+      className: "n1chat-portal n1chat-right",
+      light: () => !document.querySelector(".signin") && !document.documentElement.classList.contains("n1-dark"),
+      watch: [document.documentElement],
+    }),
   )
   .catch(() => undefined);
 
