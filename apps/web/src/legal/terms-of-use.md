@@ -1,6 +1,6 @@
 # Terms of use
 
-*Last updated November 10, 2026.*
+*Last updated November 10, 2026.* This update corrects which sign-in methods administrators can use to confirm sensitive changes and adds the section on text messages. It adds no new obligations for you.
 
 These terms cover your use of neon1.tech and the 1NEON client portal, which are run by neon1 LLC ("neon1", "I", "me"). Paid work is governed by a separate agreement or signed proposal. If that agreement conflicts with these terms, the agreement wins.
 
