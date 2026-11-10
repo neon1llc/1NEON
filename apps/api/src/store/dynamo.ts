@@ -34,7 +34,14 @@ function condition(guard: Guard | undefined): Cond {
       ExpressionAttributeNames: { "#ttl": "ttl" },
       ExpressionAttributeValues: { ":now": Math.floor(Date.now() / 1000) },
     };
-  // Version guard: the write lands only if nobody saved since the caller read the row
+  // Version guard: the write lands only if nobody saved since the caller read the row; an id-bound
+  // guard also needs the same record, so it can't land on a newer one that reuses the version
+  if (guard.id !== undefined)
+    return {
+      ConditionExpression: "#v = :v AND #id = :id",
+      ExpressionAttributeNames: { "#v": "version", "#id": "id" },
+      ExpressionAttributeValues: { ":v": guard.version, ":id": guard.id },
+    };
   return {
     ConditionExpression: "#v = :v",
     ExpressionAttributeNames: { "#v": "version" },

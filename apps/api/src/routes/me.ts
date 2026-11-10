@@ -12,7 +12,7 @@ import { codeText, e164, hashCode, smsAfterSave, smsFactorOn, smsState } from ".
 
 export function meRoutes(app: App, k: Kit) {
   const { d, repo } = k;
-  const { textCode, countPhoneTry } = assurance(k);
+  const { textCode, countPhoneTry, consumeCode } = assurance(k);
 
   // Me: the person, their organizations (all of them for the operator), and the join bookkeeping
   app.get("/me", async (c) => {
@@ -77,25 +77,24 @@ export function meRoutes(app: App, k: Kit) {
 
   // Send a code to the profile's number
   app.post("/me/phone/verify", async (c) => {
-    const { user } = who(c);
+    const { user, jti } = who(c);
     if (!d.texter) fail(503, "texts_unavailable", "Texts aren't available yet. Email notices still work.");
     const to = e164(user.phone);
     if (!to) fail(400, "no_number", "Add a mobile number to your profile first.");
     if (!user.smsConsentAt) fail(400, "not_agreed", "Agree to texts on your profile first.");
-    await textCode(user, "SMSVERIFY", to, codeText);
+    await textCode(user, "verify", jti, to, codeText);
     return c.json({ ok: true });
   });
 
-  // Check the code; a match at the same number marks it verified
+  // Check the code; a match at the profile's current number, from the session that asked, marks it
+  // verified. The code is used up in the same write that saves the profile, so it works once
   app.post("/me/phone/confirm", async (c) => {
-    const { user } = who(c);
+    const { user, jti } = who(c);
     const { code } = await body(c, z.object({ code: z.string().min(6).max(12) }));
-    const k = { PK: `USER#${user.id}`, SK: "SMSVERIFY" };
-    const row = await countPhoneTry(k);
-    if (row.hash !== (await hashCode(user.id, code)) || row.phone !== e164(user.phone)) fail(400, "wrong_code", "That code didn't match. Check the newest text.");
+    const live = await countPhoneTry(user.id, "verify", jti);
     const fresh = (await repo.getUser(user.id))!;
-    await repo.saveUser({ ...fresh, smsPhone: String(row.phone), smsVerifiedAt: now(), version: fresh.version + 1, updatedAt: now(), updatedBy: user.id }, fresh.version);
-    await repo.table.write([{ delete: k }]);
+    if (live.hash !== (await hashCode(user.id, code)) || live.phone !== e164(fresh.phone)) fail(400, "wrong_code", "That code didn't match. Check the newest text.");
+    await consumeCode(live, [repo.userOp({ ...fresh, smsPhone: String(live.phone), smsVerifiedAt: now(), version: fresh.version + 1, updatedAt: now(), updatedBy: user.id }, fresh.version)]);
     return c.json({ ok: true });
   });
 }

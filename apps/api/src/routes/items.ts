@@ -2,7 +2,7 @@
 // approving an option into an immutable decision, and the advisory edit markers.
 
 
-import { ApproveInput, CreateItemInput, DecisionFields, Item, OptionFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, type Project } from "@1neon/domain";
+import { ApproveInput, CreateItemInput, assessed, completionAfter, resolveTiming, DecisionFields, Item, OptionFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, type Project } from "@1neon/domain";
 import { z } from "zod";
 import { actorId, body, byRank, check, defined, fail, label, need, now, validateFields, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
@@ -44,9 +44,20 @@ export function itemRoutes(app: App, k: Kit) {
       updatedAt: ts,
       updatedBy: actorId(c),
     });
-    // A status update also sets the project's health, in the same transaction
+    // A request timed "this month" or "this quarter" gets an absolute due date now, in the
+    // organization's time zone, and keeps the words apart. A date the form already showed the person
+    // wins; older tabs that send only the words get it resolved here
+    const timing = item.kind === "request" ? resolveTiming(item.fields.due, new Date(ts), c.get("tenant").timeZone) : undefined;
+    if (timing) {
+      item.requestedTiming = timing.requestedTiming;
+      item.dueDate ??= timing.dueDate;
+    }
+    // Created already done: that is its completion
+    item.completedAt = completionAfter(undefined, item.status, ts);
+    // A status update is a health assessment: it sets the project's health and records who assessed it
+    // and when, in the same transaction, even when the health stays the same (that refreshes it)
     const health = item.kind === "update" ? (item.fields as { health?: Project["health"] }).health : undefined;
-    const healthOp = health && health !== p.health ? [repo.projectOp({ ...p, health, version: p.version + 1, updatedAt: ts, updatedBy: actorId(c) }, { version: p.version })] : [];
+    const healthOp = health ? [repo.projectOp({ ...p, health, ...assessed(health, actorId(c), ts), version: p.version + 1, updatedAt: ts, updatedBy: actorId(c) }, { version: p.version })] : [];
     await repo.table.write([repo.itemOp(item, { create: true }), ...healthOp, repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: `${item.kind}.created`, target: item.id, summary: `${p.key}: added ${label(item.kind)} "${item.title}"` })]);
     return c.json(item, 201);
   });
@@ -74,10 +85,10 @@ export function itemRoutes(app: App, k: Kit) {
     if (assigneeId !== undefined) next.assigneeId = assigneeId ?? undefined;
     if (dueDate !== undefined) next.dueDate = dueDate ?? undefined;
     if (fields) next.fields = validateFields(item.kind, { ...item.fields, ...fields });
-    // Work begun (an item in progress or done) also takes the project out of "not started"
-    const begun = p.health === "not_started" && input.status !== undefined && (input.status === "doing" || input.status === "done");
-    const started: Project | undefined = begun ? { ...p, health: "on_track", version: p.version + 1, updatedAt: now(), updatedBy: actorId(c) } : undefined;
-    await repo.table.write([repo.itemOp(next, { version }), ...(started ? [repo.projectOp(started, { version: p.version })] : []), repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: `${item.kind}.updated`, target: item.id, summary: `${p.key}: updated ${label(item.kind)} "${next.title}"` })]);
+    // Completion is its own event: an edit to wording, assignee, or fields never moves it
+    next.completedAt = completionAfter(item, next.status, next.updatedAt);
+    // Work starting never changes the project's health: that stays the team's assessment
+    await repo.table.write([repo.itemOp(next, { version }), repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: `${item.kind}.updated`, target: item.id, summary: `${p.key}: updated ${label(item.kind)} "${next.title}"` })]);
     await repo.clearEditing(p.tenantId, p.id, item.id, actorId(c));
     return c.json(next);
   });

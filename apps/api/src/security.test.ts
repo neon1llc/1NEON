@@ -321,6 +321,108 @@ describe("text codes to confirm it's you", () => {
     expect(mailer.sent.at(-1)!.subject).toMatch(/Text-message confirmation was removed/);
   });
 
+  // Invariants from the SMS atomicity review: one code confirms at most one session, the hourly limit
+  // counts sends rather than unused codes, and a code is bound to its session and number
+  describe("single use and send budget", () => {
+    /** Dana with a proved number and text codes on, in one email session */
+    async function ready(jti = "j-dana") {
+      const dana = await signIn(s.dana.email, jti);
+      await verifyNumber(dana);
+      expect((await call(dana, "POST", "/me/text-factor", {})).status).toBe(200);
+      return dana;
+    }
+
+    it("lets concurrent confirmations with one code succeed exactly once", async () => {
+      const dana = await ready();
+      expect((await call(dana, "POST", "/me/confirm/text", {})).status).toBe(200);
+      const code = lastCode();
+      const results = await Promise.all(Array.from({ length: 4 }, () => call(dana, "POST", "/me/confirm", { via: "text", code })));
+      expect(results.filter((r) => r.status === 200)).toHaveLength(1);
+      // Losers get a plain refusal, never a stored row
+      for (const r of results.filter((x) => x.status !== 200)) expect(r.json.current).toBeUndefined();
+    });
+
+    it("confirms only the session that asked for the code", async () => {
+      const a = await ready("j-a");
+      const b = await signIn(s.dana.email, "j-b");
+      expect((await call(a, "POST", "/me/confirm/text", {})).status).toBe(200);
+      const code = lastCode();
+      const both = await Promise.all([call(a, "POST", "/me/confirm", { via: "text", code }), call(b, "POST", "/me/confirm", { via: "text", code })]);
+      expect(both.map((r) => r.status)).toEqual([200, 409]);
+      expect(await repo.sessionStrong("j-a", s.dana.id)).toBe(true);
+      expect(await repo.sessionStrong("j-b", s.dana.id)).toBe(false);
+    });
+
+    it("refuses the fourth send in an hour even after earlier codes were used", async () => {
+      const dana = await ready();
+      for (let i = 0; i < 3; i++) {
+        expect((await call(dana, "POST", "/me/confirm/text", {})).status).toBe(200);
+        expect((await call(dana, "POST", "/me/confirm", { via: "text", code: lastCode() })).status).toBe(200);
+      }
+      const before = texter.sent.length;
+      expect((await call(dana, "POST", "/me/confirm/text", {})).status).toBe(429);
+      expect(texter.sent).toHaveLength(before);
+    });
+
+    it("caps all code texts per person across numbers", async () => {
+      const dana = await signIn(s.dana.email, "j-dana");
+      // Three proofs at one number, three at a second (six in all), then a third number is refused
+      for (const [i, phone] of ["5550102030", "5550104040", "5550105050"].entries()) {
+        const me = (await call(dana, "GET", "/me")).json.user;
+        expect((await call(dana, "PATCH", "/me", { version: me.version, phone, smsConsent: true })).status).toBe(200);
+        const sends = i < 2 ? 3 : 0;
+        for (let n = 0; n < sends; n++) expect((await call(dana, "POST", "/me/phone/verify", {})).status).toBe(200);
+      }
+      expect((await call(dana, "POST", "/me/phone/verify", {})).status).toBe(429);
+    });
+
+    it("still counts the daily account budget", async () => {
+      const dana = await ready();
+      const day = new Date().toISOString().slice(0, 10);
+      await table.write([{ put: { PK: "COUNTER", SK: `SMS#${day}`, n: 200 }, guard: { always: true } }]);
+      expect((await call(dana, "POST", "/me/confirm/text", {})).status).toBe(429);
+    });
+
+    it("fails closed when the number changes after the code was sent", async () => {
+      const dana = await ready();
+      expect((await call(dana, "POST", "/me/confirm/text", {})).status).toBe(200);
+      const code = lastCode();
+      // The verified number moves underneath the pending code (as an operator fix or another save might)
+      const u = (await repo.getUser(s.dana.id))!;
+      await repo.saveUser({ ...u, phone: "+15550109999", smsPhone: "+15550109999", version: u.version + 1 }, u.version);
+      expect((await call(dana, "POST", "/me/confirm", { via: "text", code })).status).toBe(400);
+      expect(await repo.sessionStrong("j-dana", s.dana.id)).toBe(false);
+    });
+
+    it("never lets an older answer use up a newer code", async () => {
+      const dana = await ready();
+      expect((await call(dana, "POST", "/me/confirm/text", {})).status).toBe(200);
+      const old = lastCode();
+      expect((await call(dana, "POST", "/me/confirm/text", {})).status).toBe(200);
+      const newer = lastCode();
+      if (old !== newer) expect((await call(dana, "POST", "/me/confirm", { via: "text", code: old })).status).toBe(400);
+      expect((await call(dana, "POST", "/me/confirm", { via: "text", code: newer })).status).toBe(200);
+    });
+
+    it("sends an id-bound guard to DynamoDB as a condition on both version and id", async () => {
+      const client = new DynamoDBClient({ region: "us-east-1", credentials: { accessKeyId: "x", secretAccessKey: "x" } });
+      let seen: { ConditionExpression?: string; ExpressionAttributeValues?: Record<string, unknown> } | undefined;
+      client.middlewareStack.add((next) => async (args) => {
+        seen = (args as { input: typeof seen }).input;
+        return { output: { $metadata: {} } } as never;
+      }, { step: "initialize" });
+      await new DynamoTable("synthetic", client).write([{ delete: { PK: "USER#u", SK: "SMSCONFIRM" }, guard: { version: 4, id: "sms_1" } }]);
+      expect(seen?.ConditionExpression).toBe("#v = :v AND #id = :id");
+      expect(seen?.ExpressionAttributeValues).toEqual({ ":v": 4, ":id": "sms_1" });
+    });
+
+    it("treats a code row from before binding as no code", async () => {
+      const dana = await ready();
+      await table.write([{ put: { PK: `USER#${s.dana.id}`, SK: "SMSCONFIRM", hash: "x", phone: "+15550102030", expiresAt: new Date(Date.now() + 60_000).toISOString(), attempts: 0, version: 1, sentAt: [] }, guard: { always: true } }]);
+      expect((await call(dana, "POST", "/me/confirm", { via: "text", code: "123456" })).status).toBe(409);
+    });
+  });
+
   it("won't add text codes from an email session when another second step exists", async () => {
     await enrollTotp(s.raj.id);
     const weak = await signIn(s.raj.email, "j-raj-weak");

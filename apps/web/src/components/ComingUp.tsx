@@ -5,6 +5,7 @@
 
 import { KIND_LAYER, type ItemKind } from "@1neon/domain";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link } from "react-router";
 import { read } from "../lib/reads.ts";
 import { gate } from "./Reads.tsx";
@@ -20,11 +21,13 @@ interface Event {
   itemId?: string;
   overdue: boolean;
   mine: boolean;
+  // A request's timing in the person's words ("this month"), resolved to `date` when it was made
+  requestedTiming?: string;
 }
 
 
 // Short names for the kinds that show up here
-const KIND_WORD: Record<string, string> = { target: "Target", milestone: "Milestone", task: "Task", file_request: "File", change: "Change", check: "Check", handoff: "Handoff", training: "Training" };
+const KIND_WORD: Record<string, string> = { request: "Request", target: "Target", milestone: "Milestone", task: "Task", file_request: "File", change: "Change", check: "Check", handoff: "Handoff", training: "Training" };
 
 
 // A date string a number of days from another
@@ -33,6 +36,8 @@ const addDays = (iso: string, n: number) => new Date(Date.parse(iso + "T00:00:00
 
 /** Coming up for one organization */
 export function ComingUp({ tid, base }: { tid: string; base: string }) {
+  // Agenda groups opened past their first six entries
+  const [open, setOpen] = useState<Record<string, boolean>>({});
   const up = useQuery({ queryKey: ["upcoming", tid], queryFn: () => read<{ today: string; events: Event[] }>(`/t/${tid}/upcoming`, { today: "string", events: "array" }), refetchInterval: 60_000 });
   // Loading, or failed with nothing to show: the card says which, never an empty calendar
   const wait = gate([up], { compact: true });
@@ -79,14 +84,15 @@ export function ComingUp({ tid, base }: { tid: string; base: string }) {
             <div key={name} className={`ag-group${name === "Overdue" ? " late" : ""}`}>
               <h3>{name}</h3>
               <ul>
-                {list.slice(0, 6).map((e, i) => (
+                {(open[name] ? list : list.slice(0, 6)).map((e, i) => (
                   <li key={i}>
                     <time>{new Date(e.date + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}</time>
                     <Link to={link(e)}>{e.title}</Link>
-                    <span className="s">{KIND_WORD[e.kind] ?? "Item"} · {e.projectKey}</span>
+                    <span className="s">{KIND_WORD[e.kind] ?? "Item"} · {e.projectKey}{e.requestedTiming ? ` · asked for ${e.requestedTiming}` : ""}</span>
                   </li>
                 ))}
-                {list.length > 6 && <li className="muted small">and {list.length - 6} more</li>}
+                {/* Every entry is reachable: the rest open in place, and fold away again */}
+                {list.length > 6 && <li className="small"><button type="button" className="linkish" aria-expanded={Boolean(open[name])} onClick={() => setOpen({ ...open, [name]: !open[name] })}>{open[name] ? "Show fewer" : `and ${list.length - 6} more`}</button></li>}
               </ul>
             </div>
           ))}

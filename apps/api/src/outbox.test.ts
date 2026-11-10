@@ -1,12 +1,14 @@
 // apps/api/src/outbox.test.ts - Durable delivery: a failed provider leaves a retryable record, a resend
-// is a second attempt rather than a second membership, a replay never sends twice, a provider that
-// hangs can't hold a request, and a message that keeps failing ends visibly. Memory table, fake mail.
+// is a second attempt rather than a second membership, a replay of an accepted delivery doesn't send
+// again, a provider that hangs can't hold a request, a pass keeps to its deadline and resumes where it
+// stopped, and a message that keeps failing ends visibly. Delivery is at least once: the duplicate
+// cases are documented here as tests. Memory table, fake mail.
 
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app.ts";
 import type { Config } from "./config.ts";
-import { drainOutbox } from "./outbox.ts";
+import { drainOutbox, outboxOp } from "./outbox.ts";
 import { seed } from "./seed.ts";
 import { MemoryDirectory, MemoryMailer, MemoryStorage, MemoryTexter } from "./services.ts";
 import { MemoryTable } from "./store/memory.ts";
@@ -150,7 +152,7 @@ describe("invitation delivery", () => {
 
 
 describe("event notices", () => {
-  it("never sends one person the same notice twice when a row is replayed", async () => {
+  it("doesn't send one person an accepted notice again when a row is replayed", async () => {
     const app = appWith("worker");
     const { p } = await flow();
     const before = mailer.sent.length;
@@ -176,3 +178,129 @@ async function flow() {
   const p = (await repo.listProjects(s.acme.id)).find((x) => x.key === "FLOW-1")!;
   return { p };
 }
+
+
+// --- Deadline and resume (from the outbox failure review) -------------------------------------------
+
+describe("one deadline per pass", () => {
+  /** A synthetic event row whose fan-out reaches `n` joined people, with every lookup answered locally */
+  async function bigEvent(n: number, opts: { slowLookups?: number } = {}) {
+    const table = new MemoryTable();
+    const r = new Repo(table);
+    const pause = () => new Promise((ok) => setTimeout(ok, opts.slowLookups ?? 0));
+    r.listMembers = async () => Array.from({ length: n }, (_, i) => ({ userId: `u${i}`, status: "joined" })) as never;
+    r.getUser = async (id: string) => {
+      if (opts.slowLookups) await pause();
+      return { id, email: `${id}@example.invalid`, name: id } as never;
+    };
+    r.getTenant = async () => ({ slug: "synthetic", name: "Synthetic" }) as never;
+    await table.write([outboxOp("E#big", { kind: "event", event: { id: "big", tenantId: "t", actorId: "actor", action: "option.approved", summary: "Synthetic event" } as never })]);
+    return { table, repo: r };
+  }
+
+  /** A mailer that takes `ms` per message and records who got one, and how many attempts began */
+  function slowMailer(ms: number) {
+    const m = { attempts: 0, accepted: [] as string[], aborted: 0, async send(to: string, _s: string, _t: string, _h: string, _r?: string, signal?: AbortSignal) {
+      m.attempts++;
+      await new Promise<void>((ok, fail) => {
+        const t = setTimeout(ok, ms);
+        signal?.addEventListener("abort", () => {
+          clearTimeout(t);
+          m.aborted++;
+          fail(Object.assign(new Error("aborted"), { name: "AbortError" }));
+        });
+      });
+      m.accepted.push(to);
+    } };
+    return m;
+  }
+
+  it("stops starting recipients at its deadline, then resumes without resending", async () => {
+    const { table, repo: r } = await bigEvent(30);
+    const mail = slowMailer(20);
+    const started = Date.now();
+    const first = await drainOutbox({ repo: r, mailer: mail, cfg, sendTimeoutMs: 1_000 }, { budgetMs: 150, reserveMs: 40 });
+    // Within the deadline plus a small bookkeeping allowance, with only some recipients done
+    expect(Date.now() - started).toBeLessThan(150 + 100);
+    expect(mail.accepted.length).toBeGreaterThan(0);
+    expect(mail.accepted.length).toBeLessThan(30);
+    expect(first).toMatchObject({ deferred: 1, retrying: 0, failed: 0 });
+    // Not counted as a failed attempt, and due again at once
+    const [row] = await table.query("OUTBOX");
+    expect(row).toMatchObject({ state: "pending", attempts: 0 });
+    expect(row!.leaseUntil).toBeUndefined();
+    // Later passes finish the rest; every recipient gets exactly one message here
+    for (let i = 0; i < 20 && (await table.query("OUTBOX")).length; i++) await drainOutbox({ repo: r, mailer: mail, cfg, sendTimeoutMs: 1_000 }, { budgetMs: 150, reserveMs: 40 });
+    expect(await table.query("OUTBOX")).toHaveLength(0);
+    expect(mail.accepted).toHaveLength(30);
+    expect(new Set(mail.accepted).size).toBe(30);
+  });
+
+  it("cuts a provider call short at the deadline and aborts it", async () => {
+    const { table, repo: r } = await bigEvent(10);
+    const mail = slowMailer(10_000);
+    const started = Date.now();
+    const out = await drainOutbox({ repo: r, mailer: mail, cfg, sendTimeoutMs: 5_000 }, { budgetMs: 100, reserveMs: 20 });
+    expect(Date.now() - started).toBeLessThan(100 + 100);
+    expect(mail.attempts).toBe(1);
+    expect(mail.aborted).toBe(1);
+    expect(out.deferred).toBe(1);
+    expect((await table.query("OUTBOX"))[0]).toMatchObject({ state: "pending", attempts: 0 });
+  });
+
+  it("stays within its deadline when storage lookups hang", async () => {
+    const { repo: r } = await bigEvent(5);
+    r.getUser = () => new Promise(() => undefined);
+    const started = Date.now();
+    const out = await drainOutbox({ repo: r, mailer: slowMailer(1), cfg }, { budgetMs: 80, reserveMs: 20 });
+    expect(Date.now() - started).toBeLessThan(80 + 100);
+    expect(out.processed).toBe(1);
+  });
+
+  it("stays within its deadline when receipt writes hang", async () => {
+    const { table, repo: r } = await bigEvent(5);
+    const write = table.write.bind(table);
+    table.write = async (ops) => (ops.some((o) => "put" in o && o.put.PK === "OUTBOX#DELIVERY") ? new Promise(() => undefined) : write(ops));
+    const started = Date.now();
+    await drainOutbox({ repo: r, mailer: slowMailer(1), cfg }, { budgetMs: 80, reserveMs: 20 });
+    expect(Date.now() - started).toBeLessThan(80 + 100);
+  });
+
+  it("documents a possible duplicate when the provider accepted but the receipt write failed", async () => {
+    const table = new MemoryTable();
+    const r = new Repo(table);
+    const sent = new MemoryMailer();
+    await table.write([outboxOp("I#synthetic", { kind: "invite", tenantId: "synthetic", userId: "synthetic", email: "nobody@example.invalid", orgName: "Synthetic", inviter: "Synthetic", url: "https://example.invalid" })]);
+    const write = table.write.bind(table);
+    let failAccepted = true;
+    table.write = async (ops) => {
+      if (failAccepted && ops.some((o) => "put" in o && o.put.PK === "OUTBOX#DELIVERY" && o.put.state === "accepted")) {
+        failAccepted = false;
+        throw Object.assign(new Error("synthetic receipt write failure"), { name: "SyntheticStoreFailure" });
+      }
+      await write(ops);
+    };
+    const first = await drainOutbox({ repo: r, mailer: sent, cfg });
+    // The failure stays visible as a retry, and the receipt shows the send was started
+    expect(first).toMatchObject({ sent: 0, retrying: 1 });
+    expect((await table.query("OUTBOX#DELIVERY"))[0]).toMatchObject({ state: "submitting" });
+    const [row] = await table.query("OUTBOX");
+    await table.write([{ put: { ...row!, nextAt: new Date(0).toISOString() }, guard: { always: true } }]);
+    const second = await drainOutbox({ repo: r, mailer: sent, cfg });
+    // At least once: the retry sends again and says it may be a duplicate
+    expect(second).toMatchObject({ sent: 1, possibleDuplicates: 1 });
+    expect(sent.sent).toHaveLength(2);
+    expect((await table.query("OUTBOX#DELIVERY"))[0]).toMatchObject({ state: "accepted" });
+  });
+
+  it("still honors receipts written before the accepted state existed", async () => {
+    const table = new MemoryTable();
+    const r = new Repo(table);
+    const sent = new MemoryMailer();
+    await table.write([outboxOp("I#legacy", { kind: "invite", tenantId: "synthetic", userId: "synthetic", email: "nobody@example.invalid", orgName: "Synthetic", inviter: "Synthetic", url: "https://example.invalid" })]);
+    await table.write([{ put: { PK: "OUTBOX#DELIVERY", SK: "I#legacy#nobody@example.invalid#email", state: "sent" }, guard: { always: true } }]);
+    await drainOutbox({ repo: r, mailer: sent, cfg });
+    expect(sent.sent).toHaveLength(0);
+    expect(await table.query("OUTBOX")).toHaveLength(0);
+  });
+});

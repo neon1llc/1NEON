@@ -339,10 +339,16 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
             <span className="small muted">Health</span>
             {canWrite ? (
               <select aria-label="Health" value={p.health} onChange={(e) => void save(p.version, { health: e.target.value })} style={{ maxWidth: 160 }}>
-                <option value="on_track">On track</option><option value="at_risk">At risk</option><option value="off_track">Off track</option><option value="not_started">Not started</option>
+                <option value="on_track">On track</option><option value="at_risk">At risk</option><option value="off_track">Off track</option><option value="not_started">Not assessed</option>
               </select>
             ) : <Health value={p.health} />}
           </div>
+          {/* Health is an assessment, not activity: say who set it and when, so a stale one shows */}
+          <p className="small muted" style={{ margin: 0 }}>
+            {p.assessedAt
+              ? <>Assessed by {p.assessedBy ? names.get(p.assessedBy) ?? "a former member" : "someone"}, {ago(p.assessedAt)}</>
+              : p.health === "not_started" ? "Nobody has assessed health yet." : "Assessed before assessments were recorded."}
+          </p>
           {/* The target date: editors change it in place; clearing it leaves the project open-ended */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
             <span className="small muted">Target date</span>
@@ -381,7 +387,7 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
         <form className="form" onSubmit={(e) => { e.preventDefault(); if (post.title.trim()) void postUpdate(); }}>
           <div><label htmlFor="up-h">Health</label>
             <select id="up-h" value={post.health} onChange={(e) => setPost({ ...post, health: e.target.value })}>
-              <option value="on_track">On track</option><option value="at_risk">At risk</option><option value="off_track">Off track</option><option value="not_started">Not started</option>
+              <option value="on_track">On track</option><option value="at_risk">At risk</option><option value="off_track">Off track</option><option value="not_started">Not assessed</option>
             </select>
           </div>
           <div><label htmlFor="up-t">In a sentence</label><textarea id="up-t" rows={2} style={{ minHeight: 0 }} value={post.title} onChange={(e) => setPost({ ...post, title: e.target.value })} maxLength={160} placeholder="e.g. migration finished; testing starts Monday" /></div>
@@ -714,7 +720,7 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
     );
   }
   // Requests are built as one guided sentence
-  if (kind === "request") return <RequestBuilder busy={adding} onSubmit={(ds) => void sendAll(ds)} onCancel={() => setOpen(false)} />;
+  if (kind === "request") return <RequestBuilder busy={adding} timeZone={org.timeZone} onSubmit={(ds) => void sendAll(ds)} onCancel={() => setOpen(false)} />;
 
   // Blank or non-numeric values are left unset
   const num = (s: string) => (s.trim() === "" || Number.isNaN(Number(s)) ? undefined : Number(s));

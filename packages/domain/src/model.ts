@@ -23,7 +23,11 @@ export const Layer = z.enum(["needs", "execution", "observation", "next"]);
 export type Layer = z.infer<typeof Layer>;
 
 
-/** How a project is going, set by the team and shown on every card */
+/**
+ * How a project is going, set by the team and shown on every card. Health is an assessment, separate
+ * from activity: work starting or a stage move never changes it. "not_started" is shown as Not
+ * assessed (the stored value keeps its earlier name so older records and tabs still read)
+ */
 export const Health = z.enum(["on_track", "at_risk", "off_track", "not_started"]);
 export type Health = z.infer<typeof Health>;
 
@@ -57,6 +61,8 @@ export const Tenant = z.object({
   name: z.string().trim().min(1).max(80),
   status: z.enum(["active", "archived"]),
   stages: z.array(Stage).min(1).max(20),
+  // IANA time zone for calendar wording such as "this month"; missing means America/New_York
+  timeZone: z.string().max(64).optional(),
   ...versioned,
 });
 export type Tenant = z.infer<typeof Tenant>;
@@ -171,6 +177,10 @@ export const Project = z.object({
   stageId: id,
   stageEnteredAt: isoDate,
   health: Health,
+  // Who last set the health, and when (a status update or the health picker). Missing on projects whose
+  // health was set before this was recorded, or that haven't been assessed
+  assessedBy: id.optional(),
+  assessedAt: isoDate.optional(),
   rank: z.string().min(1).max(64),
   targetDate: z.string().date().optional(),
   people: z.array(z.object({ userId: id, role: ProjectRole })).max(50).default([]),
@@ -272,6 +282,13 @@ export const Item = z.object({
   rank: z.string().max(64).default("m"),
   assigneeId: id.optional(),
   dueDate: z.string().date().optional(),
+  // When the item last moved to done. Set by the server on the transition, kept through later edits,
+  // cleared by reopening; completing again sets a new time, so it is the latest completion. Items done
+  // before this field existed have none, and Insights counts them as "completion date unknown"
+  completedAt: isoDate.optional(),
+  // The timing the person asked for in their own words ("this month"), kept apart from dueDate, which
+  // holds the absolute date it was resolved to when the request was made
+  requestedTiming: z.string().max(80).optional(),
   /** Kind-specific fields, validated by `itemFields` below */
   fields: z.record(z.string(), z.unknown()).default({}),
   ...versioned,
@@ -427,4 +444,25 @@ export function metricProgress(m: z.infer<typeof MetricFields>): number | undefi
   if (m.target === m.baseline) return latest === m.target ? 1 : 0;
   const p = (latest - m.baseline) / (m.target - m.baseline);
   return Math.max(0, Math.min(1, p));
+}
+
+
+
+/**
+ * The completion time an item should carry after a save (see Item.completedAt). Moving to done stamps
+ * `at`; staying done keeps whatever it had (a legacy item stays unknown rather than getting an
+ * invented date); anything else clears it
+ */
+export function completionAfter(prev: Pick<Item, "status" | "completedAt"> | undefined, nextStatus: string, at: string): string | undefined {
+  if (nextStatus !== "done") return undefined;
+  return prev?.status === "done" ? prev.completedAt : at;
+}
+
+
+/**
+ * The assessment fields that go with setting a project's health: who and when, or none when it is set
+ * back to not assessed
+ */
+export function assessed(health: Health, by: string, at: string): { assessedBy?: string; assessedAt?: string } {
+  return health === "not_started" ? { assessedBy: undefined, assessedAt: undefined } : { assessedBy: by, assessedAt: at };
 }

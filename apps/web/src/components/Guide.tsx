@@ -3,7 +3,7 @@
 // sentences of taps, the way issue forms and sentence-style forms ask for structure.
 
 
-import type { ItemKind } from "@1neon/domain";
+import { resolveTiming, type ItemKind } from "@1neon/domain";
 import { useId, useState } from "react";
 
 
@@ -112,7 +112,7 @@ const GOAL_WORDS = new Map<string, string>(GOALS);
 
 
 /** One need as tapped and typed. Goals hold preset keys and the person's own words */
-interface Need {
+export interface Need {
   goals: string[];
   who: string;
   now: string;
@@ -137,19 +137,39 @@ export interface RequestDraft {
 const list = (xs: string[]) => (xs.length < 3 ? xs.join(" and ") : `${xs.slice(0, -1).join(", ")}, and ${xs.at(-1)}`);
 
 
+/** A calendar date as people read it ("Nov 30, 2026"), without shifting it by time zone */
+export function dayWords(date: string) {
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+}
+
+
+/**
+ * The absolute due date a need's timing means right now: "this month" and "this quarter" end on the
+ * last day of that month or quarter in the organization's time zone; a picked date or range ends on
+ * its last day (a range with only an end date ends there too); "no rush" has none
+ */
+export function dueOf(n: Pick<Need, "due" | "from" | "to">, now = new Date(), timeZone?: string): string | undefined {
+  if (n.due === "date") return n.to || n.from || undefined;
+  return resolveTiming(n.due, now, timeZone)?.dueDate;
+}
+
+
 /** One need in words: the title reads as the sentence's start, the details as the rest */
-function draftOf(n: Need): RequestDraft {
+export function draftOf(n: Need, now = new Date(), timeZone?: string): RequestDraft {
   const goals = n.goals.map((g) => GOAL_WORDS.get(g) ?? g);
   const said = list(goals);
   const title = `${said[0]!.toUpperCase()}${said.slice(1)}${n.who.trim() ? ` for ${n.who.trim()}` : ""}`.slice(0, 160);
-  const dueWords = n.due === "date" ? (n.to && n.to !== n.from ? `${n.from} to ${n.to}` : n.from) : DUE.find(([k]) => k === n.due)?.[1];
+  const dueDate = dueOf(n, now, timeZone);
+  // The words say both what was asked and the date it was resolved to, so they read the same later
+  const range = n.from && n.to && n.to !== n.from ? `${n.from} to ${n.to}` : !n.from && n.to ? `by ${n.to}` : n.from || n.to;
+  const relative = DUE.find(([k]) => k === n.due)?.[1];
+  const dueWords = n.due === "date" ? range : n.due === "later" ? relative : relative && dueDate ? `${relative} (by ${dayWords(dueDate)})` : undefined;
   const lines = [
     n.now.trim() && `Currently: ${n.now.trim()}`,
     n.often && `Happens ${OFTEN.find(([k]) => k === n.often)?.[1]}.`,
     dueWords && `Due ${dueWords}.`,
   ].filter(Boolean);
-  // A picked date (or the end of a range) becomes the item's due date, so it shows in Coming up
-  const dueDate = n.due === "date" ? (n.to || n.from || undefined) : undefined;
+  // The due date goes on the item, so it shows in Coming up and turns overdue when it passes
   return { title, body: lines.join("\n"), dueDate, fields: { goals: n.goals, who: n.who.trim(), now: n.now.trim(), often: n.often, due: n.due, from: n.from, to: n.to } };
 }
 
@@ -188,14 +208,14 @@ function Goals({ value, onChange }: { value: string[]; onChange: (v: string[]) =
 
 /** A request as one or more needs, each one sentence: "I'd like to ___ for ___. Currently, ___.
  * It happens ___, and it's due ___." Each need with a goal becomes its own request */
-export function RequestBuilder({ onSubmit, onCancel, busy }: { onSubmit: (d: RequestDraft[]) => void; onCancel: () => void; busy?: boolean }) {
+export function RequestBuilder({ onSubmit, onCancel, busy, timeZone }: { onSubmit: (d: RequestDraft[]) => void; onCancel: () => void; busy?: boolean; timeZone?: string }) {
   const [needs, setNeeds] = useState<Need[]>([blankNeed()]);
   // Change one field of one need
   const set = (i: number, patch: Partial<Need>) => setNeeds(needs.map((n, j) => (j === i ? { ...n, ...patch } : n)));
   const ready = needs.filter((n) => n.goals.length);
 
   return (
-    <form className="card sentence" onSubmit={(e) => { e.preventDefault(); if (ready.length) onSubmit(ready.map(draftOf)); }}>
+    <form className="card sentence" onSubmit={(e) => { e.preventDefault(); if (ready.length) onSubmit(ready.map((n) => draftOf(n, new Date(), timeZone))); }}>
       <p className="eyebrow">Tell us what you need</p>
       {needs.map((n, i) => (
         <fieldset className="need" key={i}>
@@ -213,6 +233,8 @@ export function RequestBuilder({ onSubmit, onCancel, busy }: { onSubmit: (d: Req
           <div className="line">
             <span>and it's due</span>
             <Pick label="When it's due" options={DUE} value={n.due} onChange={(due) => set(i, { due })} />
+            {/* This month or quarter shows the actual date it will be due before anything is sent */}
+            {(n.due === "soon" || n.due === "quarter") && <span className="muted small" aria-live="polite">due by {dayWords(dueOf(n, new Date(), timeZone)!)}</span>}
             {/* A date, or a range when the second date is set */}
             {n.due === "date" && (
               <span className="dates">

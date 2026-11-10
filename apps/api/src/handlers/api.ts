@@ -7,7 +7,7 @@ import { createApp } from "../app.ts";
 import { CognitoAuth } from "../auth.ts";
 import { loadConfig } from "../config.ts";
 import { AwsTexter, CognitoDirectory, S3Storage, SesMailer } from "../services.ts";
-import { drainOutbox } from "../outbox.ts";
+import { beforeDeadline, drainOutbox } from "../outbox.ts";
 import { sweepFiles } from "../files.ts";
 import { DynamoTable } from "../store/dynamo.ts";
 import { Repo } from "../store/repo.ts";
@@ -51,9 +51,13 @@ const http = handle(app);
  */
 export const handler = async (event: Parameters<typeof http>[0] | { source?: string }, context: Parameters<typeof http>[1]) => {
   if ((event as { source?: string }).source === "aws.events") {
-    const result = await drainOutbox({ repo, mailer, texter, cfg }, { budgetMs: 7_000 });
+    // One absolute end for the whole pass, from the time Lambda says is left (less room to log and
+    // return). The outbox gets up to seven seconds of it and the file sweep the rest
+    const left = typeof context?.getRemainingTimeInMillis === "function" ? context.getRemainingTimeInMillis() : 15_000;
+    const end = Date.now() + Math.max(0, left - 2_000);
+    const result = await drainOutbox({ repo, mailer, texter, cfg }, { deadline: Math.min(end - 2_000, Date.now() + 7_000) });
     // Then files whose scan finished since the last pass become ready (or rejected) without a re-upload
-    const files = await sweepFiles({ repo, storage }).catch((e) => ({ watched: 0, settled: 0, error: (e as Error).name }));
+    const files = await beforeDeadline(sweepFiles({ repo, storage }, { deadline: end - 500 }), end).catch((e) => ({ watched: 0, settled: 0, error: (e as Error).name }));
     // One line per pass in CloudWatch's embedded metric format: counts and queue age only, never
     // addresses or bodies. Written to stdout directly, because the JSON log wrapper would hide the
     // metric directive inside its message field
@@ -71,6 +75,8 @@ function outboxMetrics(r: Awaited<ReturnType<typeof drainOutbox>>) {
     message: "outbox",
     OutboxOldestAgeSec: r.oldestAgeSec,
     OutboxFailed: r.failed,
+    deferred: r.deferred,
+    possibleDuplicates: r.possibleDuplicates,
     processed: r.processed,
     sent: r.sent,
     retrying: r.retrying,

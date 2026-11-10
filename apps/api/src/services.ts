@@ -34,8 +34,9 @@ export interface Directory {
 
 /** Outbound email */
 export interface Mailer {
-  // Send one message with plain text and HTML bodies; replyTo, when given, is where answers go
-  send(to: string, subject: string, text: string, html: string, replyTo?: string): Promise<void>;
+  // Send one message with plain text and HTML bodies; replyTo, when given, is where answers go. An
+  // aborted signal cancels the request where the provider's SDK supports it
+  send(to: string, subject: string, text: string, html: string, replyTo?: string, signal?: AbortSignal): Promise<void>;
 }
 
 
@@ -64,7 +65,8 @@ export interface Storage {
 
 /** Outbound text messages; `to` is an E.164 number such as +15551234567 */
 export interface Texter {
-  send(to: string, body: string): Promise<void>;
+  // An aborted signal cancels the request where the provider's SDK supports it
+  send(to: string, body: string, signal?: AbortSignal): Promise<void>;
 }
 
 
@@ -191,7 +193,8 @@ export class SesMailer implements Mailer {
   constructor(private from: string) {}
 
   // One recipient per message, so addresses never leak between invitees
-  async send(to: string, subject: string, text: string, html: string, replyTo?: string) {
+  // The AWS SDK takes an abort signal per call, so a timed-out send is cancelled rather than left running
+  async send(to: string, subject: string, text: string, html: string, replyTo?: string, signal?: AbortSignal) {
     await this.ses.send(
       new SendEmailCommand({
         FromEmailAddress: this.from,
@@ -199,6 +202,7 @@ export class SesMailer implements Mailer {
         ...(replyTo ? { ReplyToAddresses: [replyTo] } : {}),
         Content: { Simple: { Subject: { Data: subject }, Body: { Text: { Data: text }, Html: { Data: html } } } },
       }),
+      { abortSignal: signal },
     );
   }
 }
@@ -208,8 +212,9 @@ export class SesMailer implements Mailer {
 export class AwsTexter implements Texter {
   private client = new PinpointSMSVoiceV2Client({});
   constructor(private from: string) {}
-  async send(to: string, body: string) {
-    await this.client.send(new SendTextMessageCommand({ DestinationPhoneNumber: to, OriginationIdentity: this.from, MessageBody: body, MessageType: "TRANSACTIONAL" }));
+  // Cancelled through the abort signal when the caller's time limit passes
+  async send(to: string, body: string, signal?: AbortSignal) {
+    await this.client.send(new SendTextMessageCommand({ DestinationPhoneNumber: to, OriginationIdentity: this.from, MessageBody: body, MessageType: "TRANSACTIONAL" }), { abortSignal: signal });
   }
 }
 

@@ -35,8 +35,9 @@ export function Avatar({ id, name, editing, size = 26 }: { id: string; name: str
 }
 
 
-// Project health, as a colored dot plus words (never color alone)
-const HEALTH_LABEL: Record<HealthT, string> = { on_track: "On track", at_risk: "At risk", off_track: "Off track", not_started: "Not started" };
+// Project health, as a colored dot plus words (never color alone). The stored "not_started" reads as
+// Not assessed: health is the team's call, and starting work doesn't make a project on track
+const HEALTH_LABEL: Record<HealthT, string> = { on_track: "On track", at_risk: "At risk", off_track: "Off track", not_started: "Not assessed" };
 
 
 /** Health as a colored dot plus its label */

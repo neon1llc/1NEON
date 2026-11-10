@@ -2,7 +2,7 @@
 // its starter items, read, edit (including who decides), move between stages, and trash.
 
 
-import { CreateProjectInput, Item, MoveProjectInput, UpdateProjectInput, newId, rankBetween, templateById, type Project } from "@1neon/domain";
+import { CreateProjectInput, assessed, Item, MoveProjectInput, UpdateProjectInput, newId, rankBetween, templateById, type Project } from "@1neon/domain";
 import { z } from "zod";
 import { MAX_TRANSACTION, actorId, body, byRank, defined, fail, need, now } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
@@ -66,7 +66,10 @@ export function projectRoutes(app: App, k: Kit) {
     // Starter items: the real example, the template's items, and the measures from the wizard
     const push = (i: Partial<Item> & Pick<Item, "kind" | "title">) => {
       rank = rankBetween(rank, "");
-      items.push(Item.parse({ ...base, id: newId("i"), rank, ...i }));
+      const it = Item.parse({ ...base, id: newId("i"), rank, ...i });
+      // A starter item that begins done (the answered example) is completed at creation
+      if (it.status === "done") it.completedAt = ts;
+      items.push(it);
     };
     // The real example: answered in the wizard, or asked as the first discovery question
     if (input.example) push({ kind: "discovery", title: "One real example of how it works today", body: input.example, status: "done" });
@@ -116,6 +119,8 @@ export function projectRoutes(app: App, k: Kit) {
     const { version, targetDate, ...patch } = input;
     const next: Project = { ...p, ...defined(patch), version: p.version + 1, updatedAt: now(), updatedBy: actorId(c) };
     if (targetDate !== undefined) next.targetDate = targetDate ?? undefined;
+    // Setting health is an assessment: record who made it and when
+    if (input.health !== undefined) Object.assign(next, assessed(input.health, actorId(c), next.updatedAt));
     // One transaction: the project, its update event, and (when who decides changed) that event too
     await repo.table.write([
       repo.projectOp(next, { version }),
@@ -145,10 +150,8 @@ export function projectRoutes(app: App, k: Kit) {
       if (!decided && !input.reason) fail(428, "reason_required", "No option has been approved yet. Add a reason to move on anyway.");
     }
     const ts = now();
-    // A project leaves "not started" on its own once it moves on from its first stage; after that its
-    // health is the team's call (on track, at risk, off track)
-    const started = p.health === "not_started" && stageChanged && order > t.stages.findIndex((s) => !s.hidden);
-    const next: Project = { ...p, stageId: stage.id, rank: rankBetween(input.after ?? "", input.before ?? ""), stageEnteredAt: stageChanged ? ts : p.stageEnteredAt, ...(started ? { health: "on_track" as const } : {}), version: p.version + 1, updatedAt: ts, updatedBy: actorId(c) };
+    // Moving stages is activity, not an assessment: health stays whatever the team last set
+    const next: Project = { ...p, stageId: stage.id, rank: rankBetween(input.after ?? "", input.before ?? ""), stageEnteredAt: stageChanged ? ts : p.stageEnteredAt, version: p.version + 1, updatedAt: ts, updatedBy: actorId(c) };
     const summary = stageChanged ? `Moved ${p.key} to ${stage.name}${input.reason ? ` (${input.reason})` : ""}` : `Reordered ${p.key}`;
     await repo.table.write([repo.projectOp(next, { version: input.version }), repo.auditOp({ tenantId: t.id, actorId: actorId(c), action: "project.moved", target: p.id, summary })]);
     return c.json(next);

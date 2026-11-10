@@ -16,8 +16,12 @@ export interface Row {
 }
 
 
-/** How a put is guarded: create-only, match a version, or (rarely) unconditional */
-export type Guard = { create: true } | { version: number } | { always: true };
+/**
+ * How a put is guarded: create-only, match a version, or (rarely) unconditional. A version guard may
+ * also name the row's `id`, so a write meant for one short-lived record (such as one texted code)
+ * can never land on a newer record that happens to reuse the same version number
+ */
+export type Guard = { create: true } | { version: number; id?: string } | { always: true };
 
 
 /** The storage operations the repository needs, nothing more */

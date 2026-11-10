@@ -17,7 +17,8 @@ interface Data {
   byLayer: Record<string, number>;
   byHealth: Record<string, number>;
   weeks: { week: string; done: number }[];
-  work: { open: number; overdue: number; onTime: number; late: number };
+  // doneUnknown: finished before completion times were recorded (absent from older API versions)
+  work: { open: number; overdue: number; onTime: number; late: number; doneUnknown?: number };
   decisions: { count: number; avgDays: number | null };
   measures: { count: number; reached: number };
   people: { active: number; invited: number };
@@ -29,7 +30,7 @@ const HEALTH = [
   ["on_track", "On track", "var(--ok)"],
   ["at_risk", "At risk", "var(--amber)"],
   ["off_track", "Off track", "var(--red)"],
-  ["not_started", "Not started", "var(--muted)"],
+  ["not_started", "Not assessed", "var(--muted)"],
 ] as const;
 
 
@@ -51,7 +52,7 @@ export function Insights() {
           <div className="kpis" data-tour="kpis">
             <Kpi big={d.projects} label="active projects" />
             <Kpi big={d.work.open} label="open items" sub={d.work.overdue ? `${d.work.overdue} overdue` : "none overdue"} warn={d.work.overdue > 0} />
-            <Kpi big={onTimeRate === undefined ? "–" : `${onTimeRate}%`} label="finished on time" sub={onTimeRate === undefined ? "nothing due has finished yet" : `${d.work.onTime} of ${d.work.onTime + d.work.late}`} />
+            <Kpi big={onTimeRate === undefined ? "–" : `${onTimeRate}%`} label="finished on time" sub={onTimeRate === undefined ? "nothing due has finished yet" : `${d.work.onTime} of ${d.work.onTime + d.work.late} with a due date and a known finish`} />
             <Kpi big={d.decisions.avgDays ?? "–"} label="days to a decision" sub={`${d.decisions.count} decided`} />
             <Kpi big={`${d.measures.reached}/${d.measures.count}`} label="measures at target" />
             <Kpi big={d.people.active} label="people active" sub={d.people.invited ? `${d.people.invited} invited` : undefined} />
@@ -61,6 +62,7 @@ export function Insights() {
             <Layers byLayer={d.byLayer} total={d.projects} />
             <HealthBar byHealth={d.byHealth} total={d.projects} />
           </div>
+          <Definitions unknown={d.work.doneUnknown ?? 0} />
         </>
       ))}
     </>
@@ -126,6 +128,26 @@ function HealthBar({ byHealth, total }: { byHealth: Record<string, number>; tota
         {total === 0 && <span className="empty-bar" />}
       </div>
       <ul className="keys">{HEALTH.map(([k, w, c]) => <li key={k}><i style={{ background: c }} />{w} <b>{byHealth[k] ?? 0}</b></li>)}</ul>
+    </section>
+  );
+}
+
+
+/**
+ * How each number is counted, with its denominator, so a reader can check it. Finished means the
+ * recorded completion time (the latest one, if work was reopened and finished again), not the last edit
+ */
+function Definitions({ unknown }: { unknown: number }) {
+  return (
+    <section className="card chart" aria-labelledby="insights-defs">
+      <h2 className="section-h" id="insights-defs">How these are counted</h2>
+      <ul className="small">
+        <li><b>Finished per week</b> counts items by the week they were marked done. Editing a finished item doesn't move it. If an item is reopened and finished again, the latest finish counts.</li>
+        <li><b>Finished on time</b> is items finished on or before their due date, out of finished items that have both a due date and a known finish date.</li>
+        <li><b>Open items</b> are items not done, not approved options, and not status updates; overdue ones are past their due date.</li>
+        <li><b>Project health</b> is what the team last set on each active project. "Not assessed" means nobody has set it yet.</li>
+        {unknown > 0 && <li><b>Completion date unknown:</b> {unknown} finished {unknown === 1 ? "item was" : "items were"} marked done before finish dates were recorded, so {unknown === 1 ? "it isn't" : "they aren't"} in the weekly or on-time numbers.</li>}
+      </ul>
     </section>
   );
 }
