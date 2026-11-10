@@ -2,7 +2,7 @@
 // portal's own frame. Public, no sign-in; it links to the working demo and the live playback.
 
 
-import { LayerBadge, LAYERS, layerName } from "../components/ui.tsx";
+import { LayerBadge, LAYERS, layerHint, layerName } from "../components/ui.tsx";
 import type { Layer } from "@1neon/domain";
 
 
@@ -76,7 +76,7 @@ export function Example() {
         <p className="lead">A two-person bakery takes orders by email and phone, then retypes them into a spreadsheet each night. Follow it through the four layers.</p>
         {/* Contents: jump to a layer */}
         <nav className="tabs" aria-label="Layers">
-          {LAYERS.map((l) => <a key={l} href={`#${l}`}><LayerBadge layer={l} />{layerName(l)}</a>)}
+          {LAYERS.map((l) => <a key={l} href={`#${l}`}><LayerBadge layer={l} /><span className="tab-name">{layerName(l)}<small className="sub"><span className="sr">, </span>{layerHint(l)}</small></span></a>)}
         </nav>
         {LAYERS.map((l, i) => (
           <section key={l} id={l} className="example-layer" aria-labelledby={`${l}-h`}>

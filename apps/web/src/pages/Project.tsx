@@ -11,7 +11,7 @@ import { ItemPanel, STATUS_WORDS, useDeleteItem, useMayDelete } from "../compone
 import { gate, Stale } from "../components/Reads.tsx";
 import { Link, NavLink, useLocation, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
-import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerName, layerProgress, OnionProgress, Trend, ago, dateLabel, daysSince, layerFromSlug, layerSlug, useToast } from "../components/ui.tsx";
+import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerHint, layerName, layerProgress, OnionProgress, Trend, ago, dateLabel, daysSince, layerFromSlug, layerSlug, useToast } from "../components/ui.tsx";
 import { api, HttpError } from "../lib/api.ts";
 import { problem, useMembers, useProject, useProjects, useRefresh, useSubmit } from "../lib/hooks.ts";
 import { aimBetween } from "../lib/motion.ts";
@@ -103,7 +103,7 @@ export function ProjectPage() {
       <nav className="tabs" aria-label="Project sections" data-tour="layers">
         <NavLink to={base} end viewTransition onClick={() => aimBetween(at, 0)} className={() => (tab === "overview" ? "active" : "")}>Overview</NavLink>
         {LAYERS.map((l, i) => (
-          <NavLink key={l} to={`${base}/${layerSlug(l)}`} viewTransition onClick={() => aimBetween(at, i + 1)}><LayerBadge layer={l} />{layerName(l)} {prog[l][1] > 0 && <span className="muted" aria-label={`${prog[l][0]} of ${prog[l][1]} done`} title={`${prog[l][0]} of ${prog[l][1]} done`}>{prog[l][0]}/{prog[l][1]}</span>}</NavLink>
+          <NavLink key={l} to={`${base}/${layerSlug(l)}`} viewTransition onClick={() => aimBetween(at, i + 1)}><LayerBadge layer={l} /><span className="tab-name">{layerName(l)}<small className="sub"><span className="sr">, </span>{layerHint(l)}</small></span> {prog[l][1] > 0 && <span className="muted" aria-label={`${prog[l][0]} of ${prog[l][1]} done`} title={`${prog[l][0]} of ${prog[l][1]} done`}>{prog[l][0]}/{prog[l][1]}</span>}</NavLink>
         ))}
       </nav>
       {/* The section under the tabs pans by tab order */}

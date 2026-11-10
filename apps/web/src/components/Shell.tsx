@@ -22,7 +22,7 @@ import { ConfirmDialog } from "./Confirm.tsx";
 import { HelpProvider, useHelp } from "./Help.tsx";
 import { Palette } from "./Palette.tsx";
 import { gate, Stale, type Read } from "./Reads.tsx";
-import { Avatar, Icon, initials, LayerBadge, LAYERS, layerName, layerSlug, Rings, useAsk } from "./ui.tsx";
+import { Avatar, Icon, initials, LayerBadge, LAYERS, layerHint, layerName, layerSlug, Rings, useAsk } from "./ui.tsx";
 
 
 // --- Session -----------------------------------------------------------------
@@ -458,12 +458,13 @@ export function useTopBar(node: ReactNode, deps: unknown[]) {
 
 
 /** One menu entry: its icon box and label line up with every other entry; picking it closes the full menu */
-function Item({ to, icon, label, end, tour }: { to: string; icon: ReactNode; label: string; end?: boolean; tour?: string }) {
+function Item({ to, icon, label, sub, end, tour }: { to: string; icon: ReactNode; label: string; sub?: string; end?: boolean; tour?: string }) {
   return (
     <li>
-      <NavLink to={to} end={end} title={label} data-tour={tour}>
+      <NavLink to={to} end={end} title={sub ? `${label}: ${sub}` : label} data-tour={tour}>
         {icon}
-        <span className="lbl">{label}</span>
+        {/* A layer's plain subtitle rides on the same row, so every row keeps its height */}
+        <span className="lbl">{label}{sub && <small className="sub"><span className="sr">, </span>{sub}</small>}</span>
       </NavLink>
     </li>
   );
@@ -609,7 +610,7 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
               <li className="sep" data-tour="nav-layers"><span className="lbl">Layers</span>
                 <ul className="nav">
                   {LAYERS.map((l) => (
-                    <Item key={l} to={`${base}/layer/${layerSlug(l)}`} icon={<LayerBadge layer={l} />} label={layerName(l)} />
+                    <Item key={l} to={`${base}/layer/${layerSlug(l)}`} icon={<LayerBadge layer={l} />} label={layerName(l)} sub={layerHint(l)} />
                   ))}
                 </ul>
               </li>

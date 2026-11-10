@@ -963,3 +963,12 @@ body:has(.demo-bar) .top { top: var(--demo-h); }
 .content { padding-left: calc(var(--gut) + var(--inl)); padding-right: calc(var(--gut) + env(safe-area-inset-right)); }
 .tabbar { padding-left: calc(4px + var(--inl)); padding-right: calc(4px + env(safe-area-inset-right)); }
 .demo-bar { padding-left: calc(16px + env(safe-area-inset-left)); padding-right: calc(16px + env(safe-area-inset-right)); }
+
+
+/* --- Layer subtitles (2026-11-10) ---
+   Each branded layer name carries its plain meaning beside it in navigation: the menu, the project's
+   tabs, and the sample project's contents. Same row, smaller and muted, so no row grows */
+.nav .lbl .sub { margin-left: 8px; font: 12px var(--sans); color: var(--muted); }
+.nav a.active .lbl .sub { font-weight: 400; }
+.tabs .tab-name .sub { margin-left: 6px; font: 11px var(--sans); color: var(--muted); }
+.tabs a.active .tab-name .sub { color: inherit; opacity: .85; }
