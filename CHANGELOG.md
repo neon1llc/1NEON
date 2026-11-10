@@ -23,3 +23,31 @@ The first tagged release. 1NEON had been live at neon1.tech/1NEON since 2026-11-
 
 ### Fixed
 - Phone pages no longer zoom out when a project's tabs or the invite form are on screen.
+
+## Before v0.1.0
+
+1NEON shipped from main for several days before releases were tagged. These pre-releases mark the points in that history where a meaningful piece landed, on the commits as they are on main. They were tagged on 2026-11-10; the dates below are when each one shipped.
+
+### v0.1.0-alpha.8 - 2026-11-10
+- Neo for signed-in people, grounded in the 1NEON guide, and the contact route takes any number of topics or none.
+
+### v0.1.0-alpha.7 - 2026-11-10
+- Review fixes across new projects, Home, requests, Insights, and the outbox; route titles and descriptions; FAQs that link each answer; and a release that's fully checked before any AWS change.
+
+### v0.1.0-alpha.6 - 2026-11-09
+- A Watch it link on every FAQ the walkthrough can show, the contact form endpoint for neon1.tech, and plainer thoughts for the demo's client.
+
+### v0.1.0-alpha.5 - 2026-11-09
+- Notifications open what they're about, Default and Mini menus, items that edit, check off, and delete the same way, and Next step after each action.
+
+### v0.1.0-alpha.4 - 2026-11-09
+- A facet review of every page, search that offers only what you can do, one release workflow for infrastructure and app, and API routes split by feature.
+
+### v0.1.0-alpha.3 - 2026-11-09
+- Four short demos, the branded sign-in code email, and text notices in the portal.
+
+### v0.1.0-alpha.2 - 2026-11-09
+- A hardening pass: a durable outbox for notices and invitations, texted codes to confirm it's you, safer decisions and uploads, a full-history secret scan before deploys, and signed-in pages that load on first visit.
+
+### v0.1.0-alpha.1 - 2026-11-08
+- The earliest commit in the published history: the portal, the demo, and a walkthrough that holds up to jumps, pauses, and clicks.
