@@ -983,3 +983,8 @@ body:has(.demo-bar) .top { top: var(--demo-h); }
 .cost-split dd { margin: 0; }
 .assess-h { margin: 4px 0 2px; font: 11px var(--mono); letter-spacing: .04em; color: var(--muted); }
 .assess-rubric { margin: 10px 0 0; max-width: 72ch; }
+
+
+/* --- FAQ links (2026-11-10): each answer ends with a way to copy its own address --- */
+.faq-link { margin: 8px 0 0; }
+.faq:target > summary, .faq[open]:target > summary { color: var(--accent); }
