@@ -8,6 +8,7 @@ import { Link, useNavigate } from "react-router";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { dateLabel, useToast } from "../components/ui.tsx";
 import { api } from "../lib/api.ts";
+import { checkMeasures, MEASURE_TITLE_MAX, MEASURE_UNIT_MAX, numberWords, type MetricDraft } from "../lib/measures.ts";
 import { problem, useRefresh } from "../lib/hooks.ts";
 import { slide } from "../lib/motion.ts";
 import type { Project } from "@1neon/domain";
@@ -17,13 +18,6 @@ import type { Project } from "@1neon/domain";
 const STEPS = ["Template", "Basics", "Measures", "Review"] as const;
 
 
-/** A measure as typed; numbers are parsed on submit */
-interface MetricDraft {
-  title: string;
-  unit: string;
-  baseline: string;
-  target: string;
-}
 
 
 // Four steps, then one create call; only editors and admins get the form
@@ -52,16 +46,26 @@ export function NewProject() {
   if (!canWrite) return <p className="lead">Viewers can't start projects. Ask an editor or admin in {org.name}.</p>;
   // The chosen template, falling back to the first (blank)
   const t = TEMPLATES.find((x) => x.id === template) ?? TEMPLATES[0]!;
-  // Blank or non-numeric measure values are left unset
-  const num = (s: string) => (s.trim() === "" || Number.isNaN(Number(s)) ? undefined : Number(s));
-  // Measures with a name are kept; the project starts in the first stage that isn't hidden, as the API does
-  const kept = metrics.filter((m) => m.title.trim());
+  // Measures checked once, the same way for the inline errors, the Review step, and the create call:
+  // a started measure with a bad number or a missing name is an error, never silently dropped
+  const measures = checkMeasures(metrics);
+  const kept = measures.values;
+  // The project starts in the first stage that isn't hidden, as the API does
   const first = org.stages.find((x) => !x.hidden) ?? org.stages[0];
   // What was left blank, named on the review so skipping it is a choice, not an accident
   const later = [!projectSummary.trim() && "what it is", !outcome.trim() && "what done looks like", kept.length === 0 && "a measure"].filter(Boolean) as string[];
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
   // Only the Basics step has a required field
   const ready = [true, name.trim().length > 0, true, true];
+  // On a step with a problem, move to the first field to fix instead of going on; answers stay as typed
+  const firstProblem = () => {
+    if (!measures.first) return false;
+    const [field, i] = measures.first.split(":");
+    const ids = { title: "mt", unit: "mu", baseline: "mb", target: "mg" } as Record<string, string>;
+    if (step !== 2) setStep(2);
+    setTimeout(() => document.getElementById(`${ids[field!]}${i}`)?.focus(), 0);
+    return true;
+  };
 
   // Create the project with its starter items and measures, then open it
   const create = async () => {
@@ -78,7 +82,8 @@ export function NewProject() {
           outcome,
           example,
           targetDate: targetDate || undefined,
-          metrics: kept.map((m) => ({ title: m.title.trim(), unit: m.unit, baseline: num(m.baseline), target: num(m.target) })),
+          // Exactly the values the Review step showed
+          metrics: kept,
         },
       });
       refresh();
@@ -105,6 +110,7 @@ export function NewProject() {
         className="form slide-stage"
         onSubmit={(e) => {
           e.preventDefault();
+          if (step >= 2 && firstProblem()) return;
           if (step < STEPS.length - 1) slide("next", () => setStep(step + 1));
           else void create();
         }}
@@ -143,13 +149,22 @@ export function NewProject() {
             {metrics.map((m, i) => {
               // Change one field of this measure
               const set = (patch: Partial<MetricDraft>) => setMetrics(metrics.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+              const err = measures.errors[i] ?? {};
+              // One field with its inline error, tied to it for screen readers
+              const field = (key: keyof MetricDraft, idp: string, label: string, input: { placeholder?: string; inputMode?: "decimal"; maxLength?: number }, cls?: string) => (
+                <div className={cls}>
+                  <label htmlFor={`${idp}${i}`}>{label}</label>
+                  <input id={`${idp}${i}`} value={m[key]} onChange={(e) => set({ [key]: e.target.value })} aria-invalid={Boolean(err[key])} aria-describedby={err[key] ? `${idp}${i}-e` : undefined} {...input} />
+                  {err[key] && <small id={`${idp}${i}-e`} className="warn" role="alert">{err[key]}</small>}
+                </div>
+              );
               return (
                 <div key={i} className="card metric-draft">
-                  <div className="mt"><label htmlFor={`mt${i}`}>Measure</label><input id={`mt${i}`} value={m.title} onChange={(e) => set({ title: e.target.value })} placeholder="e.g. hours a week on scheduling" /></div>
-                  <div><label htmlFor={`mu${i}`}>Unit</label><input id={`mu${i}`} value={m.unit} onChange={(e) => set({ unit: e.target.value })} placeholder="e.g. hours" /></div>
-                  {/* Numbers only: anything else would be dropped, so it's filtered as typed */}
-                  <div><label htmlFor={`mb${i}`}>Now</label><input id={`mb${i}`} inputMode="decimal" value={m.baseline} onChange={(e) => set({ baseline: e.target.value.replace(/[^\d.-]/g, "") })} /></div>
-                  <div><label htmlFor={`mg${i}`}>Target</label><input id={`mg${i}`} inputMode="decimal" value={m.target} onChange={(e) => set({ target: e.target.value.replace(/[^\d.-]/g, "") })} /></div>
+                  {field("title", "mt", "Measure", { placeholder: "e.g. hours a week on scheduling", maxLength: MEASURE_TITLE_MAX }, "mt")}
+                  {field("unit", "mu", "Unit", { placeholder: "e.g. hours", maxLength: MEASURE_UNIT_MAX })}
+                  {/* Optional numbers: blank means not set (not zero); anything else must be a number */}
+                  {field("baseline", "mb", "Now (optional)", { inputMode: "decimal" })}
+                  {field("target", "mg", "Target (optional)", { inputMode: "decimal" })}
                   {metrics.length > 1 && <button type="button" className="linkish small rm" onClick={() => setMetrics(metrics.filter((_, j) => j !== i))} aria-label={`Remove measure ${i + 1}`}>Remove</button>}
                 </div>
               );
@@ -166,12 +181,13 @@ export function NewProject() {
             {projectSummary && <p>{projectSummary}</p>}
             {outcome && <p><b>Done when:</b> {outcome}</p>}
             {targetDate && <p><b>Target:</b> {dateLabel(targetDate)}</p>}
-            {/* Each measure as it will be saved, so a dropped number shows before Create */}
+            {/* Each measure exactly as it will be saved: the normalized numbers, with unset ones named */}
             {kept.length > 0 && (
               <ul className="small" style={{ paddingLeft: 18 }}>
-                {kept.map((m, i) => <li key={i}>{m.title.trim()}: from {m.baseline || "?"} to {m.target || "?"}{m.unit ? ` ${m.unit}` : ""}</li>)}
+                {kept.map((m, i) => <li key={i}>{m.title}: now {numberWords(m.baseline)}, target {numberWords(m.target)}{m.unit ? ` (${m.unit})` : ""}</li>)}
               </ul>
             )}
+            {!measures.ok && <p className="notice" role="alert">A measure needs fixing before Create. <button type="button" className="linkish" onClick={firstProblem}>Show me</button></p>}
             {later.length > 0 && <p className="small notice">Not written yet: {later.join(", ")}. You can add {later.length === 1 ? "it" : "them"} later from the project's Overview, which will remind you.</p>}
             <p className="muted small">Gets the next {t.keyPrefix} number when created. Starts in {first?.name}. Adds {plural(t.items.length, "starter item")}{kept.length ? ` and ${plural(kept.length, "measure")}` : ""}.</p>
           </div>
