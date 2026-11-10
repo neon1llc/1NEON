@@ -972,3 +972,14 @@ body:has(.demo-bar) .top { top: var(--demo-h); }
 .nav a.active .lbl .sub { font-weight: 400; }
 .tabs .tab-name .sub { margin-left: 6px; font: 11px var(--sans); color: var(--muted); }
 .tabs a.active .tab-name .sub { color: inherit; opacity: .85; }
+
+
+/* --- Option comparison basis (2026-11-10) ---
+   One-time and recurring charges on their own lines, then whose scores these are; the rubric sits
+   once under the cards */
+.cost-split { display: grid; gap: 2px; margin: 0 0 10px; }
+.cost-split div { display: flex; gap: 8px; }
+.cost-split dt { flex: none; width: 76px; font: 11px var(--mono); color: var(--muted); padding-top: 2px; }
+.cost-split dd { margin: 0; }
+.assess-h { margin: 4px 0 2px; font: 11px var(--mono); letter-spacing: .04em; color: var(--muted); }
+.assess-rubric { margin: 10px 0 0; max-width: 72ch; }

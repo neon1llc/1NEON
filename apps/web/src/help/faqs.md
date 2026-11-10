@@ -81,7 +81,7 @@ The person named as the project's decision maker. If nobody is named, an admin o
 Not edited. Once approved, neither the decision nor the option it came from can be edited or removed. To change course, a new option is proposed and approved; the earlier decision stays on record, marked as replaced, so the history stays clear.
 
 ### What do Cost, Quality, and Effort mean?
-A quick comparison of each option, in plain words. Lowest cost, best quality, and lightest effort are the better ends. [Watch it](/1NEON/live?play=propose).
+They're neon1's assessment of each option, from 1 to 5, where more filled dots is always better. **Cost** is the total cost. **Quality** is how fully it meets the requirements you agreed. **Effort** is your team's effort to adopt and run it. Each option also lists one-time and recurring charges apart, with a first-year total when it has both; the written price on the option is what you'd agree to. Figures in the demo and the walkthrough are illustrative. [Watch it](/1NEON/live?play=propose).
 
 ## Files
 
