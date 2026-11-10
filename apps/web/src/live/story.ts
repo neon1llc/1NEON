@@ -432,12 +432,12 @@ export const STORY: Section[] = [
       await s.think("And every file we traded, in one spot.");
       await s.go(`${base}/documents`, "Files");
       await s.wait(1200);
+      // The history is Home's Recent activity: who did what, newest first, the same feed a
+      // client reaches from the menu (each item's panel keeps its own History too)
+      await s.go(`${base}/workspace`, "Home");
       await s.say("And every change, kept as history");
       await s.think("Even a history of every change. Good for my records.");
-      await s.go(`${base}/settings`, "Settings");
-      await s.wait(900);
-      await s.scroll(1200, 1600);
-      await s.go(`${base}/workspace`, "Home");
+      await s.hover('[data-tour="activity"]', 1800);
       await s.say("From a first request to a measured result, all in one place");
       await s.think("No more retyping orders. That's my evenings back.");
       await s.wait(1800);
