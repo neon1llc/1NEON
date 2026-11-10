@@ -291,7 +291,7 @@ function SignIn() {
             {(IN_LIVE ? LIVE_PEOPLE : PEOPLE).map(([e, name, role]) => (
               <button key={e} onClick={() => pick(e)}><b>{name}</b><span>{role}</span></button>
             ))}
-            {!IN_LIVE && <p className="fine"><a href="/1NEON/live">Or watch a whole project play out</a></p>}
+            {!IN_LIVE && <p className="fine"><a href="/1NEON/live">Or watch the guided walkthrough</a></p>}
           </div>
         )}
         {/* Step 1: the email */}
@@ -343,7 +343,7 @@ function SignIn() {
         {!IN_DEMO && (
           <nav className="signin-more" aria-label="Without an account">
             <a href="/1NEON/example">Read a sample project</a>
-            <a href="/1NEON/demo/">Try the demo</a>
+            <a href="/1NEON/demo/">Try the interactive demo</a>
             <a href="mailto:hello@neon1.tech?subject=1NEON%20invitation">Need an invitation?</a>
             <a href="/">neon1.tech home</a>
           </nav>
@@ -501,8 +501,8 @@ function DemoBar() {
   const ask = useAsk();
   const startOver = async () => { if (await ask({ title: "Start the demo over?", body: "Every change you made in this demo goes away.", yes: "Start over", danger: true })) void resetDemo(); };
   return (
-    <div className="demo-bar" role="region" aria-label="Demo">
-      <span className="demo-tag">demo</span>
+    <div className="demo-bar" role="region" aria-label="Interactive demo">
+      <span className="demo-tag">interactive demo</span>
       <span className="demo-note">You're {me.user.name || me.user.email}. Everything stays in this browser.</span>
       <TabOnly />
       <span className="demo-acts">

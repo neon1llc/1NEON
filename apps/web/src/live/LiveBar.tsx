@@ -17,6 +17,16 @@ import "./live.css";
 const ownsKeys = (t: EventTarget | null) => t instanceof Element && Boolean(t.closest("input, textarea, select, button, a, [contenteditable=true], dialog"));
 
 
+/** Exit tour: back where the visitor came from on neon1.tech, or the site's home */
+function exitTo() {
+  try {
+    const from = new URL(document.referrer);
+    if (from.origin === location.origin && !from.pathname.startsWith("/1NEON/live")) return from.pathname + from.search;
+  } catch { /* no referrer */ }
+  return "/";
+}
+
+
 /** The bar, bound to one player */
 export function LiveBar({ player }: { player: Player }) {
   const [v, setV] = useState<View>(player.view);
@@ -57,8 +67,17 @@ export function LiveBar({ player }: { player: Player }) {
   }, [player, v.index]);
 
   return (
-    <div className="live-bar" ref={box} role="region" aria-label="Live demo controls">
+    <div className="live-bar" ref={box} role="region" aria-label="Guided walkthrough controls">
       <div className="live-inner">
+        {/* What this is, at every chapter: a fictional walkthrough, with a way to try it by hand and
+            a way out that doesn't depend on anything the story is doing underneath */}
+        <div className="live-meta">
+          <span className="live-what"><b>Guided walkthrough</b><span className="live-fiction">Fictional<span className="wide"> project</span> · no account needed</span></span>
+          <span className="live-exits">
+            <a href="/1NEON/demo/">Try it<span className="wide"> yourself</span></a>
+            <a href={exitTo()} className="live-exit">Exit tour</a>
+          </span>
+        </div>
         {/* One segment per section: done ones full, the current one filling, the rest empty */}
         <div className="live-line" aria-hidden="true">
           {player.sections.map((s, i) => (
@@ -112,6 +131,8 @@ export function LiveBar({ player }: { player: Player }) {
           short demos (a different show loads fresh) */}
       <div id="live-list" className={`live-list${list ? " open" : ""}`} inert={!list}>
         <p className="live-list-h">{player.show.title}</p>
+        {/* How a reload behaves, said where someone would look for it */}
+        <p className="live-list-note">Nothing here is saved. A reload picks up at the same chapter, from fresh fictional data.</p>
         <ol>
           {player.sections.map((s, i) => (
             <li key={s.id}>
