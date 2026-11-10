@@ -121,6 +121,10 @@ async function dropFile(s: Stage, target: Parameters<Stage["click"]>[0], name: s
 }
 
 
+// Thrown inside the sign-in to skip the mail's show while catching up; caught right there
+class Skip extends Error {}
+
+
 /** The primer card before the story: who's who, what's coming, and how to steer. Removed by the caller */
 function primer() {
   const el = document.createElement("section");
@@ -171,12 +175,20 @@ export const STORY: Section[] = [
       await s.wait(600);
       await s.type("#email", MARIA, 400);
       await s.click({ sel: "form button", text: "Continue" }, 1000);
+      // The code field shows once the code email is out, so it's in her inbox from here
+      await s.waitFor("#code");
       await s.say("No password: 1NEON emails her a sign-in code");
       await s.think("It sent me a code. Let me check my email.");
       const mail = new MailWindow(MARIA);
       let code = "";
       try {
         mail.fill((await engine()).outbox());
+        // Catching up to a later section (a link from the FAQs): read the code without the show
+        if (s.fast()) {
+          mail.open([...mail.el.querySelectorAll(".mail-row")].indexOf(mail.row("sign-in code")!));
+          code = mail.code()?.value ?? "";
+          throw new Skip();
+        }
         await s.wait(700);
         await s.click(() => mail.row("sign-in code"), 300);
         mail.open([...mail.el.querySelectorAll(".mail-row")].indexOf(mail.row("sign-in code")!));
@@ -185,6 +197,8 @@ export const STORY: Section[] = [
         await s.hover(() => mail.code()?.el, 700);
         await s.think(`There it is: ${code}. Copy.`);
         await s.wait(500);
+      } catch (e) {
+        if (!(e instanceof Skip)) throw e;
       } finally {
         await mail.close();
       }
