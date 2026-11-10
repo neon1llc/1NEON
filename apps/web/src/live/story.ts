@@ -249,7 +249,7 @@ export const STORY: Section[] = [
         await add("file_request", "A week of order emails, names removed", { body: "Export or forward them as a zip, whichever is easier." });
       }, 1200, "Pradeep asked for a file");
       await s.say("The bell breathes: something's new");
-      await s.think("Oh, a notification!");
+      await s.think("Something new came in.");
       await s.click(".bell-btn", 1400);
       await s.think("Pradeep wants a week of order emails. I have those.");
       // Each notification opens what it's about: this one lands on the file request in Needs
@@ -347,7 +347,7 @@ export const STORY: Section[] = [
         await patch((i) => i.title === "Emailed orders read into the same list", { status: "done" });
         await patch((i) => i.title === "Daily summary at 7pm", { status: "done" });
       }, 1200, "Pradeep finished three tasks");
-      await s.think("Oh, all three are done already!");
+      await s.think("All three are done already.");
       await s.hover({ sel: ".item", text: "Daily summary at 7pm" }, 900);
     },
   },
@@ -394,7 +394,7 @@ export const STORY: Section[] = [
         await (await engine()).uploadAs(PRADEEP, t, "orders-runbook.txt", "Where orders go, and what to do if one looks wrong.", { layer: "next", projectId: p.id });
         await add("training", "Front desk walkthrough, recorded for new staff");
       }, 900, "Pradeep uploaded the runbook");
-      await s.think("A runbook! So we can handle things ourselves.");
+      await s.think("A runbook, so we can handle things ourselves.");
       await s.go(`${base}/projects`, "Projects");
       // The page remembers List or Timeline; the project row is in List
       await s.click({ sel: ".switch button", text: "List" }, 500);
@@ -413,7 +413,7 @@ export const STORY: Section[] = [
         await s.click(`input[aria-label="Done: ${t}"]`, 450);
       }
       await s.say("And adds ongoing care from a suggestion");
-      await s.think("A monthly check-in would give me peace of mind.");
+      await s.think("A monthly check-in makes sense for us.");
       await s.click({ sel: "button", text: "+ Add care item" }, 500);
       await s.click({ sel: ".starters .chip", text: "Monthly updates and backup check" }, 300);
       await s.click({ sel: "form.add-form button", text: /^Add$/ }, 900);
@@ -425,7 +425,7 @@ export const STORY: Section[] = [
     run: async (s) => {
       await s.others(async () => { await moveTo("care"); }, 700, "Pradeep moved the project to Care");
       await s.say("The whole project, on a timeline");
-      await s.think("I'd love to see the whole thing at once.");
+      await s.think("I want to see the whole thing at once.");
       await s.go(`${base}/projects`, "Projects");
       await s.click({ sel: ".switch button", text: "Timeline" }, 1600);
       await s.say("Every file in one place");
