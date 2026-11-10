@@ -34,8 +34,8 @@ export interface Directory {
 
 /** Outbound email */
 export interface Mailer {
-  // Send one message with plain text and HTML bodies
-  send(to: string, subject: string, text: string, html: string): Promise<void>;
+  // Send one message with plain text and HTML bodies; replyTo, when given, is where answers go
+  send(to: string, subject: string, text: string, html: string, replyTo?: string): Promise<void>;
 }
 
 
@@ -191,11 +191,12 @@ export class SesMailer implements Mailer {
   constructor(private from: string) {}
 
   // One recipient per message, so addresses never leak between invitees
-  async send(to: string, subject: string, text: string, html: string) {
+  async send(to: string, subject: string, text: string, html: string, replyTo?: string) {
     await this.ses.send(
       new SendEmailCommand({
         FromEmailAddress: this.from,
         Destination: { ToAddresses: [to] },
+        ...(replyTo ? { ReplyToAddresses: [replyTo] } : {}),
         Content: { Simple: { Subject: { Data: subject }, Body: { Text: { Data: text }, Html: { Data: html } } } },
       }),
     );
