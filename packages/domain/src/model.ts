@@ -23,7 +23,11 @@ export const Layer = z.enum(["needs", "execution", "observation", "next"]);
 export type Layer = z.infer<typeof Layer>;
 
 
-/** How a project is going, set by the team and shown on every card */
+/**
+ * How a project is going, set by the team and shown on every card. Health is an assessment, separate
+ * from activity: work starting or a stage move never changes it. "not_started" is shown as Not
+ * assessed (the stored value keeps its earlier name so older records and tabs still read)
+ */
 export const Health = z.enum(["on_track", "at_risk", "off_track", "not_started"]);
 export type Health = z.infer<typeof Health>;
 
@@ -171,6 +175,10 @@ export const Project = z.object({
   stageId: id,
   stageEnteredAt: isoDate,
   health: Health,
+  // Who last set the health, and when (a status update or the health picker). Missing on projects whose
+  // health was set before this was recorded, or that haven't been assessed
+  assessedBy: id.optional(),
+  assessedAt: isoDate.optional(),
   rank: z.string().min(1).max(64),
   targetDate: z.string().date().optional(),
   people: z.array(z.object({ userId: id, role: ProjectRole })).max(50).default([]),
@@ -443,4 +451,13 @@ export function metricProgress(m: z.infer<typeof MetricFields>): number | undefi
 export function completionAfter(prev: Pick<Item, "status" | "completedAt"> | undefined, nextStatus: string, at: string): string | undefined {
   if (nextStatus !== "done") return undefined;
   return prev?.status === "done" ? prev.completedAt : at;
+}
+
+
+/**
+ * The assessment fields that go with setting a project's health: who and when, or none when it is set
+ * back to not assessed
+ */
+export function assessed(health: Health, by: string, at: string): { assessedBy?: string; assessedAt?: string } {
+  return health === "not_started" ? { assessedBy: undefined, assessedAt: undefined } : { assessedBy: by, assessedAt: at };
 }

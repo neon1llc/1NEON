@@ -30,7 +30,7 @@ const HEALTH = [
   ["on_track", "On track", "var(--ok)"],
   ["at_risk", "At risk", "var(--amber)"],
   ["off_track", "Off track", "var(--red)"],
-  ["not_started", "Not started", "var(--muted)"],
+  ["not_started", "Not assessed", "var(--muted)"],
 ] as const;
 
 

@@ -222,17 +222,34 @@ describe("projects and concurrency", () => {
     expect(ok.json.stageId).toBe("build");
   });
 
-  it("takes a project out of not started once it moves on, or once its work begins", async () => {
+  it("keeps health not assessed when a project moves on or its work begins, until someone assesses it", async () => {
     const net = (await call(OP, "GET", `/t/${s.harbor.id}/projects`)).json.find((x: { key: string }) => x.key === "NET-1");
     expect(net.health).toBe("not_started");
     const moved = await call(OP, "POST", `/t/${s.harbor.id}/projects/${net.id}/move`, { version: net.version, stageId: "listen" });
-    expect(moved.json.health).toBe("on_track");
+    expect(moved.json.health).toBe("not_started");
+    expect(moved.json.assessedAt).toBeUndefined();
+    // An overdue project whose work starts is not shown as healthy
     const ai = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json.find((x: { key: string }) => x.key === "AI-1");
-    expect(ai.health).toBe("not_started");
+    const dated = await call(OP, "PATCH", `/t/${s.acme.id}/projects/${ai.id}`, { version: ai.version, targetDate: "2026-01-01" });
     const item = (await call(OP, "POST", `/t/${s.acme.id}/projects/${ai.id}/items`, { kind: "task", title: "First task" })).json;
     await call(OP, "PATCH", `/t/${s.acme.id}/projects/${ai.id}/items/${item.id}`, { version: item.version, status: "doing" });
     const after = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json.find((x: { key: string }) => x.key === "AI-1");
-    expect(after.health).toBe("on_track");
+    expect(after.health).toBe("not_started");
+    expect(after.version).toBe(dated.json.version);
+    // Setting health by hand records who and when
+    const set = await call(OP, "PATCH", `/t/${s.acme.id}/projects/${ai.id}`, { version: after.version, health: "at_risk" });
+    expect(set.json).toMatchObject({ health: "at_risk", assessedBy: s.pradeep.id });
+    expect(set.json.assessedAt).toBeTruthy();
+    // So does a status update, by whoever posts it, even when the health stays the same
+    const raj = (await repo.userIdForEmail("raj@acmedental.example"))!;
+    expect((await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/projects/${ai.id}/items`, { kind: "update", title: "Still waiting on access", fields: { health: "at_risk" } })).status).toBe(201);
+    const later = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json.find((x: { key: string }) => x.key === "AI-1");
+    expect(later).toMatchObject({ health: "at_risk", assessedBy: raj });
+    // Other edits leave the assessment alone; an existing on_track project keeps its value
+    const renamed = await call(OP, "PATCH", `/t/${s.acme.id}/projects/${ai.id}`, { version: later.version, name: "Answers from our policies" });
+    expect(renamed.json.assessedAt).toBe(later.assessedAt);
+    const flow = (await call(OP, "GET", `/t/${s.acme.id}/projects`)).json.find((x: { key: string }) => x.key === "FLOW-1");
+    expect(flow.health).toBe("on_track");
   });
 
   it("lets a project already past Decide move back from Closed without a reason", async () => {

@@ -27,8 +27,8 @@ The four layers every project moves through, N E O N. **Needs** is what you want
 ### What should I do first on a project?
 Look at **Next step** at the top of the project. It says what has to happen now and who it's waiting on, and it changes as soon as that's done: approve an option or send a file and it moves on to the next thing. When nothing is waiting on anyone, it names the stage's goal and offers **Move to** the next stage. [Watch it](/1NEON/live?play=propose).
 
-### What do Not started, On track, At risk, and Off track mean?
-They're the project's health. A new project is **Not started**, and it turns **On track** by itself once it moves past its first stage or any of its work is in progress or done. After that, the team sets it on the project's overview, or with a status update. Items have their own status in their panel: To do, In progress, Blocked, or Done. [Watch it](/1NEON/live?play=build).
+### What do Not assessed, On track, At risk, and Off track mean?
+They're the project's health, which is someone's assessment of how it's going. A new project is **Not assessed**, and it stays that way when work starts or it moves to a new stage: starting work doesn't make a project on track. The team sets health on the project's overview, or with a status update, and the overview shows who set it and when. Items have their own status in their panel: To do, In progress, Blocked, or Done. [Watch it](/1NEON/live?play=build).
 
 ### What if we rename, reorder, or hide stages?
 Projects follow along. Their steps, the board, and Next step use the new names and order. A hidden stage still shows while a project is in it. Decide keeps asking for an approved option, and Closed still ends a project, under any name or position.
