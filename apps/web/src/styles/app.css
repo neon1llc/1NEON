@@ -342,6 +342,16 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
 .signin .remember input:focus-visible { outline: 2px solid var(--neon); outline-offset: 2px; }
 .signin .fine a { color: #84A98C; }
 .signin .legal-links { margin-top: 8px; white-space: nowrap; }
+/* Who the portal is for, the visible email label, what Continue leads to, and the ways in without an
+   account. Text colors measure 7.8:1 (#84A98C) to 17:1 (#D6F5DC) on the void, and stay above 5.5:1
+   with green rain lit behind the glass */
+.signin .signin-h { margin: 4px 0 0; font: 600 16px var(--mono); letter-spacing: .04em; color: #D6F5DC; }
+.signin .signin-lead { margin: 6px 0 20px; font-size: 14px; color: #A3C2AA; }
+.signin .field-label { display: block; font: 12px var(--mono); color: #A3C2AA; margin: 0 0 -4px; }
+.signin form.stack > .next-hint { margin: -2px 0 0; }
+.signin .signin-more { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(0, 255, 65, .16); font-size: 13px; }
+.signin .signin-more a { color: #A3C2AA; }
+.signin .signin-more a:hover { color: var(--neon); }
 /* Sign-in steps: stacked buttons, and a wide, spaced-out code field */
 .signin .steps-col { display: grid; gap: 10px; }
 .signin .steps-col .btn { width: 100%; margin: 0; }
@@ -417,7 +427,7 @@ html.from-site, html.from-site body { background: var(--void); }
 }
 
 /* Plain labels in forms and dialogs */
-form label:not(.card):not(.chip):not(.field):not(.remember):not(.sms-consent), dialog label { display: block; font: 12px var(--mono); color: var(--muted); margin-bottom: 6px; }
+form label:not(.card):not(.chip):not(.field):not(.remember):not(.sms-consent):not(.field-label), dialog label { display: block; font: 12px var(--mono); color: var(--muted); margin-bottom: 6px; }
 fieldset legend { font: 12px var(--mono); color: var(--muted); }
 .chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 

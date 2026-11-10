@@ -10,6 +10,7 @@ import { PLAY, PROJECT } from "../live/where.ts";
 import { api, DEMO as IN_DEMO, LIVE as IN_LIVE, devUser, HttpError, pickPerson, resetDemo } from "../lib/api.ts";
 import { failureOf, read } from "../lib/reads.ts";
 import { passkeyAssertion } from "../lib/passkey.ts";
+import { SIGN_IN_METHODS } from "../lib/methods.ts";
 import { cleanCode, clearStep, loadStep, saveStep, session } from "../lib/signin.ts";
 import type { Me, OrgResponse, OrgSummary } from "../lib/types.ts";
 import { Bell } from "./Bell.tsx";
@@ -260,6 +261,13 @@ function SignIn() {
       </header>
       <div className="panel glass">
         <Wordmark />
+        {/* Who this is for, before anyone types: clients, by invitation */}
+        {!PICKER && (
+          <>
+            <h2 className="signin-h">Client portal</h2>
+            <p className="signin-lead">For neon1 clients. Access is by invitation.</p>
+          </>
+        )}
         {problem === "not_invited" && <p className="notice" role="alert">That email hasn't been invited yet. Ask your organization's admin, or neon1.</p>}
         {problem === "failed" && <p className="notice" role="alert">{fromLink ? "That link only works in the browser where you asked for the code. Type the code there instead, or start again here." : "Sign-in didn't finish. Please try again."}</p>}
         {/* The demo: no accounts, just pick who to be */}
@@ -276,16 +284,19 @@ function SignIn() {
         {/* Step 1: the email */}
         {!PICKER && (at.step === "email" || at.step === "failed" || at.step === "not_invited") && (
           <form className="stack" onSubmit={(e) => { e.preventDefault(); void send({ op: "start", email: email.trim(), remember }); }}>
-            <label className="sr" htmlFor="email">Your email</label>
+            {/* A label that stays on screen, so it survives autofill and typed text (the placeholder doesn't) */}
+            <label className="field-label" htmlFor="email">Email address</label>
             {/* Remember me opens under the email once it looks like a real address */}
             <div className={`email-row${emailOk ? " ok" : ""}`}>
-              <input id="email" type="email" required autoComplete="email webauthn" placeholder="e.g. you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <input id="email" type="email" required autoComplete="email webauthn" placeholder="you@company.com" aria-describedby="email-next" value={email} onChange={(e) => setEmail(e.target.value)} />
               <label className="remember" aria-hidden={!emailOk}>
                 <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} tabIndex={emailOk ? 0 : -1} />
                 remember me
               </label>
             </div>
             <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? "One moment…" : "Continue"}</button>
+            {/* What Continue leads to, worded the same whether or not the address has an account */}
+            <p id="email-next" className="fine next-hint">{SIGN_IN_METHODS}</p>
           </form>
         )}
         {/* Step 2a: a passkey or a code, when both are on offer */}
@@ -309,11 +320,21 @@ function SignIn() {
           </form>
         )}
         {at.step !== "email" && <p className="fine"><button className="linkish" onClick={restart}>Use a different email</button></p>}
-        {!PICKER && <p className="fine">Sign in with a code sent to your email, or a passkey. 1NEON uses only the cookies it needs to keep you signed in.</p>}
+        {!PICKER && <p className="fine">1NEON uses only the cookies it needs to keep you signed in.</p>}
         {/* The three policies on one line of their own */}
         <p className="fine legal-links">
           <Link to="/faqs">FAQs</Link> · <Link to="/cookies">Cookies</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
         </p>
+        {/* Not a client yet: the sample and the demo are one click away, with no sign-in to attempt,
+            and a way to ask for an invitation. Kept out of the demo, which is already one of them */}
+        {!IN_DEMO && (
+          <nav className="signin-more" aria-label="Without an account">
+            <a href="/1NEON/example">Read a sample project</a>
+            <a href="/1NEON/demo/">Try the demo</a>
+            <a href="mailto:hello@neon1.tech?subject=1NEON%20invitation">Need an invitation?</a>
+            <a href="/">neon1.tech home</a>
+          </nav>
+        )}
         {/* Local builds also offer the demo people under the real form */}
         {pickPerson && !IN_DEMO && (
           <div className="dev" aria-label="Local demo accounts">
