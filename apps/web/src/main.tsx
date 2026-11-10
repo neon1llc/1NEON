@@ -122,7 +122,9 @@ if (!DEMO) import(/* @vite-ignore */ CHAT)
 if (LIVE) {
   void Promise.all([import("./live/player.ts"), import("./live/story.ts"), import("./live/LiveBar.tsx")]).then(([{ Player }, { STORY }, { LiveBar }]) => {
     const player = new Player(STORY);
+    // The controls live outside #root, so they stay reachable while the portal underneath is inert
     const host = document.body.appendChild(document.createElement("div"));
+    host.className = "live-layer";
     createRoot(host).render(<LiveBar player={player} />);
     setTimeout(() => player.start(), 1200);
   });
