@@ -24,6 +24,8 @@ export interface Me {
   factors?: { totp: boolean; sms?: boolean; passkey: boolean; any: boolean };
   // Where texts stand, so the profile can say what's next
   sms?: { state: SmsState };
+  // Neo for signed-in people is available here (a model is wired)
+  neo?: boolean;
   orgs: OrgSummary[];
 }
 

@@ -988,3 +988,22 @@ body:has(.demo-bar) .top { top: var(--demo-h); }
 /* --- FAQ links (2026-11-10): each answer ends with a way to copy its own address --- */
 .faq-link { margin: 8px 0 0; }
 .faq:target > summary, .faq[open]:target > summary { color: var(--accent); }
+
+/* --- Neo for signed-in people (components/Neo.tsx): the public window's look, with plans and tours --- */
+/* Where the signed-in Neo is on, the public one steps aside */
+body:has(.n1neo) .n1chat-portal { display: none !important; }
+.n1neo .n1chat-msg p, .n1neo .n1chat-msg ul, .n1neo .n1chat-msg ol { margin: 0 0 6px; }
+.n1neo .n1chat-msg > :last-child { margin-bottom: 0; }
+.n1neo .n1chat-msg ul, .n1neo .n1chat-msg ol { padding-left: 20px; }
+/* A plan: its steps with a mark each, then "Want me to do it?" */
+.neo-plan { margin-top: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 6px; }
+.neo-plan-title { font: 600 13px var(--mono); color: var(--accent); }
+.neo-steps { list-style: none; margin: 0; padding: 0 !important; display: grid; gap: 4px; }
+.neo-step { display: grid; grid-template-columns: 18px 1fr; gap: 6px; }
+.neo-mark { font: 600 13px var(--mono); color: var(--muted); }
+.neo-done .neo-mark { color: var(--accent); }
+.neo-fail .neo-mark, .neo-error { color: #e5484d; }
+.neo-error { display: block; font-size: 12px; margin-top: 2px; }
+.neo-warn, .neo-note { margin: 0; font-size: 12px; color: var(--muted); }
+.neo-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; }
+.neo-acts .n1chat-send, .neo-acts .n1chat-tool { padding: 6px 12px; cursor: pointer; }

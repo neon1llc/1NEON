@@ -20,6 +20,7 @@ import { Rain } from "./Rain.tsx";
 import { FileText as FileIcon, Folder as FolderIcon, Home as HomeIcon, Kanban as KanbanIcon, Menu as MenuIcon, Search as SearchIcon } from "lucide-react";
 import { ConfirmDialog } from "./Confirm.tsx";
 import { HelpProvider, useHelp } from "./Help.tsx";
+import { Neo } from "./Neo.tsx";
 import { Palette } from "./Palette.tsx";
 import { gate, Stale, type Read } from "./Reads.tsx";
 import { Avatar, Icon, initials, LayerBadge, LAYERS, layerHint, layerName, layerSlug, Rings, useAsk } from "./ui.tsx";
@@ -690,6 +691,8 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
       </nav>
       <Palette me={me} org={org} open={search} setOpen={setSearch} onHelp={help.open} onTour={help.welcomeTour} />
       <ConfirmDialog me={me} />
+      {/* Neo for signed-in people, where a model is wired; elsewhere the public Neo stays */}
+      {me.neo && !IN_DEMO && <Neo />}
     </div>
   );
 }

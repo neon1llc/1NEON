@@ -47,6 +47,8 @@ export function meRoutes(app: App, k: Kit) {
       factors: { totp, sms: smsFactorOn(user), passkey: Boolean(user.passkey), any: totp || smsFactorOn(user) || Boolean(user.passkey) || user.strongAuth },
       // Where texts stand: unavailable (no sending number yet), no number, not agreed, opted out, unverified, or ready
       sms: { state: smsState(user, Boolean(d.texter)) },
+      // Whether Neo for signed-in people is wired here; without it the window stays the public one
+      neo: Boolean(d.neo),
       orgs: tenants
         .filter((t) => t.status === "active")
         .map((t) => ({ id: t.id, slug: t.slug, name: t.name, clientId: t.clientId, access: actor.operator ? "admin" : accessBy.get(t.id) }))
