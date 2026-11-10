@@ -26,6 +26,11 @@ export const keys = {
   totpPending: (uid: string) => ({ PK: `USER#${uid}`, SK: "TOTP#PENDING" }),
   // The earliest proof that still counts for this person; raised when a factor is removed or replaced
   assurance: (uid: string) => ({ PK: `USER#${uid}`, SK: "ASSURANCE" }),
+  // One texted code waiting to be used, per purpose: confirming it's you, or proving a new number
+  smsChallenge: (uid: string, purpose: "confirm" | "verify") => ({ PK: `USER#${uid}`, SK: purpose === "confirm" ? "SMSCONFIRM" : "SMSVERIFY" }),
+  // The person's recent code texts (time, number, purpose), kept apart from the codes themselves so
+  // using or replacing a code never resets the hourly limit; expires an hour after the latest send
+  smsSent: (uid: string) => ({ PK: `USER#${uid}`, SK: "SMSSENT" }),
   // Security events about one person's sign-in methods, newest last
   security: (uid: string, at: string, id: string) => ({ PK: `USER#${uid}`, SK: `SEC#${at}#${id}` }),
   // Inside one tenant
@@ -179,10 +184,15 @@ export class Repo {
   // authenticator check only counts for STEP_UP_MS; after that admin actions ask again. `strongAt`
   // is when the proof happened, compared with the person's assurance floor
   async saveSession(jti: string, userId: string, strong: boolean, opts: { strongAt?: string; strongUntil?: string } = {}) {
+    await this.table.write([this.sessionOp(jti, userId, strong, opts)]);
+  }
+
+  /** The session write on its own, so a proof can land in the same transaction that uses up a code */
+  sessionOp(jti: string, userId: string, strong: boolean, opts: { strongAt?: string; strongUntil?: string } = {}): WriteOp {
     const ttl = Math.floor(Date.now() / 1000) + 30 * 24 * 3600;
     const strongAt = strong ? opts.strongAt ?? new Date().toISOString() : undefined;
     const strongUntil = strong ? opts.strongUntil ?? new Date(Date.now() + STEP_UP_MS).toISOString() : undefined;
-    await this.table.write([{ put: { ...keys.session(jti), userId, strong, strongAt, strongUntil, ttl }, guard: { always: true } }]);
+    return { put: { ...keys.session(jti), userId, strong, strongAt, strongUntil, ttl }, guard: { always: true } };
   }
 
   // The session row itself, for keeping its expiry when a factor change re-stamps it
@@ -273,7 +283,12 @@ export class Repo {
 
   // Lands only if the stored version still matches `expected`
   async saveUser(u: User, expected: number) {
-    await this.table.write([{ put: { ...keys.user(u.id), type: "user", ...u }, guard: { version: expected } }]);
+    await this.table.write([this.userOp(u, expected)]);
+  }
+
+  /** The profile write on its own, for combining with another write in one transaction */
+  userOp(u: User, expected: number): WriteOp {
+    return { put: { ...keys.user(u.id), type: "user", ...u }, guard: { version: expected } };
   }
 
   // One person's membership in one organization

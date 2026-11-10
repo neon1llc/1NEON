@@ -6,11 +6,21 @@ import type { User } from "@1neon/domain";
 import type { Context } from "hono";
 import { factorInventory, type FactorInventory } from "../factors.ts";
 import { checkTotp } from "../totp.ts";
-import { ConflictError, type Row } from "../store/types.ts";
+import { newId } from "@1neon/domain";
+import { keys } from "../store/repo.ts";
+import { ConflictError, type Row, type WriteOp } from "../store/types.ts";
 import { withTimeout } from "../outbox.ts";
-import { accountAllows, isOptOut, CODE_MS, CODE_TRIES, CODES_PER_HOUR, newCode } from "../sms.ts";
+import { accountAllows, isOptOut, CODE_MS, CODE_TRIES, CODES_PER_HOUR, CODES_PER_HOUR_PERSON, newCode } from "../sms.ts";
 import { fail, now, who, type Env } from "./http.ts";
 import type { Kit } from "./kit.ts";
+
+
+/** One code text in the person's send history */
+interface SmsSend {
+  at: string;
+  to: string;
+  purpose: "confirm" | "verify";
+}
 
 
 /** Bind the helpers to one app's services; stateless, so each route module may build its own */
@@ -63,21 +73,48 @@ export function assurance(k: Kit) {
   // --- Counted codes ------------------------------------------------------------
 
   /**
-   * Text one code to a number and keep only its hash under this person's key, with the hourly limit
-   * per person and the account's daily budget. Shared by number checks and confirming it's you
+   * Text one code to a number and keep only its hash under this person's key. The code is bound to
+   * its purpose, the session that asked, and the number it went to. The send is recorded in a
+   * separate history row in the same transaction that stores the code, so the hourly limits (per
+   * purpose and number, and per person) still count it after the code is used or replaced. The
+   * account's daily budget is counted once per send. Shared by number checks and confirming it's you
    */
-  async function textCode(user: User, sk: string, to: string, words: (code: string) => string) {
+  async function textCode(user: User, purpose: "confirm" | "verify", jti: string | undefined, to: string, words: (code: string) => string) {
     const texter = d.texter;
     if (!texter) fail(503, "texts_unavailable", "Texts aren't available yet. Email notices still work.");
-    const k = { PK: `USER#${user.id}`, SK: sk };
-    const prev = await repo.table.get(k.PK, k.SK);
-    const recent = ((prev?.sentAt as string[] | undefined) ?? []).filter((t) => Date.now() - Date.parse(t) < 3600_000);
-    if (recent.length >= CODES_PER_HOUR) fail(429, "too_many_codes", "Too many codes this hour. Try again later.");
-    if (!(await accountAllows(repo))) fail(429, "texts_busy", "Texts are paused for today. Try again tomorrow.");
-    const { code, hash } = await newCode(user.id);
-    const at = now();
-    const version = Number(prev?.version ?? 0) + 1;
-    await repo.table.write([{ put: { ...k, hash, phone: to, expiresAt: new Date(Date.now() + CODE_MS).toISOString(), attempts: 0, sentAt: [...recent, at], version, ttl: Math.floor(Date.now() / 1000) + 3600 }, guard: prev ? { version: Number(prev.version) } : { create: true } }]);
+    const k = keys.smsChallenge(user.id, purpose);
+    const h = keys.smsSent(user.id);
+    let counted = false;
+    let code: string | undefined;
+    for (let tries = 0; tries < 5 && code === undefined; tries++) {
+      const [prev, hist] = await Promise.all([repo.table.get(k.PK, k.SK), repo.table.get(h.PK, h.SK)]);
+      const fresh = (t: string) => Date.now() - Date.parse(t) < 3600_000;
+      const sends = ((hist?.sends as SmsSend[] | undefined) ?? []).filter((x) => fresh(x.at));
+      // Code rows written before the history row existed carried their own send times; they still count
+      const legacy = ((prev?.sentAt as string[] | undefined) ?? []).filter(fresh).length;
+      const same = sends.filter((x) => x.to === to && x.purpose === purpose).length + legacy;
+      if (same >= CODES_PER_HOUR || sends.length + legacy >= CODES_PER_HOUR_PERSON) fail(429, "too_many_codes", "Too many codes this hour. Try again later.");
+      if (!counted) {
+        if (!(await accountAllows(repo))) fail(429, "texts_busy", "Texts are paused for today. Try again tomorrow.");
+        counted = true;
+      }
+      const next = await newCode(user.id);
+      const at = now();
+      const ttl = Math.floor(Date.now() / 1000) + 3600;
+      const challenge = { ...k, id: newId("sms"), purpose, jti: jti ?? "dev", hash: next.hash, phone: to, expiresAt: new Date(Date.now() + CODE_MS).toISOString(), attempts: 0, version: Number(prev?.version ?? 0) + 1, ttl };
+      const history = { ...h, sends: [...sends, { at, to, purpose }], version: Number(hist?.version ?? 0) + 1, ttl };
+      try {
+        await repo.table.write([
+          { put: history, guard: hist ? { version: Number(hist.version) } : { create: true } },
+          { put: challenge, guard: prev ? { version: Number(prev.version) } : { create: true } },
+        ]);
+        code = next.code;
+      } catch (e) {
+        // Another request for a code landed first: read both rows again and count afresh
+        if (!(e instanceof ConflictError)) throw e;
+      }
+    }
+    if (code === undefined) fail(429, "busy", "Too many requests at once. Wait a moment and try again.");
     // The person waits for this one, so it gets the same time limit as queued sends
     try {
       await withTimeout(texter.send(to, words(code)), 5_000);
@@ -88,23 +125,42 @@ export function assurance(k: Kit) {
   }
 
   /**
-   * Count one try at the phone code before any verdict. A write that loses a race is read again and
-   * counted afresh, so parallel guesses can't slip past the limit; still contended after five reads
-   * is answered as busy rather than judged uncounted
+   * Count one try at a texted code before any verdict, and return the row as it now stands (its live
+   * version). Only the session that asked for the code, for this purpose, may try it; anything else
+   * reads as no code. A write that loses a race is read again and counted afresh, so parallel guesses
+   * can't slip past the limit; still contended after five reads is answered as busy
    */
-  async function countPhoneTry(k: { PK: string; SK: string }): Promise<Row> {
+  async function countPhoneTry(uid: string, purpose: "confirm" | "verify", jti: string | undefined): Promise<Row> {
+    const k = keys.smsChallenge(uid, purpose);
     for (let tries = 0; tries < 5; tries++) {
       const row = await repo.table.get(k.PK, k.SK);
       if (!row?.hash || Date.parse(String(row.expiresAt)) < Date.now()) fail(409, "no_code", "Ask for a new code.");
+      // Rows from before codes were bound have no purpose or session and fail closed here
+      if (row.purpose !== purpose || row.jti !== (jti ?? "dev")) fail(409, "no_code", "Ask for a new code.");
       if (Number(row.attempts) >= CODE_TRIES) fail(429, "locked", "Too many wrong codes. Ask for a new one.");
+      const live = { ...row, attempts: Number(row.attempts) + 1, version: Number(row.version) + 1 };
       try {
-        await repo.table.write([{ put: { ...row, attempts: Number(row.attempts) + 1, version: Number(row.version) + 1 }, guard: { version: Number(row.version) } }]);
-        return row;
+        await repo.table.write([{ put: live, guard: { version: Number(row.version), id: String(row.id) } }]);
+        return live;
       } catch (e) {
         if (!(e instanceof ConflictError)) throw e;
       }
     }
     fail(429, "busy", "Too many tries at once. Wait a moment and try again.");
+  }
+
+  /**
+   * Use up a matched code: delete exactly the version that was counted, in the same transaction as
+   * what the code proves (`also`). A concurrent use, a newer code, or another try in between changes
+   * the row, so at most one use succeeds and an old answer can never remove a newer code
+   */
+  async function consumeCode(live: Row, also: WriteOp[]) {
+    try {
+      await repo.table.write([{ delete: { PK: live.PK, SK: live.SK }, guard: { version: Number(live.version), id: String(live.id) } }, ...also]);
+    } catch (e) {
+      if (e instanceof ConflictError) fail(409, "no_code", "That code was just used or replaced. Ask for a new one.");
+      throw e;
+    }
   }
 
   /**
@@ -134,5 +190,5 @@ export function assurance(k: Kit) {
     return "busy";
   }
 
-  return { tokenOf, mayChangeFactors, refreshEnrolled, factorChanged, notice, textCode, countPhoneTry, useTotpCode };
+  return { tokenOf, mayChangeFactors, refreshEnrolled, factorChanged, notice, textCode, countPhoneTry, consumeCode, useTotpCode };
 }

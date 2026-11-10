@@ -9,10 +9,13 @@ import type { Repo } from "./store/repo.ts";
 
 // The consent wording version shown on the profile; recorded with each yes
 export const SMS_POLICY = "2026-11-09";
-// A verification code lives ten minutes, allows five tries, and a person may ask for three an hour
+// A verification code lives ten minutes and allows five tries. A person may ask for three an hour for
+// each purpose (proving a number, confirming it's you) at each number, and six an hour in all. The
+// limits count sends, not unused codes, so using a code never frees another send
 export const CODE_MS = 10 * 60 * 1000;
 export const CODE_TRIES = 5;
 export const CODES_PER_HOUR = 3;
+export const CODES_PER_HOUR_PERSON = 6;
 // Daily ceilings: per person for notices, and for every text the account sends (codes included)
 export const PERSON_DAILY = 10;
 export const ACCOUNT_DAILY = 200;

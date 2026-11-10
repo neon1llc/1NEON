@@ -17,7 +17,7 @@ import { checkTotp, newTotp } from "../totp.ts";
 // Every add, replace, or remove here follows the factor-change rule in lib/assurance.ts
 export function factorRoutes(app: App, k: Kit) {
   const { d, repo, cfg } = k;
-  const { tokenOf, mayChangeFactors, refreshEnrolled, factorChanged, notice, textCode, countPhoneTry, useTotpCode } = assurance(k);
+  const { tokenOf, mayChangeFactors, refreshEnrolled, factorChanged, notice, textCode, countPhoneTry, consumeCode, useTotpCode } = assurance(k);
 
   // Add a passkey, under the rule above, so someone who only got into the email can't plant their own
   app.post("/me/passkey/start", async (c) => {
@@ -127,25 +127,28 @@ export function factorRoutes(app: App, k: Kit) {
 
   // Text a code to confirm it's you
   app.post("/me/confirm/text", async (c) => {
-    const { user } = who(c);
+    const { user, jti } = who(c);
     if (!smsFactorOn(user)) fail(409, "no_text_factor", "Turn on text codes on your profile first.");
-    await textCode(user, "SMSCONFIRM", user.smsPhone!, confirmText);
+    await textCode(user, "confirm", jti, user.smsPhone!, confirmText);
     return c.json({ ok: true });
   });
 
   // Confirm it's you with an authenticator code, or with a texted code (via: "text"): this session
   // can then use admin actions. Five wrong app codes lock it for 15 minutes, and a code can't be used
-  // twice; a texted code has five tries and ten minutes, and is used up by a match
+  // twice; a texted code has five tries and ten minutes, works only in the session that asked for it
+  // and only while it matches the verified number, and is used up by a match in the same write that
+  // confirms the session, so concurrent uses of one code confirm at most one session
   app.post("/me/confirm", async (c) => {
     const { user, jti } = who(c);
     const { code, via } = await body(c, z.object({ code: z.string().min(6).max(12), via: z.enum(["app", "text"]).default("app") }));
     if (via === "text") {
       if (!smsFactorOn(user)) fail(409, "no_text_factor", "Turn on text codes on your profile first.");
-      const k = { PK: `USER#${user.id}`, SK: "SMSCONFIRM" };
-      const row = await countPhoneTry(k);
-      if (row.hash !== (await hashCode(user.id, code)) || row.phone !== user.smsPhone) fail(400, "wrong_code", "That code didn't match. Check the newest text.");
-      await repo.table.write([{ delete: k }]);
-      if (jti) await repo.saveSession(jti, user.id, true);
+      const live = await countPhoneTry(user.id, "confirm", jti);
+      // Read the verified number again now: a number changed since the code was sent fails closed
+      const fresh = await repo.getUser(user.id);
+      if (!fresh || !smsFactorOn(fresh)) fail(409, "no_text_factor", "Turn on text codes on your profile first.");
+      if (live.hash !== (await hashCode(user.id, code)) || live.phone !== fresh.smsPhone) fail(400, "wrong_code", "That code didn't match. Check the newest text.");
+      await consumeCode(live, jti ? [repo.sessionOp(jti, user.id, true)] : []);
       return c.json({ ok: true });
     }
     const verdict = await useTotpCode(user.id, code);

@@ -78,6 +78,8 @@ export class MemoryTable implements TableStore {
     const live = current && !this.expired(current) ? current : undefined;
     if ("create" in guard && live) throw new ConflictError(clone(live), "This already exists.");
     if ("version" in guard && live?.version !== guard.version) throw new ConflictError(live && clone(live));
+    // An id-bound guard also needs the very same record, not just the same version number
+    if ("version" in guard && guard.id !== undefined && live?.id !== guard.id) throw new ConflictError(live && clone(live));
   }
 
   /** Rows past their TTL count as gone, as in DynamoDB */
