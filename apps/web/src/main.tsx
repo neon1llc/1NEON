@@ -12,6 +12,7 @@ import { Faqs } from "./pages/Faqs.tsx";
 import { Legal } from "./pages/Legal.tsx";
 import { NotFound } from "./pages/NotFound.tsx";
 import { BASE_PATH, DEMO, devUser, LIVE } from "./lib/api.ts";
+import { applyHead, headFor } from "./lib/head.ts";
 import { setCache, setNavigate } from "./lib/nav.ts";
 import { offline } from "./lib/reads.ts";
 import { Example } from "./pages/Example.tsx";
@@ -81,9 +82,21 @@ const router = createBrowserRouter(
 // The live playback always starts at the person picker, from a fresh story
 if (LIVE) devUser.set("");
 
+// Each route's title, description, and indexing intent (lib/head.ts, docs/routes.md), kept current
+// as the address changes
+const head = () => applyHead(headFor(location.pathname));
+head();
+router.subscribe(head);
+
 // Code outside React (the live playback) navigates through the same router
 setNavigate((to) => void router.navigate(to));
 setCache({ invalidateQueries: () => queries.invalidateQueries(), clear: () => queries.clear() });
+// A write that got no answer may still have happened: re-read everything on screen (safe GETs) so the
+// page shows the real outcome. The write itself is never sent again on its own
+// Sign-in steps check their own outcome (re-reading the session here would reset the sign-in form)
+addEventListener("1neon:unconfirmed", (e) => {
+  if (!String((e as CustomEvent<{ path?: string }>).detail?.path).startsWith("/auth/")) void queries.invalidateQueries();
+});
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -116,8 +129,15 @@ if (!DEMO) import(/* @vite-ignore */ CHAT)
 if (LIVE) {
   void Promise.all([import("./live/player.ts"), import("./live/story.ts"), import("./live/LiveBar.tsx")]).then(([{ Player }, { STORY }, { LiveBar }]) => {
     const player = new Player(STORY);
+    // The controls live outside #root, so they stay reachable while the portal underneath is inert
     const host = document.body.appendChild(document.createElement("div"));
+    host.className = "live-layer";
     createRoot(host).render(<LiveBar player={player} />);
-    setTimeout(() => player.start(), 1200);
+    // Plays on its own once the page settles, unless motion is reduced (then it waits on Start, the
+    // page holding still) or the tab is in the background (then it starts when the tab is seen)
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const go = () => { if (!document.hidden) setTimeout(() => void player.start(), 1200); else addEventListener("visibilitychange", go, { once: true }); };
+      go();
+    }
   });
 }

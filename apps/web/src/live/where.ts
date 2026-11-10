@@ -4,11 +4,13 @@
 
 
 // The short demos, by the id their ?play= link uses (their sections live in shorts.ts)
-export const SHORT_IDS = ["invite", "passkey", "authenticator", "texts"] as const;
+// "preview" is the short outcome-first tour the bare /1NEON/live opens with
+export const SHORT_IDS = ["preview", "invite", "passkey", "authenticator", "texts"] as const;
 export type ShortId = (typeof SHORT_IDS)[number];
 
-// The whole project's id, for the saved place
+// The whole project's id, for the saved place; ?play=full asks for it from the start
 export const PROJECT = "project";
+const FULL = "full";
 
 /** What to play: a show, and optionally the section of it to start at */
 export interface Play {
@@ -30,13 +32,15 @@ const isShort = (id: string | null | undefined): id is ShortId => SHORT_IDS.incl
 
 
 /**
- * Decide once per page load. A ?play= link wins. Otherwise a page deep inside the playback (the
- * address moves as the story navigates) is a refresh, so it resumes at the saved section; the bare
- * /1NEON/live starts the whole project from the top.
+ * Decide once per page load. A ?play= link wins: a short demo, "full" for the whole project, or a
+ * section of it. Otherwise a page deep inside the playback (the address moves as the story
+ * navigates) is a refresh, so it resumes at the saved section; the bare /1NEON/live starts the
+ * short preview.
  */
 export const PLAY: Play = (() => {
   const param = new URLSearchParams(location.search).get("play");
   if (isShort(param)) return { show: param };
+  if (param === FULL) return { show: PROJECT };
   if (param) return { show: PROJECT, at: param };
   const deep = !/^\/1NEON\/live\/?$/.test(location.pathname);
   if (deep) {
@@ -45,5 +49,5 @@ export const PLAY: Play = (() => {
       if (saved && (saved.show === PROJECT || isShort(saved.show))) return saved;
     } catch { /* unreadable: start over */ }
   }
-  return { show: PROJECT };
+  return { show: "preview" };
 })();

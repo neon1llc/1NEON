@@ -6,7 +6,7 @@
 /* --- Tokens for the live layer -------------------------------------------------
    Its z-indexes sit at the very top of the range, above the portal's tour (driver.js), so the
    cursor, thoughts, and controls are never dimmed under anything the story opens */
-:root { --live-bg: #0d0208; --live-ink: #d8f5e1; --live-hi: #9AFF9A; --live-glow: #6cffa8; --live-dim: #a3c2aa; --live-line: rgba(108, 255, 168, .35); --demo-h: 76px; }
+:root { --live-bg: #0d0208; --live-ink: #d8f5e1; --live-hi: #9AFF9A; --live-glow: #6cffa8; --live-dim: #a3c2aa; --live-line: rgba(108, 255, 168, .35); --demo-h: 100px; }
 
 
 /* --- The bar: content centered as one group, top to bottom --------------------- */
@@ -15,6 +15,18 @@
 
 /* The tour turns off pointers everywhere but its own popover; the controls stay usable during it */
 .driver-active .live-bar, .driver-active .live-bar *, .driver-active .live-list, .driver-active .live-list *, .driver-active .live-shield { pointer-events: auto; }
+
+/* What this is, and the ways out: always on screen, above the progress line. #a3c2aa on the bar's
+   black measures 10.5:1 */
+.live-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; min-height: 18px; }
+.live-what { display: flex; gap: 10px; min-width: 0; white-space: nowrap; overflow: hidden; }
+.live-what b { color: var(--live-hi); }
+.live-fiction { color: var(--live-dim); overflow: hidden; text-overflow: ellipsis; }
+.live-exits { display: flex; gap: 14px; flex: none; }
+.live-exits a { color: var(--live-hi); text-underline-offset: 3px; }
+.live-exits a:focus-visible { outline: 2px solid var(--live-glow); outline-offset: 2px; }
+.live-list-note { margin: 0 10px 6px; color: var(--live-dim); font: 12px var(--sans, inherit); }
+@media (max-width: 640px) { .live-what b, .live-meta .wide { display: none; } .live-exits { gap: 10px; } }
 
 /* Where the story is: one segment per section */
 .live-line { display: flex; gap: 3px; height: 3px; margin-bottom: 9px; background: none; border-radius: 0; overflow: visible; }
@@ -34,6 +46,8 @@
 .live-step:focus-visible, .live-play:focus-visible, .live-speed:focus-visible, .live-now:focus-visible, .live-list a:focus-visible, .live-list button:focus-visible { outline: 2px solid var(--live-glow); outline-offset: 2px; }
 .live-mid { display: flex; align-items: center; gap: 8px; min-width: 0; justify-content: center; }
 .live-play { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 99px; border: 0; background: var(--live-glow); color: var(--live-bg); cursor: pointer; }
+/* Start, before the first play: the same button, wide enough for its word */
+.live-play.start { display: inline-flex; gap: 6px; width: auto; padding: 0 14px; font: 700 12px var(--mono); }
 .live-now { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; text-align: left; min-width: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; padding: 3px 8px; border-radius: 8px; }
 .live-now:hover, .live-now[aria-expanded="true"] { background: rgba(108, 255, 168, .08); }
 .live-title { color: var(--live-hi); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

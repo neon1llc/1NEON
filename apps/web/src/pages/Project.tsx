@@ -11,8 +11,9 @@ import { ItemPanel, STATUS_WORDS, useDeleteItem, useMayDelete } from "../compone
 import { gate, Stale } from "../components/Reads.tsx";
 import { Link, NavLink, useLocation, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
-import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerName, layerProgress, OnionProgress, Trend, ago, dateLabel, daysSince, layerFromSlug, layerSlug, useToast } from "../components/ui.tsx";
-import { api, HttpError } from "../lib/api.ts";
+import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerHint, layerName, layerProgress, OnionProgress, Trend, ago, dateLabel, daysSince, layerFromSlug, layerSlug, useToast } from "../components/ui.tsx";
+import { api, DEMO, HttpError } from "../lib/api.ts";
+import { firstYear, money, parseCost, type Recurring } from "../lib/cost.ts";
 import { problem, useMembers, useProject, useProjects, useRefresh, useSubmit } from "../lib/hooks.ts";
 import { aimBetween } from "../lib/motion.ts";
 import type { EditMarker } from "../lib/types.ts";
@@ -103,7 +104,7 @@ export function ProjectPage() {
       <nav className="tabs" aria-label="Project sections" data-tour="layers">
         <NavLink to={base} end viewTransition onClick={() => aimBetween(at, 0)} className={() => (tab === "overview" ? "active" : "")}>Overview</NavLink>
         {LAYERS.map((l, i) => (
-          <NavLink key={l} to={`${base}/${layerSlug(l)}`} viewTransition onClick={() => aimBetween(at, i + 1)}><LayerBadge layer={l} />{layerName(l)} {prog[l][1] > 0 && <span className="muted" aria-label={`${prog[l][0]} of ${prog[l][1]} done`} title={`${prog[l][0]} of ${prog[l][1]} done`}>{prog[l][0]}/{prog[l][1]}</span>}</NavLink>
+          <NavLink key={l} to={`${base}/${layerSlug(l)}`} viewTransition onClick={() => aimBetween(at, i + 1)}><LayerBadge layer={l} /><span className="tab-name">{layerName(l)}<small className="sub"><span className="sr">, </span>{layerHint(l)}</small></span> {prog[l][1] > 0 && <span className="muted" aria-label={`${prog[l][0]} of ${prog[l][1]} done`} title={`${prog[l][0]} of ${prog[l][1]} done`}>{prog[l][0]}/{prog[l][1]}</span>}</NavLink>
         ))}
       </nav>
       {/* The section under the tabs pans by tab order */}
@@ -787,6 +788,26 @@ const SCORE_WORDS = {
 } as const;
 
 
+/**
+ * The written price split into what's paid once and what repeats, and a first year when both are
+ * known. Only shown when the price reads cleanly (lib/cost.ts); the written price above stays the
+ * terms, so this says what it assumes and leaves out
+ */
+function CostSplit({ cost }: { cost: string }) {
+  const parts = parseCost(cost);
+  if (!parts) return null;
+  const year = firstYear(parts);
+  const per = (r: Recurring) => `${money(r)} a ${r.per}`;
+  return (
+    <dl className="cost-split small">
+      {parts.oneTime && <div><dt>One-time</dt><dd>{money(parts.oneTime)}</dd></div>}
+      {parts.recurring.length > 0 && <div><dt>Recurring</dt><dd>{parts.recurring.map(per).join(" + ")}</dd></div>}
+      {year && <div><dt>First year</dt><dd>{money(year)}<span className="muted"> · one-time plus 12 months, USD, before tax</span></dd></div>}
+    </dl>
+  );
+}
+
+
 /** One score as a word, with five dots where filled dots mean better */
 function Meter({ label, value }: { label: keyof typeof SCORE_WORDS; value: number }) {
   const word = SCORE_WORDS[label][Math.min(5, Math.max(1, value)) - 1];
@@ -840,6 +861,10 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
   // The option waiting on approval, and the conditions being typed
   const [approving, setApproving] = useState<Item>();
   const [conditions, setConditions] = useState("");
+  // Which option the typed conditions belong to: reopening the same one keeps them (after a lost
+  // reply, say), and another option starts blank
+  const [draftFor, setDraftFor] = useState<string>();
+  const startApprove = (o: Item) => { if (draftFor !== o.id) { setConditions(""); setDraftFor(o.id); } setApproving(o); };
   // The option open in its panel (details, comments, and for neon1 the edit fields)
   const [openId, setOpenId] = useState<string>();
   const opened = items.find((o) => o.id === openId);
@@ -861,8 +886,10 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
     setApproving(undefined);
     if (!o) return;
     try {
+      // Approvals are never retried on their own; a lost reply says so and the page re-reads
       await api(`${path}/items/${o.id}/approve`, { method: "POST", body: { version: o.version, conditions } });
       toast(`Approved: ${o.title}`);
+      setDraftFor(undefined);
     } catch (e) {
       if (e instanceof HttpError && e.status === 409) toast("That option changed since you opened it. Review it again, then approve.");
       else toast(problem(e));
@@ -886,14 +913,16 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
               </div>
               <h4><button type="button" className="item-open" onClick={() => setOpenId(o.id)}>{o.title}</button></h4>
               {o.body && <p className="small muted" style={{ marginTop: 0, whiteSpace: "pre-wrap" }}>{o.body}</p>}
-              {f.cost && <p className="mono small" style={{ margin: "0 0 8px" }}>{f.cost}{f.timeline ? ` · ${f.timeline}` : ""}</p>}
-              {/* Cost, quality, and effort, scored so more bars is always better */}
+              {f.cost && <p className="mono small" style={{ margin: "0 0 8px" }}>{f.cost}{f.timeline ? ` · ${f.timeline}` : ""}{DEMO && <span className="tag" style={{ marginLeft: 6 }}>illustrative</span>}</p>}
+              <CostSplit cost={f.cost} />
+              {/* Cost, quality, and effort, scored so more bars is always better: neon1's own judgment */}
+              <p className="assess-h">neon1's assessment</p>
               <Meter label="Cost" value={f.costScore} />
               <Meter label="Quality" value={f.qualityScore} />
               <Meter label="Effort" value={f.effortScore} />
               {/* The decision maker approves a proposed option; editors move drafts along */}
               <div className="option-acts">
-                {o.status === "proposed" && decider && <button className={`btn ${decided ? "btn-ghost" : "btn-primary"}`} onClick={() => { setConditions(""); setApproving(o); }}>{decided ? "Choose this instead" : "Approve this option"}</button>}
+                {o.status === "proposed" && decider && <button className={`btn ${decided ? "btn-ghost" : "btn-primary"}`} onClick={() => startApprove(o)}>{decided ? "Choose this instead" : "Approve this option"}</button>}
                 {o.status === "proposed" && !decider && !decided && <span className="small muted">Waiting on {deciders.length ? deciders.join(" or ") : "a client admin"}</span>}
                 {/* Sharing an option and taking it back are neon1's to do; the client approves */}
                 {canWrite && me.operator && o.status === "draft" && <button className="btn btn-ghost" onClick={() => void setStatus(o, "proposed")}>Share with client</button>}
@@ -903,6 +932,10 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
           );
         })}
       </div>
+      {/* What the scores mean, once for all the options */}
+      <p className="small muted assess-rubric">
+        <b>neon1's assessment</b>, from 1 to 5, where more filled dots is always better. <b>Cost</b>: the total cost. <b>Quality</b>: how fully it meets the agreed requirements. <b>Effort</b>: your team's effort to adopt and run it. The written price on each option is what you'd agree to{DEMO ? "; every figure in this demo is illustrative" : ""}.
+      </p>
       {opened && <ItemPanel item={opened} label="Option" path={path} open onClose={() => setOpenId(undefined)} />}
       {/* Approval confirmation with optional conditions */}
       <Dialog open={Boolean(approving)} onClose={() => setApproving(undefined)} label="Approve option">

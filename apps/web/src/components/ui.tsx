@@ -163,6 +163,15 @@ export function layerName(l: Layer) {
 }
 
 
+// The plain meaning beside each branded layer name, wherever layers are a way to navigate
+const LAYER_HINTS: Record<Layer, string> = { needs: "What you need", execution: "Work in progress", observation: "Results", next: "Handover and care" };
+
+/** A layer's plain subtitle: Needs is "What you need", Normalize is "Handover and care" */
+export function layerHint(l: Layer) {
+  return LAYER_HINTS[l];
+}
+
+
 /** "just now", "5m ago", "yesterday": relative times for activity and presence */
 export function ago(iso?: string) {
   if (!iso) return "never";

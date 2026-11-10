@@ -1,6 +1,6 @@
 # Cookies and browser storage
 
-*Last updated November 9, 2026.*
+*Last updated November 10, 2026.*
 
 Neither neon1.tech nor the 1NEON portal uses analytics, advertising, or tracking of any kind.
 
@@ -33,19 +33,22 @@ The portal also saves, on your device only:
 | Saved item | What it's for | How long it lasts |
 |---|---|---|
 | `1neon.last` (local storage) | Whether you were last signed in, so a reload starts on the right background | Until you clear it |
+| `1neon.lastOrg` (local storage) | The organization you last had open, so pages outside one (your profile, the FAQs) keep its menu | Until you clear it |
 | `1neon.signin` (session storage) | Your email and the sign-in step in progress, so a reload mid sign-in returns to the code step. The code itself is never saved | 5 minutes, or until the tab closes |
 | `neon1.rain` (local storage) | The same rain settings as the website, on the sign-in screen | Until you clear it |
-| `1neon.projects.view` (local storage) | Whether you last looked at projects as a list or a timeline | Until you clear it |
+| `1neon.projects.view`, `1neon.projects.view.sort` (local storage) | Whether you last looked at projects as a list or a timeline, and how you sorted them | Until you clear it |
 | `1neon.tour-offered` (session storage) | That the welcome tour was already offered, so it isn't offered again in this tab | Until the tab closes |
 
 Your other preferences, such as your theme, are saved with your account.
 
-The public demo (neon1.tech/1NEON/demo) and the guided playback (neon1.tech/1NEON/live) run entirely in your browser and send nothing to me:
+The interactive demo (neon1.tech/1NEON/demo) and the guided walkthrough (neon1.tech/1NEON/live) run entirely in your browser and send nothing to me. The interactive demo keeps your changes where your browser allows it; if it doesn't, the demo still works and lasts until you close or reload the tab. The guided walkthrough starts from fresh fictional data on every load and never saves its data.
 
 | Saved item | What it's for | How long it lasts |
 |---|---|---|
-| `1neon-demo` (IndexedDB) | The demo's sample data and any files you add to it, so the demo survives a reload | Until you reset the demo or clear site data |
-| `1neon.devUser`, `1neon.liveUser` (local storage) | Which sample person you chose to be | Until you clear it |
-| `1neon.liveSpeed` (local storage) | The playback speed you picked | Until you clear it |
+| `1neon-demo` (IndexedDB) | Interactive demo only: its sample data and any files you add, so it survives a reload | Until you choose Start over or clear site data |
+| `1neon.devUser` (local storage) | Interactive demo: which sample person you chose to be | Until you clear it |
+| `1neon.liveUser` (local storage) | Guided walkthrough: which fictional person is signed in on screen | Until you clear it; the walkthrough resets it on every load |
+| `1neon.live` (session storage) | Guided walkthrough: the chapter playing, so a reload picks up there (from fresh data) | Until the tab closes |
+| `1neon.liveSpeed` (local storage) | The walkthrough speed you picked | Until you clear it |
 
 If I ever add optional cookies or storage, such as analytics, I'll update this notice and ask for your consent first.

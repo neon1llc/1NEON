@@ -29,6 +29,8 @@ export interface Show {
   path?: string;
   /** Said when it ends */
   end?: string;
+  /** How long it takes at the default speed, said before it starts ("about 1½ minutes") */
+  length?: string;
 }
 
 /** What the controls show */
@@ -40,6 +42,8 @@ export interface View {
   paused: boolean;
   skipping: boolean;
   done: boolean;
+  /** Not started yet: waiting on Start (reduced motion, or a tab opened in the background) */
+  idle: boolean;
 }
 
 
@@ -60,7 +64,10 @@ const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 function visible(el: Element) {
   const r = el.getBoundingClientRect();
   if (r.width === 0 || r.height === 0) return false;
-  if (el.closest("[inert]")) return false;
+  // The portal itself is inert while playing (keyboard isolation); anything inert inside it still
+  // doesn't count, nor do the pretend windows the player made inert
+  const shut = el.closest("[inert]");
+  if (shut && !shut.hasAttribute("data-live-inert") && !(playing && shut.matches(BESIDE))) return false;
   const cs = getComputedStyle(el);
   return cs.visibility !== "hidden" && cs.display !== "none" && Number(cs.opacity) > 0.05;
 }
@@ -87,22 +94,82 @@ export function find(t: Target): HTMLElement | undefined {
 }
 
 
-// --- Dialogs, drawn under the playback's own layer ------------------------------------
-// A native modal dialog sits in the browser's top layer, above anything a z-index can lift, and makes
-// the rest of the page inert, the controls included. Here a dialog opens as a plain one drawn like a
-// modal (live.css .live-modal), so the cursor, Maria's thoughts, her phone, the passkey prompt, and
-// the controls stay above it and usable. Escape and a tap outside still close it.
-HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
-  this.classList.add("live-modal");
-  this.addEventListener("close", () => this.classList.remove("live-modal"), { once: true });
-  this.show();
-};
+// --- Keyboard isolation and dialogs ----------------------------------------------------
+// While the story plays, the portal underneath (#root) is inert: no pointer (the shield also
+// covers it) and no keyboard, so Tab reaches only the controls and the exits, never Sign out or
+// any other action behind them. The player's own steps still work there: they click and type
+// through the DOM directly. Paused, the portal is live again for exploring.
+//
+// A native modal dialog sits in the browser's top layer and makes the rest of the page inert, the
+// controls included. So here a dialog opens as a plain one drawn like a modal (live.css
+// .live-modal), with the same contract kept by hand: focus moves into it, Escape closes it, the
+// page behind it is inert while paused, and focus returns to what opened it.
+
+// The playback's own layer: controls, cursor and thoughts, and the pretend windows
+const LAYER = ".live-layer, .live-cursor, .live-think, .live-prop, .live-pop, .live-desk-file, .live-shield, .live-ghost";
+// The pretend windows and the portal tour's popover sit outside #root but act as the portal does
+const BESIDE = ".live-prop, .driver-popover";
+const FOCUSABLE = "[autofocus], a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])";
+// Set by the player: true while the story moves on its own
+let playing = false;
+// Elements this file made inert to wall off an open dialog, to undo exactly those
+let walled: HTMLElement[] = [];
+
 // The open dialog on top, if any, and closing it the way Escape or the backdrop would
 const topDialog = () => [...document.querySelectorAll<HTMLDialogElement>("dialog.live-modal[open]")].at(-1);
 const dismiss = (d: HTMLDialogElement) => { if (d.dispatchEvent(new Event("cancel", { cancelable: true }))) d.close(); };
+
+/** Make everything beside `keep` (and its ancestors) inert, up to the body, sparing the live layer
+ * and anything already inert (the page's own state, which isn't ours to undo) */
+function wallOff(keep: Element) {
+  for (let el: Element | null = keep; el && el !== document.body; el = el.parentElement) {
+    for (const sib of el.parentElement?.children ?? []) {
+      if (sib === el || !(sib instanceof HTMLElement) || sib.inert || sib.matches(LAYER) || sib.matches("script, style")) continue;
+      sib.inert = true;
+      walled.push(sib);
+    }
+  }
+}
+
+/** Bring isolation in line with the state: playing walls off the portal; paused, an open dialog
+ * walls off everything but itself and the controls */
+function isolate() {
+  for (const el of walled) el.inert = false;
+  walled = [];
+  const root = document.getElementById("root");
+  if (root) {
+    root.inert = playing;
+    root.toggleAttribute("data-live-inert", playing);
+  }
+  for (const el of document.querySelectorAll<HTMLElement>(BESIDE)) el.inert = playing;
+  const d = topDialog();
+  if (!playing && d) wallOff(d);
+}
+
+// Pretend windows and popovers that appear mid-story take the current state at once
+new MutationObserver((list) => {
+  if (list.some((m) => [...m.addedNodes].some((n) => n instanceof Element && n.matches(BESIDE)))) isolate();
+}).observe(document.body, { childList: true });
+
+HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+  const back = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  this.classList.add("live-modal");
+  this.show();
+  isolate();
+  // Paused (someone exploring): focus goes into the dialog. Playing, the portal is inert anyway
+  if (!playing) this.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+  this.addEventListener("close", () => {
+    this.classList.remove("live-modal");
+    isolate();
+    // Focus goes back to what opened it, if focus would otherwise be lost
+    const lost = !document.activeElement || document.activeElement === document.body || this.contains(document.activeElement);
+    if (!playing && lost && back?.isConnected && !back.closest("[inert]")) back.focus();
+  }, { once: true });
+};
+// Escape closes the top dialog while paused; while playing, keys belong to the controls
 document.addEventListener("keydown", (e) => {
   const d = topDialog();
-  if (e.key !== "Escape" || !d) return;
+  if (e.key !== "Escape" || !d || playing) return;
   e.preventDefault();
   dismiss(d);
 });
@@ -274,13 +341,17 @@ export class Player {
   private lastThought = { at: 0, read: 0 };
   view: View;
   fast = false;
+  // Set once playing begins; before that the portal stays as it loaded
+  private started = false;
+  // The field typed into last, which Enter submits (focus can't land in the inert portal)
+  private typed?: HTMLElement;
 
   constructor(project: Section[]) {
     const short = SHORTS.find((s) => s.id === PLAY.show);
-    this.show = short ?? { id: PROJECT, title: "A whole project", blurb: "From a first sign-in to ongoing care", sections: project, end: "That's a whole project, start to finish." };
+    this.show = short ?? { id: PROJECT, title: "The full story", blurb: "A whole project, from a first sign-in to ongoing care", length: "about 6 minutes", sections: project, end: "That's a whole project, start to finish." };
     // A section named in the link (or saved by a refresh) starts there, catching up on the way
     this.first = Math.max(0, this.show.sections.findIndex((s) => s.id === PLAY.at));
-    this.view = { index: this.first, title: this.sections[this.first]!.title, caption: "", progress: 0, paused: false, skipping: false, done: false };
+    this.view = { index: this.first, title: this.sections[this.first]!.title, caption: "", progress: 0, paused: false, skipping: false, done: false, idle: true };
   }
 
   /** The sections of the show playing */
@@ -303,12 +374,22 @@ export class Player {
   }
   private emit(patch: Partial<View>) {
     this.view = { ...this.view, ...patch };
+    // Moving on its own: the portal underneath goes inert; paused or done, it's live again
+    const now = this.started && !this.view.paused && !this.view.done;
+    if (now !== playing) { playing = now; isolate(); }
     for (const fn of this.listeners) fn(this.view);
   }
 
   /** Start: the seed as the first section's start, on the show's own first page, then play */
   async start() {
+    if (this.started) return;
+    this.started = true;
+    this.emit({ idle: false });
     this.cursor ??= new Cursor();
+    // A tab sent to the background pauses, so nothing plays unseen; Play picks it up again
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && !this.view.paused && !this.view.done) this.emit({ paused: true, caption: "Paused while this tab was in the background" });
+    });
     // Clicks in the portal while paused mean someone explored; note it for resuming
     document.addEventListener("pointerdown", (e) => {
       if (this.view.paused && (e.target as Element).closest("#root")) this.touched = true;
@@ -340,6 +421,7 @@ export class Player {
     return (ms * 1.5) / this.speed;
   }
   toggle() {
+    if (this.view.idle) return void this.start();
     if (this.view.paused || this.view.done) this.resume();
     else this.pause();
   }
@@ -583,6 +665,7 @@ export class Player {
         await reach(el);
         p.cursor!.press();
         el.focus();
+        p.typed = el;
         // React listens for native input events, so set the value through the element's own setter
         const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value")!.set!;
         let now = el.value;
@@ -611,7 +694,7 @@ export class Player {
       /** Press a key where the cursor typed; Enter in a form submits it, as a browser would */
       key: async (key: string, after = 500) => {
         await tick();
-        const el = document.activeElement as HTMLElement | null;
+        const el = p.typed?.isConnected ? p.typed : (document.activeElement as HTMLElement | null);
         el?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
         if (key === "Enter") (el?.closest("form") as HTMLFormElement | null)?.requestSubmit();
         await pause(after);

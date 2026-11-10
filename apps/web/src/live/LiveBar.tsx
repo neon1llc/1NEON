@@ -17,6 +17,16 @@ import "./live.css";
 const ownsKeys = (t: EventTarget | null) => t instanceof Element && Boolean(t.closest("input, textarea, select, button, a, [contenteditable=true], dialog"));
 
 
+/** Exit tour: back where the visitor came from on neon1.tech, or the site's home */
+function exitTo() {
+  try {
+    const from = new URL(document.referrer);
+    if (from.origin === location.origin && !from.pathname.startsWith("/1NEON/live")) return from.pathname + from.search;
+  } catch { /* no referrer */ }
+  return "/";
+}
+
+
 /** The bar, bound to one player */
 export function LiveBar({ player }: { player: Player }) {
   const [v, setV] = useState<View>(player.view);
@@ -57,8 +67,17 @@ export function LiveBar({ player }: { player: Player }) {
   }, [player, v.index]);
 
   return (
-    <div className="live-bar" ref={box} role="region" aria-label="Live demo controls">
+    <div className="live-bar" ref={box} role="region" aria-label="Guided walkthrough controls">
       <div className="live-inner">
+        {/* What this is, at every chapter: a fictional walkthrough, with a way to try it by hand and
+            a way out that doesn't depend on anything the story is doing underneath */}
+        <div className="live-meta">
+          <span className="live-what"><b>Guided walkthrough</b><span className="live-fiction">Fictional<span className="wide"> project</span> · no account needed</span></span>
+          <span className="live-exits">
+            <a href="/1NEON/demo/">Try it<span className="wide"> yourself</span></a>
+            <a href={exitTo()} className="live-exit">Exit tour</a>
+          </span>
+        </div>
         {/* One segment per section: done ones full, the current one filling, the rest empty */}
         <div className="live-line" aria-hidden="true">
           {player.sections.map((s, i) => (
@@ -73,8 +92,10 @@ export function LiveBar({ player }: { player: Player }) {
             <ChevronLeft size={16} aria-hidden="true" /><span>{prev?.title}</span>
           </button>
           <div className="live-mid">
-            <button className="live-play" onClick={() => player.toggle()} aria-label={v.done ? "Watch again" : v.paused ? "Play" : "Pause"} title={v.done ? "Watch again" : undefined}>
-              {v.done ? <RotateCcw size={15} aria-hidden="true" /> : v.paused ? <Play size={15} aria-hidden="true" /> : <Pause size={15} aria-hidden="true" />}
+            {/* Before it starts (reduced motion, or a background tab) the one button says Start */}
+            <button className={`live-play${v.idle ? " start" : ""}`} onClick={() => player.toggle()} aria-label={v.idle ? undefined : v.done ? "Watch again" : v.paused ? "Play" : "Pause"} title={v.done ? "Watch again" : undefined}>
+              {v.done ? <RotateCcw size={15} aria-hidden="true" /> : v.paused || v.idle ? <Play size={15} aria-hidden="true" /> : <Pause size={15} aria-hidden="true" />}
+              {v.idle && <span>Start</span>}
             </button>
             {/* Speed: a slider from half to twice the calm default, remembered on this device */}
             <span className="live-speed-wrap">
@@ -92,8 +113,9 @@ export function LiveBar({ player }: { player: Player }) {
               )}
             </span>
             <button className="live-now" onClick={openList} aria-expanded={list} aria-controls="live-list">
-              <span className="live-title">{v.index + 1}/{player.sections.length} · {v.title}</span>
-              <span className="live-cap">{v.skipping ? "Catching up…" : v.caption || " "}</span>
+              <span className="live-title">{v.idle ? player.show.title : `${v.index + 1}/${player.sections.length} · ${v.title}`}</span>
+              {/* Before starting: how long it takes, so the visitor knows before committing */}
+              <span className="live-cap">{v.idle ? `${player.show.length ?? "A few minutes"}. Start when you're ready.` : v.skipping ? "Catching up…" : v.caption || " "}</span>
               <ChevronDown className="live-caret" size={14} aria-hidden="true" />
             </button>
           </div>
@@ -109,6 +131,8 @@ export function LiveBar({ player }: { player: Player }) {
           short demos (a different show loads fresh) */}
       <div id="live-list" className={`live-list${list ? " open" : ""}`} inert={!list}>
         <p className="live-list-h">{player.show.title}</p>
+        {/* How a reload behaves, said where someone would look for it */}
+        <p className="live-list-note">Nothing here is saved. A reload picks up at the same chapter, from fresh fictional data.</p>
         <ol>
           {player.sections.map((s, i) => (
             <li key={s.id}>
@@ -120,9 +144,9 @@ export function LiveBar({ player }: { player: Player }) {
         </ol>
         {(short || SHORTS.length > 0) && <p className="live-list-h">{short ? "Other demos" : "Short demos"}</p>}
         <ul>
-          {short && <li><a href="/1NEON/live"><span className="n">▸</span><span>A whole project<small>From a first sign-in to ongoing care</small></span></a></li>}
+          {short && <li><a href="/1NEON/live?play=full"><span className="n">▸</span><span>The full story<small>A whole project, from a first sign-in to ongoing care · about 6 minutes</small></span></a></li>}
           {SHORTS.filter((s) => s.id !== player.show.id).map((s) => (
-            <li key={s.id}><a href={`/1NEON/live?play=${s.id}`}><span className="n">▸</span><span>{s.title}<small>{s.blurb}</small></span></a></li>
+            <li key={s.id}><a href={`/1NEON/live?play=${s.id}`}><span className="n">▸</span><span>{s.title}<small>{s.blurb}{s.length ? ` · ${s.length}` : ""}</small></span></a></li>
           ))}
         </ul>
       </div>

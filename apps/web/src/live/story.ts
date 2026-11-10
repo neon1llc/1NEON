@@ -9,9 +9,9 @@ import { MARIA, PRADEEP } from "./seed.ts";
 
 
 // The bakery's organization, and the project once it exists
-const SLUG = "maple-street";
-const KEY = "FLOW-1";
-const base = `/o/${SLUG}`;
+export const SLUG = "maple-street";
+export const KEY = "FLOW-1";
+export const base = `/o/${SLUG}`;
 
 // Pradeep's calls go through the in-browser API, as if from his own browser
 const engine = async () => (await liveEngine())!;
@@ -21,7 +21,7 @@ async function as<T>(path: string, method = "GET", body?: unknown) {
 type P = { id: string; key: string; version: number; stageId: string };
 type I = { id: string; kind: string; title: string; version: number; status: string; fields: Record<string, unknown> };
 // The bakery's ID, and its project with every item, fresh each time
-async function tid() {
+export async function tid() {
   const me = await as<{ orgs: { id: string; slug: string }[] }>("/me");
   return me.orgs.find((o) => o.slug === SLUG)!.id;
 }
@@ -32,18 +32,62 @@ async function project() {
   return { t, p, items: d.items };
 }
 // Pradeep adds an item, moves the project to a stage, or changes an item
-async function add(kind: string, title: string, extra: Record<string, unknown> = {}) {
+export async function add(kind: string, title: string, extra: Record<string, unknown> = {}) {
   const { t, p } = await project();
   return as<I>(`/t/${t}/projects/${p.id}/items`, "POST", { kind, title, ...extra });
 }
-async function moveTo(stageId: string, reason?: string) {
+export async function moveTo(stageId: string, reason?: string) {
   const { t, p } = await project();
   await as(`/t/${t}/projects/${p.id}/move`, "POST", { version: p.version, stageId, reason });
 }
-async function patch(match: (i: I) => boolean, body: Record<string, unknown>) {
+export async function patch(match: (i: I) => boolean, body: Record<string, unknown>) {
   const { t, p, items } = await project();
   const i = items.find(match)!;
   await as(`/t/${t}/projects/${p.id}/items/${i.id}`, "PATCH", { version: i.version, ...body });
+}
+
+
+// --- Pradeep's side, shared with the short preview (preview.ts) ------------------------
+
+/** Three options with cost, quality, and effort, shared for approval; the project moves to Decide */
+export async function proposeOptions() {
+  await moveTo("propose");
+  // Illustrative figures for a fictional bakery, not a quote
+  const opts: [string, string, Record<string, unknown>][] = [
+    ["A. Quick fix", "An order form that writes straight into the spreadsheet.", { cost: "$400 fixed", costScore: 5, qualityScore: 2, effortScore: 5, timeline: "2 days" }],
+    ["B. Solid setup", "The form, plus emailed orders read into the same list, with a 7pm summary.", { cost: "$1,600 fixed", costScore: 4, qualityScore: 4, effortScore: 4, timeline: "1 week", recommended: true }],
+    ["C. Fuller build", "All of that, plus an order page with pickup times and reminders.", { cost: "$4,000 fixed + $10/mo", costScore: 2, qualityScore: 5, effortScore: 2, timeline: "3 weeks" }],
+  ];
+  for (const [title, body, fields] of opts) {
+    const o = await add("option", title, { body, fields });
+    const { t, p } = await project();
+    await as(`/t/${t}/projects/${p.id}/items/${o.id}`, "PATCH", { version: o.version, status: "proposed" });
+  }
+  await moveTo("decide");
+}
+
+/** The plan: a milestone, three tasks, and a first update */
+export async function planWork() {
+  await add("milestone", "Staff trial starts", { dueDate: new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 10) });
+  await add("task", "Order form connected to the spreadsheet");
+  await add("task", "Emailed orders read into the same list");
+  await add("task", "Daily summary at 7pm");
+  await add("update", "Form is live; email reading starts Monday", { fields: { health: "on_track" } });
+}
+
+/** The three tasks, done */
+export async function finishWork() {
+  await patch((i) => i.title === "Order form connected to the spreadsheet", { status: "done" });
+  await patch((i) => i.title === "Emailed orders read into the same list", { status: "done" });
+  await patch((i) => i.title === "Daily summary at 7pm", { status: "done" });
+}
+
+/** Handover: the stage, a runbook, and a recorded walkthrough */
+export async function handOver() {
+  await moveTo("handover");
+  const { t, p } = await project();
+  await (await engine()).uploadAs(PRADEEP, t, "orders-runbook.txt", "Where orders go, and what to do if one looks wrong.", { layer: "next", projectId: p.id });
+  await add("training", "Front desk walkthrough, recorded for new staff");
 }
 
 
@@ -268,18 +312,7 @@ export const STORY: Section[] = [
     run: async (s) => {
       await s.say("Pradeep writes three options, each with its cost, quality, and effort");
       await s.others(async () => {
-        await moveTo("propose");
-        const opts: [string, string, Record<string, unknown>][] = [
-          ["A. Quick fix", "An order form that writes straight into the spreadsheet.", { cost: "$400 fixed", costScore: 5, qualityScore: 2, effortScore: 5, timeline: "2 days" }],
-          ["B. Solid setup", "The form, plus emailed orders read into the same list, with a 7pm summary.", { cost: "$1,600 fixed", costScore: 4, qualityScore: 4, effortScore: 4, timeline: "1 week", recommended: true }],
-          ["C. Fuller build", "All of that, plus an order page with pickup times and reminders.", { cost: "$4,000 fixed + $10/mo", costScore: 2, qualityScore: 5, effortScore: 2, timeline: "3 weeks" }],
-        ];
-        for (const [title, body, fields] of opts) {
-          const o = await add("option", title, { body, fields });
-          const { t, p } = await project();
-          await as(`/t/${t}/projects/${p.id}/items/${o.id}`, "PATCH", { version: o.version, status: "proposed" });
-        }
-        await moveTo("decide");
+        await proposeOptions();
       }, 1200, "Pradeep proposed three options");
       await s.think("Another one. Looks like Pradeep sent options.");
       await s.click(".bell-btn", 1400);
@@ -326,13 +359,7 @@ export const STORY: Section[] = [
       await s.drag({ sel: "article.pcard", text: KEY }, '.col[aria-label^="Build"]');
       await s.wait(600);
       await s.say("Pradeep plans the work and posts an update");
-      await s.others(async () => {
-        await add("milestone", "Staff trial starts", { dueDate: new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 10) });
-        await add("task", "Order form connected to the spreadsheet");
-        await add("task", "Emailed orders read into the same list");
-        await add("task", "Daily summary at 7pm");
-        await add("update", "Form is live; email reading starts Monday", { fields: { health: "on_track" } });
-      }, 900, "Pradeep planned the work and posted an update");
+      await s.others(planWork, 900, "Pradeep planned the work and posted an update");
       await s.think("Pradeep posted the plan. Let me open the project.");
       await s.click({ sel: "article.pcard a.name", text: "Orders without retyping" }, 1200);
       await s.click({ sel: "nav.tabs a", text: "Execute" }, 1000);
@@ -342,11 +369,7 @@ export const STORY: Section[] = [
       await s.type('textarea[aria-label="Write a comment"]', "Could the summary go to Sam too?");
       await s.click({ sel: ".comment-box button", text: "Send" }, 900);
       await s.click('dialog[open] button[aria-label="Close"]', 600);
-      await s.others(async () => {
-        await patch((i) => i.title === "Order form connected to the spreadsheet", { status: "done" });
-        await patch((i) => i.title === "Emailed orders read into the same list", { status: "done" });
-        await patch((i) => i.title === "Daily summary at 7pm", { status: "done" });
-      }, 1200, "Pradeep finished three tasks");
+      await s.others(finishWork, 1200, "Pradeep finished three tasks");
       await s.think("All three are done already.");
       await s.hover({ sel: ".item", text: "Daily summary at 7pm" }, 900);
     },
@@ -388,12 +411,7 @@ export const STORY: Section[] = [
     title: "Hand over",
     run: async (s) => {
       await s.say("Pradeep hands over: a runbook, a walkthrough, and the accounts in her name");
-      await s.others(async () => {
-        await moveTo("handover");
-        const { t, p } = await project();
-        await (await engine()).uploadAs(PRADEEP, t, "orders-runbook.txt", "Where orders go, and what to do if one looks wrong.", { layer: "next", projectId: p.id });
-        await add("training", "Front desk walkthrough, recorded for new staff");
-      }, 900, "Pradeep uploaded the runbook");
+      await s.others(handOver, 900, "Pradeep uploaded the runbook");
       await s.think("A runbook, so we can handle things ourselves.");
       await s.go(`${base}/projects`, "Projects");
       // The page remembers List or Timeline; the project row is in List
@@ -432,12 +450,12 @@ export const STORY: Section[] = [
       await s.think("And every file we traded, in one spot.");
       await s.go(`${base}/documents`, "Files");
       await s.wait(1200);
+      // The history is Home's Recent activity: who did what, newest first, the same feed a
+      // client reaches from the menu (each item's panel keeps its own History too)
+      await s.go(`${base}/workspace`, "Home");
       await s.say("And every change, kept as history");
       await s.think("Even a history of every change. Good for my records.");
-      await s.go(`${base}/settings`, "Settings");
-      await s.wait(900);
-      await s.scroll(1200, 1600);
-      await s.go(`${base}/workspace`, "Home");
+      await s.hover('[data-tour="activity"]', 1800);
       await s.say("From a first request to a measured result, all in one place");
       await s.think("No more retyping orders. That's my evenings back.");
       await s.wait(1800);

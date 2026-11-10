@@ -6,6 +6,7 @@
 import { liveEngine } from "../lib/api.ts";
 import type { Show, Stage, Target } from "./player.ts";
 import { fakePasskeys, MailWindow, Phone } from "./props.ts";
+import { PREVIEW } from "./preview.ts";
 import { MARIA, SAM } from "./seed.ts";
 
 
@@ -417,4 +418,4 @@ const texts: Show = {
 
 
 /** Every short demo, in menu order */
-export const SHORTS: Show[] = [invite, passkey, authenticator, texts];
+export const SHORTS: Show[] = [PREVIEW, invite, passkey, authenticator, texts];

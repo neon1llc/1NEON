@@ -342,6 +342,16 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
 .signin .remember input:focus-visible { outline: 2px solid var(--neon); outline-offset: 2px; }
 .signin .fine a { color: #84A98C; }
 .signin .legal-links { margin-top: 8px; white-space: nowrap; }
+/* Who the portal is for, the visible email label, what Continue leads to, and the ways in without an
+   account. Text colors measure 7.8:1 (#84A98C) to 17:1 (#D6F5DC) on the void, and stay above 5.5:1
+   with green rain lit behind the glass */
+.signin .signin-h { margin: 4px 0 0; font: 600 16px var(--mono); letter-spacing: .04em; color: #D6F5DC; }
+.signin .signin-lead { margin: 6px 0 20px; font-size: 14px; color: #A3C2AA; }
+.signin .field-label { display: block; font: 12px var(--mono); color: #A3C2AA; margin: 0 0 -4px; }
+.signin form.stack > .next-hint { margin: -2px 0 0; }
+.signin .signin-more { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(0, 255, 65, .16); font-size: 13px; }
+.signin .signin-more a { color: #A3C2AA; }
+.signin .signin-more a:hover { color: var(--neon); }
 /* Sign-in steps: stacked buttons, and a wide, spaced-out code field */
 .signin .steps-col { display: grid; gap: 10px; }
 .signin .steps-col .btn { width: 100%; margin: 0; }
@@ -417,7 +427,7 @@ html.from-site, html.from-site body { background: var(--void); }
 }
 
 /* Plain labels in forms and dialogs */
-form label:not(.card):not(.chip):not(.field):not(.remember):not(.sms-consent), dialog label { display: block; font: 12px var(--mono); color: var(--muted); margin-bottom: 6px; }
+form label:not(.card):not(.chip):not(.field):not(.remember):not(.sms-consent):not(.field-label), dialog label { display: block; font: 12px var(--mono); color: var(--muted); margin-bottom: 6px; }
 fieldset legend { font: 12px var(--mono); color: var(--muted); }
 .chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
@@ -840,6 +850,10 @@ body:has(.demo-bar) { --demo-h: 36px; padding-top: var(--demo-h); }
 body:has(.demo-bar) .side { top: var(--demo-h); }
 body:has(.demo-bar) .top { top: var(--demo-h); }
 @media (max-width: 640px) { .demo-note { display: none; } .demo-acts { margin-left: auto; } }
+/* The demo can't save on this device: one calm line, in the bar and on the picker (13:1 on the void) */
+.demo-tab-only { color: #FFD27A; }
+.demo-bar .demo-tab-only { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.demo-pick .demo-tab-only { display: block; font-size: 12px; }
 /* The demo's picker: each person with what they can do */
 .demo-pick { display: grid; gap: 8px; }
 .demo-pick .eyebrow { margin: 6px 0 0; }
@@ -949,3 +963,28 @@ body:has(.demo-bar) .top { top: var(--demo-h); }
 .content { padding-left: calc(var(--gut) + var(--inl)); padding-right: calc(var(--gut) + env(safe-area-inset-right)); }
 .tabbar { padding-left: calc(4px + var(--inl)); padding-right: calc(4px + env(safe-area-inset-right)); }
 .demo-bar { padding-left: calc(16px + env(safe-area-inset-left)); padding-right: calc(16px + env(safe-area-inset-right)); }
+
+
+/* --- Layer subtitles (2026-11-10) ---
+   Each branded layer name carries its plain meaning beside it in navigation: the menu, the project's
+   tabs, and the sample project's contents. Same row, smaller and muted, so no row grows */
+.nav .lbl .sub { margin-left: 8px; font: 12px var(--sans); color: var(--muted); }
+.nav a.active .lbl .sub { font-weight: 400; }
+.tabs .tab-name .sub { margin-left: 6px; font: 11px var(--sans); color: var(--muted); }
+.tabs a.active .tab-name .sub { color: inherit; opacity: .85; }
+
+
+/* --- Option comparison basis (2026-11-10) ---
+   One-time and recurring charges on their own lines, then whose scores these are; the rubric sits
+   once under the cards */
+.cost-split { display: grid; gap: 2px; margin: 0 0 10px; }
+.cost-split div { display: flex; gap: 8px; }
+.cost-split dt { flex: none; width: 76px; font: 11px var(--mono); color: var(--muted); padding-top: 2px; }
+.cost-split dd { margin: 0; }
+.assess-h { margin: 4px 0 2px; font: 11px var(--mono); letter-spacing: .04em; color: var(--muted); }
+.assess-rubric { margin: 10px 0 0; max-width: 72ch; }
+
+
+/* --- FAQ links (2026-11-10): each answer ends with a way to copy its own address --- */
+.faq-link { margin: 8px 0 0; }
+.faq:target > summary, .faq[open]:target > summary { color: var(--accent); }

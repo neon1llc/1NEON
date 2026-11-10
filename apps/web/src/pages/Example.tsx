@@ -2,7 +2,7 @@
 // portal's own frame. Public, no sign-in; it links to the working demo and the live playback.
 
 
-import { LayerBadge, LAYERS, layerName } from "../components/ui.tsx";
+import { LayerBadge, LAYERS, layerHint, layerName } from "../components/ui.tsx";
 import type { Layer } from "@1neon/domain";
 
 
@@ -63,20 +63,20 @@ export function Example() {
     <div className="shell example">
       {/* The signed-in portal's top bar, with the way into the demo where search would be */}
       <header className="top">
-        <div className="crumb"><a href="/1NEON/">1NEON</a> / Example</div>
+        <div className="crumb"><a href="/1NEON/">1NEON</a> / Sample project</div>
         <span className="top-acts">
           <a className="btn btn-ghost btn-sm" href="/">neon1.tech</a>
-          <a className="btn btn-ghost btn-sm" href="/1NEON/live">Watch it live</a>
-          <a className="btn btn-primary btn-sm" href="/1NEON/demo/">Try the demo</a>
+          <a className="btn btn-ghost btn-sm" href="/1NEON/live">Guided walkthrough</a>
+          <a className="btn btn-primary btn-sm" href="/1NEON/demo/">Interactive demo</a>
         </span>
       </header>
       <main className="content example-body" id="main">
-        <p className="eyebrow">Example project · every name, number, and file is made up</p>
+        <p className="eyebrow">Sample project · every name, number, and file is made up</p>
         <h1 className="page-title">Maple Street Bakery: orders without retyping</h1>
         <p className="lead">A two-person bakery takes orders by email and phone, then retypes them into a spreadsheet each night. Follow it through the four layers.</p>
         {/* Contents: jump to a layer */}
         <nav className="tabs" aria-label="Layers">
-          {LAYERS.map((l) => <a key={l} href={`#${l}`}><LayerBadge layer={l} />{layerName(l)}</a>)}
+          {LAYERS.map((l) => <a key={l} href={`#${l}`}><LayerBadge layer={l} /><span className="tab-name">{layerName(l)}<small className="sub"><span className="sr">, </span>{layerHint(l)}</small></span></a>)}
         </nav>
         {LAYERS.map((l, i) => (
           <section key={l} id={l} className="example-layer" aria-labelledby={`${l}-h`}>
@@ -102,8 +102,8 @@ export function Example() {
         <section className="example-end card">
           <p>That's the whole loop. A real project follows the same steps, with its own need and numbers.</p>
           <div className="actions">
-            <a className="btn btn-primary" href="/1NEON/demo/">Try the demo</a>
-            <a className="btn btn-ghost" href="/1NEON/live">Watch a project play out</a>
+            <a className="btn btn-primary" href="/1NEON/demo/">Interactive demo</a>
+            <a className="btn btn-ghost" href="/1NEON/live">Guided walkthrough</a>
             <a className="btn btn-ghost" href="https://calendly.com/1isgladtobeofservice/neon1-consultation" target="_blank" rel="noopener">Book a free call</a>
           </div>
         </section>

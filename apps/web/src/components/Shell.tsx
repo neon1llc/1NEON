@@ -7,9 +7,11 @@ import { createContext, useContext, useEffect, useRef, useState, type CSSPropert
 import { Link, NavLink, Navigate, Outlet, useLocation, useParams } from "react-router";
 import { menuOf } from "@1neon/domain";
 import { PLAY, PROJECT } from "../live/where.ts";
-import { api, DEMO as IN_DEMO, LIVE as IN_LIVE, devUser, HttpError, pickPerson, resetDemo } from "../lib/api.ts";
+import { api, DEMO as IN_DEMO, LIVE as IN_LIVE, devUser, HttpError, pickPerson, resetDemo, Unconfirmed } from "../lib/api.ts";
 import { failureOf, read } from "../lib/reads.ts";
 import { passkeyAssertion } from "../lib/passkey.ts";
+import { SIGN_IN_METHODS } from "../lib/methods.ts";
+import { usePersisting } from "../lib/persist.ts";
 import { cleanCode, clearStep, loadStep, saveStep, session } from "../lib/signin.ts";
 import type { Me, OrgResponse, OrgSummary } from "../lib/types.ts";
 import { Bell } from "./Bell.tsx";
@@ -20,7 +22,7 @@ import { ConfirmDialog } from "./Confirm.tsx";
 import { HelpProvider, useHelp } from "./Help.tsx";
 import { Palette } from "./Palette.tsx";
 import { gate, Stale, type Read } from "./Reads.tsx";
-import { Avatar, Icon, initials, LayerBadge, LAYERS, layerName, layerSlug, Rings, useAsk } from "./ui.tsx";
+import { Avatar, Icon, initials, LayerBadge, LAYERS, layerHint, layerName, layerSlug, Rings, useAsk } from "./ui.tsx";
 
 
 // --- Session -----------------------------------------------------------------
@@ -198,6 +200,8 @@ function SignIn() {
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
   const [at, setAt] = useState<Step>(() => (saved ? { step: saved.step, methods: saved.methods } : { step: "email" }));
   const [busy, setBusy] = useState(false);
+  // The last call got no answer, so it may or may not have gone through
+  const [unsure, setUnsure] = useState(false);
   const qc = useQueryClient();
   // The Managed Login callback sends people back here with a reason when sign-in can't finish
   const problem = at.step === "failed" || at.step === "not_invited" ? at.step : new URLSearchParams(location.search).get("signin");
@@ -209,6 +213,7 @@ function SignIn() {
   // One round trip to the API; a passkey step prompts the browser and answers right away
   const send = async (body: object) => {
     setBusy(true);
+    setUnsure(false);
     try {
       let r = await api<Step>("/auth/step", { method: "POST", body });
       if (r.step === "passkey") r = await api<Step>("/auth/step", { method: "POST", body: { op: "answer", kind: "passkey", value: await passkeyAssertion(r.options as never) } });
@@ -218,9 +223,16 @@ function SignIn() {
       else clearStep(session());
       if (r.step === "done") await qc.invalidateQueries();
       else setAt(r);
-    } catch {
-      clearStep(session());
-      setAt({ step: "failed" });
+    } catch (e) {
+      // No answer within the deadline: stay on this step with the email kept, and check the session
+      // (a safe read), which hands over to the app if the sign-in did finish. Nothing is resent
+      if (e instanceof Unconfirmed) {
+        setUnsure(true);
+        void api("/me").then(() => qc.invalidateQueries(), () => undefined);
+      } else {
+        clearStep(session());
+        setAt({ step: "failed" });
+      }
     }
     setBusy(false);
   };
@@ -260,32 +272,44 @@ function SignIn() {
       </header>
       <div className="panel glass">
         <Wordmark />
+        {/* Who this is for, before anyone types: clients, by invitation */}
+        {!PICKER && (
+          <>
+            <h2 className="signin-h">Client portal</h2>
+            <p className="signin-lead">For neon1 clients. Access is by invitation.</p>
+          </>
+        )}
         {problem === "not_invited" && <p className="notice" role="alert">That email hasn't been invited yet. Ask your organization's admin, or neon1.</p>}
+        {unsure && <p className="notice" role="alert">We couldn't confirm whether this finished. If a code arrives by email, you can still use it, or try again.</p>}
         {problem === "failed" && <p className="notice" role="alert">{fromLink ? "That link only works in the browser where you asked for the code. Type the code there instead, or start again here." : "Sign-in didn't finish. Please try again."}</p>}
         {/* The demo: no accounts, just pick who to be */}
         {PICKER && (
           <div className="dev demo-pick" aria-label="Demo people">
             <p className="fine">A working copy of 1NEON with made-up clients. Everything you do stays in this browser.</p>
+            {!IN_LIVE && <TabOnly />}
             <p className="eyebrow">Try it as</p>
             {(IN_LIVE ? LIVE_PEOPLE : PEOPLE).map(([e, name, role]) => (
               <button key={e} onClick={() => pick(e)}><b>{name}</b><span>{role}</span></button>
             ))}
-            {!IN_LIVE && <p className="fine"><a href="/1NEON/live">Or watch a whole project play out</a></p>}
+            {!IN_LIVE && <p className="fine"><a href="/1NEON/live">Or watch the guided walkthrough</a></p>}
           </div>
         )}
         {/* Step 1: the email */}
         {!PICKER && (at.step === "email" || at.step === "failed" || at.step === "not_invited") && (
           <form className="stack" onSubmit={(e) => { e.preventDefault(); void send({ op: "start", email: email.trim(), remember }); }}>
-            <label className="sr" htmlFor="email">Your email</label>
+            {/* A label that stays on screen, so it survives autofill and typed text (the placeholder doesn't) */}
+            <label className="field-label" htmlFor="email">Email address</label>
             {/* Remember me opens under the email once it looks like a real address */}
             <div className={`email-row${emailOk ? " ok" : ""}`}>
-              <input id="email" type="email" required autoComplete="email webauthn" placeholder="e.g. you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <input id="email" type="email" required autoComplete="email webauthn" placeholder="you@company.com" aria-describedby="email-next" value={email} onChange={(e) => setEmail(e.target.value)} />
               <label className="remember" aria-hidden={!emailOk}>
                 <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} tabIndex={emailOk ? 0 : -1} />
                 remember me
               </label>
             </div>
             <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? "One moment…" : "Continue"}</button>
+            {/* What Continue leads to, worded the same whether or not the address has an account */}
+            <p id="email-next" className="fine next-hint">{SIGN_IN_METHODS}</p>
           </form>
         )}
         {/* Step 2a: a passkey or a code, when both are on offer */}
@@ -309,11 +333,21 @@ function SignIn() {
           </form>
         )}
         {at.step !== "email" && <p className="fine"><button className="linkish" onClick={restart}>Use a different email</button></p>}
-        {!PICKER && <p className="fine">Sign in with a code sent to your email, or a passkey. 1NEON uses only the cookies it needs to keep you signed in.</p>}
+        {!PICKER && <p className="fine">1NEON uses only the cookies it needs to keep you signed in.</p>}
         {/* The three policies on one line of their own */}
         <p className="fine legal-links">
           <Link to="/faqs">FAQs</Link> · <Link to="/cookies">Cookies</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
         </p>
+        {/* Not a client yet: the sample and the demo are one click away, with no sign-in to attempt,
+            and a way to ask for an invitation. Kept out of the demo, which is already one of them */}
+        {!IN_DEMO && (
+          <nav className="signin-more" aria-label="Without an account">
+            <a href="/1NEON/example">Read a sample project</a>
+            <a href="/1NEON/demo/">Try the interactive demo</a>
+            <a href="mailto:hello@neon1.tech?subject=1NEON%20invitation">Need an invitation?</a>
+            <a href="/">neon1.tech home</a>
+          </nav>
+        )}
         {/* Local builds also offer the demo people under the real form */}
         {pickPerson && !IN_DEMO && (
           <div className="dev" aria-label="Local demo accounts">
@@ -424,12 +458,13 @@ export function useTopBar(node: ReactNode, deps: unknown[]) {
 
 
 /** One menu entry: its icon box and label line up with every other entry; picking it closes the full menu */
-function Item({ to, icon, label, end, tour }: { to: string; icon: ReactNode; label: string; end?: boolean; tour?: string }) {
+function Item({ to, icon, label, sub, end, tour }: { to: string; icon: ReactNode; label: string; sub?: string; end?: boolean; tour?: string }) {
   return (
     <li>
-      <NavLink to={to} end={end} title={label} data-tour={tour}>
+      <NavLink to={to} end={end} title={sub ? `${label}: ${sub}` : label} data-tour={tour}>
         {icon}
-        <span className="lbl">{label}</span>
+        {/* A layer's plain subtitle rides on the same row, so every row keeps its height */}
+        <span className="lbl">{label}{sub && <small className="sub"><span className="sr">, </span>{sub}</small>}</span>
       </NavLink>
     </li>
   );
@@ -449,6 +484,14 @@ function Frame({ org, all, reads, children }: { org?: OrgSummary; all?: boolean;
 
 
 
+/** Said in the demo once this browser refuses to save it: the demo still works, from memory */
+function TabOnly() {
+  const ok = usePersisting();
+  if (ok) return null;
+  return <span className="demo-tab-only" role="status">This demo lasts until you close or reload this tab.</span>;
+}
+
+
 /** The demo's strip above the portal: what this is, who you're being, and a way to start over */
 function DemoBar() {
   const me = useSession();
@@ -459,9 +502,10 @@ function DemoBar() {
   const ask = useAsk();
   const startOver = async () => { if (await ask({ title: "Start the demo over?", body: "Every change you made in this demo goes away.", yes: "Start over", danger: true })) void resetDemo(); };
   return (
-    <div className="demo-bar" role="region" aria-label="Demo">
-      <span className="demo-tag">demo</span>
+    <div className="demo-bar" role="region" aria-label="Interactive demo">
+      <span className="demo-tag">interactive demo</span>
       <span className="demo-note">You're {me.user.name || me.user.email}. Everything stays in this browser.</span>
+      <TabOnly />
       <span className="demo-acts">
         <button className="linkish" onClick={switchPerson}>Switch person</button>
         <button className="linkish" onClick={startOver}>Start over</button>
@@ -566,7 +610,7 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
               <li className="sep" data-tour="nav-layers"><span className="lbl">Layers</span>
                 <ul className="nav">
                   {LAYERS.map((l) => (
-                    <Item key={l} to={`${base}/layer/${layerSlug(l)}`} icon={<LayerBadge layer={l} />} label={layerName(l)} />
+                    <Item key={l} to={`${base}/layer/${layerSlug(l)}`} icon={<LayerBadge layer={l} />} label={layerName(l)} sub={layerHint(l)} />
                   ))}
                 </ul>
               </li>
