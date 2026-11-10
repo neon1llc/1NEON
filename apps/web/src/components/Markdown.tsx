@@ -109,7 +109,7 @@ export function Markdown({ source }: { source: string }) {
         }
         if (b.kind === "table") {
           return (
-            <div key={`t${i}`} style={{ overflowX: "auto" }}>
+            <div key={`t${i}`} style={{ overflowX: "auto", position: "relative" }}>
               <table className="people">
                 <thead><tr>{b.head.map((c, j) => <th key={j}>{inline(c, j)}</th>)}</tr></thead>
                 <tbody>{b.rows.map((r, ri) => <tr key={ri}>{r.map((c, j) => <td key={j}>{inline(c, ri * 100 + j)}</td>)}</tr>)}</tbody>

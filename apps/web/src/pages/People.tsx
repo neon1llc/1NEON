@@ -64,7 +64,7 @@ export function People() {
       {canAdmin && <Invite />}
       <Stale reads={[members]} />
       {/* Until the list answers, no empty table */}
-      {gate([members]) ?? <div style={{ overflowX: "auto" }}>
+      {gate([members]) ?? <div style={{ overflowX: "auto", position: "relative" }}>
         {/* One row per member: who, email, access, and status with its action */}
         <table className="people" data-tour="people-list">
           <thead><tr><th>Name</th><th>Email</th><th>Access</th><th>Status</th></tr></thead>

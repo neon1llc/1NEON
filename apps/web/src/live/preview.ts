@@ -26,7 +26,7 @@ export const PREVIEW: Show = {
   id: "preview",
   title: "The short preview",
   blurb: "Request, compare, approve, progress, and handover",
-  length: "about a minute",
+  length: "about a minute and a half",
   who: MARIA,
   path: `${base}/workspace`,
   end: "That's the short version. The full story, or the interactive demo, goes further.",

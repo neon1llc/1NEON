@@ -51,6 +51,9 @@ export interface View {
 class Cut extends Error {}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Typing at a steady, readable pace (before speed scaling): an even beat per letter with a little
+// give, a slightly longer one between words, and a small breath after punctuation
+const beat = (ch: string) => (/[.,;:!?…]/.test(ch) ? 150 : ch === " " ? 95 : 62 + Math.random() * 14);
 const frame = () => new Promise((r) => requestAnimationFrame(() => r(undefined)));
 // Smooth start and stop for every movement
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -331,8 +334,9 @@ export class Player {
   private touched = false;
   // Where the first section starts, from the link
   private first = 0;
-  /** How fast it plays: 1 is the calm default, 0.5 half as fast, 2 twice as fast */
-  speed = (() => { try { return Number(localStorage.getItem("1neon.liveSpeed")) || 1; } catch { return 1; } })();
+  /** How fast it plays: 1 is the calm default, 0.5 half as fast, 2 twice as fast. Saved as "2:<speed>"
+   * since 1x moved (the old 0.75x is today's 1x), so a speed saved on the old scale starts over at 1x */
+  speed = (() => { try { const v = /^2:([\d.]+)$/.exec(localStorage.getItem("1neon.liveSpeed") ?? ""); return Number(v?.[1]) || 1; } catch { return 1; } })();
   private listeners = new Set<(v: View) => void>();
   private steps = 0;
   private est = new Map<number, number>();
@@ -348,7 +352,7 @@ export class Player {
 
   constructor(project: Section[]) {
     const short = SHORTS.find((s) => s.id === PLAY.show);
-    this.show = short ?? { id: PROJECT, title: "The full story", blurb: "A whole project, from a first sign-in to ongoing care", length: "about 6 minutes", sections: project, end: "That's a whole project, start to finish." };
+    this.show = short ?? { id: PROJECT, title: "The full story", blurb: "A whole project, from a first sign-in to ongoing care", length: "about 8 minutes", sections: project, end: "That's a whole project, start to finish." };
     // A section named in the link (or saved by a refresh) starts there, catching up on the way
     this.first = Math.max(0, this.show.sections.findIndex((s) => s.id === PLAY.at));
     this.view = { index: this.first, title: this.sections[this.first]!.title, caption: "", progress: 0, paused: false, skipping: false, done: false, idle: true };
@@ -414,11 +418,12 @@ export class Player {
   /** Change the speed; it applies from the next movement */
   setSpeed(v: number) {
     this.speed = Math.min(2, Math.max(0.5, v));
-    try { localStorage.setItem("1neon.liveSpeed", String(this.speed)); } catch { /* private mode */ }
+    try { localStorage.setItem("1neon.liveSpeed", `2:${this.speed}`); } catch { /* private mode */ }
   }
-  // Today's movements were tuned at 1.5x of the calm default; every duration scales from there
+  // The movements were tuned fast; 1x is what used to be 0.75x on the old scale (1.5 / 0.75 = 2), and
+  // every duration scales from there
   private pace(ms: number) {
-    return (ms * 1.5) / this.speed;
+    return (ms * 2) / this.speed;
   }
   toggle() {
     if (this.view.idle) return void this.start();
@@ -674,8 +679,23 @@ export class Player {
           now += ch;
           setter.call(el, now);
           el.dispatchEvent(new Event("input", { bubbles: true }));
-          if (!p.fast) await sleep(p.pace(ch === " " ? 75 : 40 + Math.random() * 32));
+          if (!p.fast) await sleep(p.pace(beat(ch)));
         }
+        await pause(after);
+      },
+      /** Click into a field and paste a whole value at once, as from the clipboard */
+      paste: async (t: Target, text: string, after = 400) => {
+        step();
+        const el = (await waitFor(t)) as HTMLInputElement | HTMLTextAreaElement;
+        await reach(el);
+        p.cursor!.press();
+        el.focus();
+        p.typed = el;
+        await pause(350);
+        await tick();
+        const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value")!.set!;
+        setter.call(el, text);
+        el.dispatchEvent(new Event("input", { bubbles: true }));
         await pause(after);
       },
       /** Set a date or a select the way its picker would */

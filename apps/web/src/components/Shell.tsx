@@ -6,7 +6,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useParams } from "react-router";
 import { menuOf } from "@1neon/domain";
-import { PLAY, PROJECT } from "../live/where.ts";
 import { api, DEMO as IN_DEMO, LIVE as IN_LIVE, devUser, HttpError, pickPerson, resetDemo, Unconfirmed } from "../lib/api.ts";
 import { failureOf, read } from "../lib/reads.ts";
 import { passkeyAssertion } from "../lib/passkey.ts";
@@ -139,14 +138,9 @@ const PEOPLE = [
   ["dana@acmedental.example", "Dana Kim", "Acme Dental's office manager: adds requests, answers, and files"],
   ["pradeep@neon1.tech", "Pradeep", "neon1's lead engineer: every client, proposals, and the work"],
 ] as const;
-// The demo signs in by picking a person; the live playback's short demos show the real sign-in
-// instead, answered in the browser, since signing in is what they're about
-const PICKER = IN_DEMO && !(IN_LIVE && PLAY.show !== PROJECT);
-// The live playback's two people: the bakery's owner, and neon1
-const LIVE_PEOPLE = [
-  ["maria@maplestreetbakery.example", "Maria Lopez", "Maple Street Bakery's owner"],
-  ["pradeep@neon1.tech", "Pradeep", "neon1's lead engineer"],
-] as const;
+// The demo signs in by picking a person; the live playback always shows the real sign-in instead
+// (email, then a code from her email), answered in the browser
+const PICKER = IN_DEMO && !IN_LIVE;
 
 
 // What the API answers at each sign-in step
@@ -184,6 +178,8 @@ function Wordmark() {
       <h1 className={`word${open ? " open" : ""}`} tabIndex={0} aria-label="1NEON" aria-describedby="word-meaning"
         onMouseEnter={() => show()} onMouseLeave={hide} onFocus={() => show()} onBlur={hide} onClick={() => show(4600)}>
         <span className="wm" aria-hidden="true">
+          {/* The 1NEON mark beside the word, sized with it so it stays beside it when the word spells out */}
+          <Rings />
           {SPELLED.map(([initial, rest], i) => (
             <span key={i} className="seg">
               <span className="init">{initial}</span>
@@ -302,12 +298,12 @@ function SignIn() {
         {PICKER && (
           <div className="dev demo-pick" aria-label="Demo people">
             <p className="fine">A working copy of 1NEON with made-up clients. Everything you do stays in this browser.</p>
-            {!IN_LIVE && <TabOnly />}
+            <TabOnly />
             <p className="eyebrow">Try it as</p>
-            {(IN_LIVE ? LIVE_PEOPLE : PEOPLE).map(([e, name, role]) => (
+            {PEOPLE.map(([e, name, role]) => (
               <button key={e} onClick={() => pick(e)}><b>{name}</b><span>{role}</span></button>
             ))}
-            {!IN_LIVE && <p className="fine"><a href="/1NEON/live">Or watch the guided walkthrough</a></p>}
+            <p className="fine"><a href="/1NEON/live">Or watch the guided walkthrough</a></p>
           </div>
         )}
         {/* Step 1: the email */}
@@ -349,19 +345,16 @@ function SignIn() {
           </form>
         )}
         {at.step !== "email" && <p className="fine"><button className="linkish" onClick={restart}>Use a different email</button></p>}
-        {!PICKER && <p className="fine">1NEON uses only the cookies it needs to keep you signed in.</p>}
         {/* The three policies on one line of their own */}
         <p className="fine legal-links">
           <Link to="/faqs">FAQs</Link> · <Link to="/cookies">Cookies</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
         </p>
-        {/* Not a client yet: the sample and the demo are one click away, with no sign-in to attempt,
-            and a way to ask for an invitation. Kept out of the demo, which is already one of them */}
+        {/* Not a client yet: the sample and the demo are one click away, with no sign-in to attempt.
+            Kept out of the demo, which is already one of them */}
         {!IN_DEMO && (
           <nav className="signin-more" aria-label="Without an account">
             <a href="/1NEON/example">Read a sample project</a>
             <a href="/1NEON/demo/">Try the interactive demo</a>
-            <a href="mailto:hello@neon1.tech?subject=1NEON%20invitation">Need an invitation?</a>
-            <a href="/">neon1.tech home</a>
           </nav>
         )}
         {/* Local builds also offer the demo people under the real form */}

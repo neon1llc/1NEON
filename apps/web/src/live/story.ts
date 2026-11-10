@@ -5,6 +5,7 @@
 
 import { liveEngine } from "../lib/api.ts";
 import type { Section, Stage } from "./player.ts";
+import { MailWindow } from "./props.ts";
 import { MARIA, PRADEEP } from "./seed.ts";
 
 
@@ -120,18 +121,76 @@ async function dropFile(s: Stage, target: Parameters<Stage["click"]>[0], name: s
 }
 
 
+/** The primer card before the story: who's who, what's coming, and how to steer. Removed by the caller */
+function primer() {
+  const el = document.createElement("section");
+  el.className = "live-primer live-prop";
+  el.setAttribute("aria-label", "Before it starts");
+  const h = document.createElement("h2");
+  h.textContent = "Meet Maria";
+  el.append(h);
+  for (const t of [
+    "Maria owns Maple Street Bakery. Every night her team retypes about 40 orders from email and voicemail into a spreadsheet. Pradeep at neon1 has invited her to 1NEON, the portal where they'll fix that together.",
+    "You'll watch her sign in with a code from her email, set up her alerts, invite her team, start a project, choose from Pradeep's options, follow the work, and take the handover. Her thoughts appear beside the cursor.",
+    "Everything here is made up and stays in this browser. The bar above pauses it, steps between parts, and changes the speed.",
+  ]) {
+    const p = document.createElement("p");
+    p.textContent = t;
+    el.append(p);
+  }
+  document.body.append(el);
+  // Props start see-through and fade in once marked on
+  requestAnimationFrame(() => el.classList.add("on"));
+  return el;
+}
+
+
 /** The sections, in order. Titles are what the Back and Next buttons say. Captions (say) narrate in
  * the bar; thoughts (think) are Maria's own, beside the cursor, at each look and move */
 export const STORY: Section[] = [
+  {
+    id: "primer",
+    title: "Meet Maria",
+    run: async (s) => {
+      const card = primer();
+      try {
+        await s.say("Before it starts: who's who, and what you'll see");
+        // Long enough to read all three short paragraphs at the default speed
+        await s.wait(card.textContent!.length * 22);
+      } finally {
+        card.remove();
+      }
+    },
+  },
   {
     id: "signin",
     title: "Sign in",
     run: async (s) => {
       await s.say("Maria, who owns Maple Street Bakery, opens 1NEON for the first time");
       await s.think("Pradeep said our project lives here. Let me sign in.");
-      await s.wait(900);
-      await s.hover({ sel: ".demo-pick button", text: "Maria" }, 500);
-      await s.click({ sel: ".demo-pick button", text: "Maria" }, 1400);
+      await s.wait(600);
+      await s.type("#email", MARIA, 400);
+      await s.click({ sel: "form button", text: "Continue" }, 1000);
+      await s.say("No password: 1NEON emails her a sign-in code");
+      await s.think("It sent me a code. Let me check my email.");
+      const mail = new MailWindow(MARIA);
+      let code = "";
+      try {
+        mail.fill((await engine()).outbox());
+        await s.wait(700);
+        await s.click(() => mail.row("sign-in code"), 300);
+        mail.open([...mail.el.querySelectorAll(".mail-row")].indexOf(mail.row("sign-in code")!));
+        await s.wait(700);
+        code = mail.code()?.value ?? "";
+        await s.hover(() => mail.code()?.el, 700);
+        await s.think(`There it is: ${code}. Copy.`);
+        await s.wait(500);
+      } finally {
+        await mail.close();
+      }
+      await s.think("Back to 1NEON. Paste, and Enter.");
+      await s.paste("#code", code, 400);
+      await s.key("Enter", 1400);
       await s.say("Home shows what needs her, what's coming up, and what's new");
       await s.think("Okay, home. What's waiting on me?");
       await s.hover({ sel: "h2.section-h", text: "Needs you" }, 900);

@@ -11,6 +11,7 @@ import { Repo } from "../../../api/src/store/repo.ts";
 import type { Row } from "../../../api/src/store/types.ts";
 import type { LiveSession } from "../live/signin.ts";
 import { devUser } from "../lib/devuser.ts";
+import { PLAY, PROJECT } from "../live/where.ts";
 import { persistFailed } from "../lib/persist.ts";
 
 
@@ -135,7 +136,9 @@ export async function demoFetch(url: string, init: RequestInit = {}): Promise<Re
     if (req.method === "POST" && new URL(req.url).pathname === "/1NEON/api/auth/step") {
       const { liveStep } = await import("../live/signin.ts");
       return liveStep(req, new Repo(table), mailer, (s) => {
-        session = s;
+        // The full story shows the code sign-in, then moves on to the project without stopping for
+        // "Confirm it's you" (Maria has no passkey or app yet); the short demos about it keep the session
+        if (PLAY.show !== PROJECT) session = s;
         devUser.set(s.email);
       });
     }
