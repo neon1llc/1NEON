@@ -12,7 +12,8 @@ export const CONTACT_TO = "hello@neon1.tech";
 export const PER_SENDER_HOURLY = 5;
 export const DAILY = 50;
 
-// What each topic is called in the email; the same four as the site's services, plus "something else"
+// What each topic is called in the email: the site's four services, plus "something else" (kept so
+// an older page still sends). A visitor may pick any number, or none, and name their own in `other`
 export const TOPICS = {
   business: "Business workflows and technology",
   cloud: "Cloud and AI engineering",
@@ -21,11 +22,17 @@ export const TOPICS = {
   other: "Something else",
 } as const;
 
+const TopicKey = z.enum(Object.keys(TOPICS) as [keyof typeof TOPICS, ...(keyof typeof TOPICS)[]]);
+
 const Message = z.object({
   name: z.string().trim().min(1).max(100),
   email: z.string().trim().email().max(200),
   company: z.string().trim().max(120).optional().default(""),
-  topic: z.enum(Object.keys(TOPICS) as [keyof typeof TOPICS, ...(keyof typeof TOPICS)[]]),
+  topics: z.array(TopicKey).max(5).optional().default([]),
+  // The older one-topic form, still accepted
+  topic: TopicKey.optional(),
+  // Their own words for what it's about, when none of the four fits
+  other: z.string().trim().max(120).optional().default(""),
   today: z.string().trim().min(1).max(3000),
   better: z.string().trim().max(1500).optional().default(""),
   timing: z.string().trim().max(200).optional().default(""),
@@ -51,7 +58,9 @@ export function contactRoutes(app: App, k: Kit) {
     if ((await repo.table.increment("COUNTER", `CONTACT#${who}#${hour}`)) > PER_SENDER_HOURLY) fail(429, "too_many", "That's a lot of messages in an hour. Email hello@neon1.tech instead.");
     if ((await repo.table.increment("COUNTER", `CONTACT#${hour.slice(0, 10)}`)) > DAILY) fail(429, "busy", "The form is paused for today. Email hello@neon1.tech instead.");
 
-    const topic = TOPICS[m.topic];
+    // Every picked topic by name, then their own words; "Not said" when they picked nothing
+    const keys = [...new Set([...m.topics, ...(m.topic ? [m.topic] : [])])].filter((t) => t !== "other");
+    const topic = [...keys.map((t) => TOPICS[t]), ...(m.other ? [m.other] : [])].join(", ") || "Not said";
     const rows: [string, string][] = [
       ["From", `${m.name} <${m.email}>`], ...(m.company ? [["Organization", m.company] as [string, string]] : []),
       ["About", topic], ["What happens today", m.today],

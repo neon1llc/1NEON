@@ -26,6 +26,13 @@ describe("contact form", () => {
     expect(mailer.sent[0]).toMatchObject({ to: CONTACT_TO, replyTo: "dana@example.com" });
     expect(mailer.sent[0]!.text).toContain("Orders land in the sheet");
   });
+  it("names every topic picked and the visitor's own, or says none was picked", async () => {
+    await send({ ...good, topic: undefined, topics: ["cloud", "security"], other: "Printer setup" });
+    expect(mailer.sent[0]!.text).toContain("About: Cloud and AI engineering, Security awareness and readiness, Printer setup");
+    await send({ ...good, topic: undefined });
+    expect(mailer.sent[1]!.text).toContain("About: Not said");
+    expect((await send({ ...good, topics: ["nope"] })).status).toBe(400);
+  });
   it("escapes what people type", async () => {
     await send({ ...good, today: "<script>x</script>" });
     expect(mailer.sent[0]!.html).not.toContain("<script>");
