@@ -272,6 +272,10 @@ export const Item = z.object({
   rank: z.string().max(64).default("m"),
   assigneeId: id.optional(),
   dueDate: z.string().date().optional(),
+  // When the item last moved to done. Set by the server on the transition, kept through later edits,
+  // cleared by reopening; completing again sets a new time, so it is the latest completion. Items done
+  // before this field existed have none, and Insights counts them as "completion date unknown"
+  completedAt: isoDate.optional(),
   /** Kind-specific fields, validated by `itemFields` below */
   fields: z.record(z.string(), z.unknown()).default({}),
   ...versioned,
@@ -427,4 +431,16 @@ export function metricProgress(m: z.infer<typeof MetricFields>): number | undefi
   if (m.target === m.baseline) return latest === m.target ? 1 : 0;
   const p = (latest - m.baseline) / (m.target - m.baseline);
   return Math.max(0, Math.min(1, p));
+}
+
+
+
+/**
+ * The completion time an item should carry after a save (see Item.completedAt). Moving to done stamps
+ * `at`; staying done keeps whatever it had (a legacy item stays unknown rather than getting an
+ * invented date); anything else clears it
+ */
+export function completionAfter(prev: Pick<Item, "status" | "completedAt"> | undefined, nextStatus: string, at: string): string | undefined {
+  if (nextStatus !== "done") return undefined;
+  return prev?.status === "done" ? prev.completedAt : at;
 }

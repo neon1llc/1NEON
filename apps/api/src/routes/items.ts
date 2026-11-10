@@ -2,7 +2,7 @@
 // approving an option into an immutable decision, and the advisory edit markers.
 
 
-import { ApproveInput, CreateItemInput, DecisionFields, Item, OptionFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, type Project } from "@1neon/domain";
+import { ApproveInput, CreateItemInput, completionAfter, DecisionFields, Item, OptionFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, type Project } from "@1neon/domain";
 import { z } from "zod";
 import { actorId, body, byRank, check, defined, fail, label, need, now, validateFields, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
@@ -44,6 +44,8 @@ export function itemRoutes(app: App, k: Kit) {
       updatedAt: ts,
       updatedBy: actorId(c),
     });
+    // Created already done: that is its completion
+    item.completedAt = completionAfter(undefined, item.status, ts);
     // A status update also sets the project's health, in the same transaction
     const health = item.kind === "update" ? (item.fields as { health?: Project["health"] }).health : undefined;
     const healthOp = health && health !== p.health ? [repo.projectOp({ ...p, health, version: p.version + 1, updatedAt: ts, updatedBy: actorId(c) }, { version: p.version })] : [];
@@ -74,6 +76,8 @@ export function itemRoutes(app: App, k: Kit) {
     if (assigneeId !== undefined) next.assigneeId = assigneeId ?? undefined;
     if (dueDate !== undefined) next.dueDate = dueDate ?? undefined;
     if (fields) next.fields = validateFields(item.kind, { ...item.fields, ...fields });
+    // Completion is its own event: an edit to wording, assignee, or fields never moves it
+    next.completedAt = completionAfter(item, next.status, next.updatedAt);
     // Work begun (an item in progress or done) also takes the project out of "not started"
     const begun = p.health === "not_started" && input.status !== undefined && (input.status === "doing" || input.status === "done");
     const started: Project | undefined = begun ? { ...p, health: "on_track", version: p.version + 1, updatedAt: now(), updatedBy: actorId(c) } : undefined;

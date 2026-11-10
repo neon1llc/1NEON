@@ -67,7 +67,7 @@ Choose **New project**, answer a few short questions, and the project starts wit
 This week and the next two as a strip of days. Each mark is something dated: a task's due date, a milestone, or a project's target. Below it, everything dated in the next six weeks is listed by Overdue, This week, Next week, and Later. [Watch it](/1NEON/live?play=signin).
 
 ### What is Insights?
-Charts made from your organization's own data: open and overdue work, how often things finish on time, days to a decision, work finished per week, where projects sit across the four layers, and how healthy they are. [Watch it](/1NEON/live?play=observe).
+Charts made from your organization's own data: open and overdue work, how often things finish on time, days to a decision, work finished per week, where projects sit across the four layers, and how healthy they are. Work counts as finished on the day it was marked done, so editing it later doesn't move it; if it's reopened and finished again, the latest finish counts. The page explains how each number is counted. [Watch it](/1NEON/live?play=observe).
 
 ## Decisions and approvals
 

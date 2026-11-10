@@ -61,6 +61,8 @@ export async function seed(repo: Repo, operatorEmail = "pradeep@neon1.tech") {
   const item = async (p: Project, kind: Item["kind"], title: string, extra: Partial<Item> = {}) => {
     irank = rankBetween(irank, "");
     const i = Item.parse({ tenantId: p.tenantId, projectId: p.id, id: newId("i"), kind, title, body: "", status: "open", rank: irank, fields: {}, version: 1, createdAt: t0, updatedAt: t0, updatedBy: pradeep.id, ...extra });
+    // Seeded work that starts done was completed when it was made
+    if (i.status === "done") i.completedAt = t0;
     await repo.saveItem(i, { create: true });
     return i;
   };

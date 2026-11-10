@@ -66,7 +66,10 @@ export function projectRoutes(app: App, k: Kit) {
     // Starter items: the real example, the template's items, and the measures from the wizard
     const push = (i: Partial<Item> & Pick<Item, "kind" | "title">) => {
       rank = rankBetween(rank, "");
-      items.push(Item.parse({ ...base, id: newId("i"), rank, ...i }));
+      const it = Item.parse({ ...base, id: newId("i"), rank, ...i });
+      // A starter item that begins done (the answered example) is completed at creation
+      if (it.status === "done") it.completedAt = ts;
+      items.push(it);
     };
     // The real example: answered in the wizard, or asked as the first discovery question
     if (input.example) push({ kind: "discovery", title: "One real example of how it works today", body: input.example, status: "done" });

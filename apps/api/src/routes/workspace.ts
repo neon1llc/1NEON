@@ -118,7 +118,9 @@ export function workspaceRoutes(app: App, k: Kit) {
     const byLayer = { needs: 0, execution: 0, observation: 0, next: 0 } as Record<string, number>;
     const byHealth = { on_track: 0, at_risk: 0, off_track: 0, not_started: 0 } as Record<string, number>;
     const doneByWeek = new Map<string, number>();
-    let open = 0, overdue = 0, onTime = 0, late = 0, measures = 0, reached = 0;
+    // doneUnknown: items done before completion times were recorded; they count as done, but in no
+    // week and in neither on-time nor late, because their real finish date isn't known
+    let open = 0, overdue = 0, onTime = 0, late = 0, doneUnknown = 0, measures = 0, reached = 0;
     const decisionDays: number[] = [];
     const today = now().slice(0, 10);
     // Monday of the week a date falls in, so weeks line up
@@ -142,9 +144,14 @@ export function workspaceRoutes(app: App, k: Kit) {
           continue;
         }
         if (i.status === "done") {
-          const wk = week(i.updatedAt);
+          // Finished means the recorded completion time, never the last edit (updatedAt moves on edits)
+          if (!i.completedAt) {
+            doneUnknown++;
+            continue;
+          }
+          const wk = week(i.completedAt);
           doneByWeek.set(wk, (doneByWeek.get(wk) ?? 0) + 1);
-          if (i.dueDate) (i.updatedAt.slice(0, 10) <= i.dueDate ? onTime++ : late++);
+          if (i.dueDate) (i.completedAt.slice(0, 10) <= i.dueDate ? onTime++ : late++);
         } else if (i.kind !== "update" && i.status !== "approved") {
           open++;
           if (i.dueDate && i.dueDate < today) overdue++;
@@ -162,7 +169,7 @@ export function workspaceRoutes(app: App, k: Kit) {
       byLayer,
       byHealth,
       weeks,
-      work: { open, overdue, onTime, late },
+      work: { open, overdue, onTime, late, doneUnknown },
       decisions: { count: decisionDays.length, avgDays: decisionDays.length ? Math.round((decisionDays.reduce((a, b) => a + b, 0) / decisionDays.length) * 10) / 10 : null },
       measures: { count: measures, reached },
       people: { active: members.filter((m) => m.status === "joined").length, invited: members.filter((m) => m.status === "invited").length },

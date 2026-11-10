@@ -78,7 +78,7 @@ async function ready(d: FileDeps, x: DocumentRecord) {
   const next: DocumentRecord = { ...x, state: "ready", problem: undefined, scan: "clean", uploaded: true, version: x.version + 1, updatedAt: ts };
   const ops: WriteOp[] = [d.repo.docOp(next, { version: x.version }), d.repo.auditOp({ tenantId: x.tenantId, actorId: x.updatedBy, action: "doc.uploaded", target: x.id, summary: `Uploaded "${x.name}"` }), { delete: { PK: WATCH, SK: watchKey(x) } }];
   const item = x.projectId && x.itemId ? await d.repo.getItem(x.tenantId, x.projectId, x.itemId) : undefined;
-  if (item && item.status !== "done") ops.push(d.repo.itemOp({ ...item, status: "done", version: item.version + 1, updatedAt: ts, updatedBy: x.updatedBy }, { version: item.version }));
+  if (item && item.status !== "done") ops.push(d.repo.itemOp({ ...item, status: "done", completedAt: ts, version: item.version + 1, updatedAt: ts, updatedBy: x.updatedBy }, { version: item.version }));
   return commit(d, x, next, ops);
 }
 
