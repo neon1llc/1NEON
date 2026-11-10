@@ -2,6 +2,11 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.1.1 - 2026-11-10
+
+### Fixed
+- Emails in the walkthrough, such as the sign-in code, show their own layout on neon1.tech instead of plain text.
+
 ## v0.1.0 - 2026-11-10
 
 The first tagged release. 1NEON had been live at neon1.tech/1NEON since 2026-11-06, deployed from main without version numbers; this entry records what that release holds.

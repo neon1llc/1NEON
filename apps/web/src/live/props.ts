@@ -95,8 +95,17 @@ export class MailWindow {
     head.querySelector("span")!.textContent = `<${FROM_ADDR}>`;
     head.querySelector(".mail-to")!.textContent = `to ${m.to}`;
     this.pane.prepend(head);
-    // Our own template's HTML; links don't navigate (the demo follows them itself)
-    this.body.innerHTML = m.html;
+    // Our own template's HTML; links don't navigate (the demo follows them itself). The page's
+    // policy blocks inline style attributes, so each is moved onto the element through the
+    // style object instead, which the policy allows, and the email looks as it would in a mail app
+    const doc = new DOMParser().parseFromString(m.html, "text/html");
+    const styled = [...doc.body.querySelectorAll<HTMLElement>("[style]")].map((el) => {
+      const css = el.getAttribute("style") ?? "";
+      el.removeAttribute("style");
+      return [el, css] as const;
+    });
+    this.body.replaceChildren(...doc.body.childNodes);
+    for (const [el, css] of styled) el.style.cssText = css;
     for (const a of this.body.querySelectorAll("a")) a.addEventListener("click", (e) => e.preventDefault());
     this.el.classList.add("reading");
   }
