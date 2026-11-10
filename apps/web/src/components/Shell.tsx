@@ -7,7 +7,7 @@ import { createContext, useContext, useEffect, useRef, useState, type CSSPropert
 import { Link, NavLink, Navigate, Outlet, useLocation, useParams } from "react-router";
 import { menuOf } from "@1neon/domain";
 import { PLAY, PROJECT } from "../live/where.ts";
-import { api, DEMO as IN_DEMO, LIVE as IN_LIVE, devUser, HttpError, pickPerson, resetDemo } from "../lib/api.ts";
+import { api, DEMO as IN_DEMO, LIVE as IN_LIVE, devUser, HttpError, pickPerson, resetDemo, Unconfirmed } from "../lib/api.ts";
 import { failureOf, read } from "../lib/reads.ts";
 import { passkeyAssertion } from "../lib/passkey.ts";
 import { SIGN_IN_METHODS } from "../lib/methods.ts";
@@ -199,6 +199,8 @@ function SignIn() {
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
   const [at, setAt] = useState<Step>(() => (saved ? { step: saved.step, methods: saved.methods } : { step: "email" }));
   const [busy, setBusy] = useState(false);
+  // The last call got no answer, so it may or may not have gone through
+  const [unsure, setUnsure] = useState(false);
   const qc = useQueryClient();
   // The Managed Login callback sends people back here with a reason when sign-in can't finish
   const problem = at.step === "failed" || at.step === "not_invited" ? at.step : new URLSearchParams(location.search).get("signin");
@@ -210,6 +212,7 @@ function SignIn() {
   // One round trip to the API; a passkey step prompts the browser and answers right away
   const send = async (body: object) => {
     setBusy(true);
+    setUnsure(false);
     try {
       let r = await api<Step>("/auth/step", { method: "POST", body });
       if (r.step === "passkey") r = await api<Step>("/auth/step", { method: "POST", body: { op: "answer", kind: "passkey", value: await passkeyAssertion(r.options as never) } });
@@ -219,9 +222,16 @@ function SignIn() {
       else clearStep(session());
       if (r.step === "done") await qc.invalidateQueries();
       else setAt(r);
-    } catch {
-      clearStep(session());
-      setAt({ step: "failed" });
+    } catch (e) {
+      // No answer within the deadline: stay on this step with the email kept, and check the session
+      // (a safe read), which hands over to the app if the sign-in did finish. Nothing is resent
+      if (e instanceof Unconfirmed) {
+        setUnsure(true);
+        void api("/me").then(() => qc.invalidateQueries(), () => undefined);
+      } else {
+        clearStep(session());
+        setAt({ step: "failed" });
+      }
     }
     setBusy(false);
   };
@@ -269,6 +279,7 @@ function SignIn() {
           </>
         )}
         {problem === "not_invited" && <p className="notice" role="alert">That email hasn't been invited yet. Ask your organization's admin, or neon1.</p>}
+        {unsure && <p className="notice" role="alert">We couldn't confirm whether this finished. If a code arrives by email, you can still use it, or try again.</p>}
         {problem === "failed" && <p className="notice" role="alert">{fromLink ? "That link only works in the browser where you asked for the code. Type the code there instead, or start again here." : "Sign-in didn't finish. Please try again."}</p>}
         {/* The demo: no accounts, just pick who to be */}
         {PICKER && (

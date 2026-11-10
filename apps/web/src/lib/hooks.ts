@@ -4,7 +4,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
 import type { Project } from "@1neon/domain";
-import { HttpError } from "./api.ts";
+import { HttpError, Unconfirmed } from "./api.ts";
 import { read } from "./reads.ts";
 import type { MemberRow, ProjectDetail } from "./types.ts";
 
@@ -68,12 +68,18 @@ export function useSubmit() {
 }
 
 
+/** What a page says when a write got no answer; the page re-reads, so the outcome shows up on screen */
+export const UNCONFIRMED = "We couldn't confirm whether this finished. What you entered is kept here. The page is checking now, so look for the change before trying again.";
+
+
 /** A sentence a person can act on, whatever went wrong */
 export function problem(e: unknown) {
   if (e instanceof HttpError) {
     if (e.body.error === "strong_auth_required") return "Confirm it's you first, with a passkey, an authenticator app, or a text code.";
     return e.body.message;
   }
+  // No answer to a write: it may have happened. Never "try again", which could do it twice
+  if (e instanceof Unconfirmed) return UNCONFIRMED;
   return "Couldn't reach 1NEON. Check your connection and try again.";
 }
 

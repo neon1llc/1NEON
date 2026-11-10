@@ -89,7 +89,7 @@ describe("read", () => {
     events.removeEventListener("1neon:signed-out", heard);
   });
 
-  it("gives reads a deadline and leaves writes without one", async () => {
+  it("gives reads and writes a deadline", async () => {
     const seen: (AbortSignal | null | undefined)[] = [];
     vi.stubGlobal("fetch", async (_: string, init: RequestInit) => {
       seen.push(init.signal);
@@ -98,6 +98,6 @@ describe("read", () => {
     await reads.read("/t/1/projects", "array");
     await api.api("/t/1/projects", { method: "POST", body: {} });
     expect(seen[0]).toBeInstanceOf(AbortSignal);
-    expect(seen[1]).toBeUndefined();
+    expect(seen[1]).toBeInstanceOf(AbortSignal);
   });
 });

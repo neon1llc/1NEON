@@ -82,6 +82,28 @@ export async function resetDemo() {
 
 // How long a read may take before it counts as failed (a slow phone network still fits)
 const READ_DEADLINE = 20_000;
+// How long a write may take before the page stops waiting. Longer than a read, since a write does
+// more, but bounded, so Continue, Creating, and Saving always end
+export const WRITE_DEADLINE = 30_000;
+
+
+/**
+ * A write that got no answer: it timed out or the connection dropped after it was sent, so it may or
+ * may not have happened on the server. Pages keep what was typed and say so; nothing is retried on
+ * its own, since an approval, invite, or create could then happen twice. The app answers the
+ * "1neon:unconfirmed" event by re-reading what's on screen (a safe GET), which shows the real outcome
+ */
+export class Unconfirmed extends Error {
+  constructor(
+    readonly method: string,
+    readonly path: string,
+  ) {
+    super("We couldn't confirm whether this finished.");
+  }
+}
+
+// A deadline for a request, where the browser supports one
+const deadline = (ms: number) => (typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(ms) : undefined);
 
 
 /** Call the API. The x-1neon header satisfies the CSRF check; cookies ride along automatically */
@@ -90,18 +112,28 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   if (init.body !== undefined) headers["content-type"] = "application/json";
   if (pickPerson && devUser.get()) headers["x-dev-user"] = devUser.get();
   const method = init.method ?? "GET";
-  const r = await send(BASE + path, {
-    method,
-    headers,
-    credentials: "same-origin",
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-    // A read that never answers ends as a failure the page can offer to retry, never an endless
-    // spinner. Writes get no deadline: giving up locally can't undo what the server may have done
-    signal: method === "GET" && typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(READ_DEADLINE) : undefined,
-  });
-  // Empty bodies (204) come back as undefined
+  const write = method !== "GET";
+  // Every request ends: a read that never answers becomes a failure the page can offer to retry; a
+  // write that never answers becomes Unconfirmed (giving up locally can't undo what the server did)
+  let r: Response;
+  let text: string;
+  try {
+    r = await send(BASE + path, {
+      method,
+      headers,
+      credentials: "same-origin",
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      signal: deadline(write ? WRITE_DEADLINE : READ_DEADLINE),
+    });
+    // Empty bodies (204) come back as undefined. The deadline covers the body too
+    text = await r.text();
+  } catch (e) {
+    // No answer to a write: say so, and let the app re-read what's on screen to find out
+    if (!write) throw e;
+    dispatchEvent(new CustomEvent("1neon:unconfirmed", { detail: { method, path } }));
+    throw new Unconfirmed(method, path);
+  }
   // A non-JSON reply (a gateway error page) still becomes a readable error
-  const text = await r.text();
   let data: unknown;
   try {
     data = text ? JSON.parse(text) : undefined;

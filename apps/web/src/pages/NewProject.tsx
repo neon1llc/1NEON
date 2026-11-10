@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { dateLabel, useToast } from "../components/ui.tsx";
-import { api } from "../lib/api.ts";
+import { api, Unconfirmed } from "../lib/api.ts";
 import { problem, useRefresh } from "../lib/hooks.ts";
 import { slide } from "../lib/motion.ts";
 import type { Project } from "@1neon/domain";
@@ -43,6 +43,8 @@ export function NewProject() {
   const [metrics, setMetrics] = useState<MetricDraft[]>([{ title: "", unit: "", baseline: "", target: "" }]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Create got no answer: the project may exist. Pressing again sends the same key, which finds it
+  const [unsure, setUnsure] = useState(false);
   // One key per visit to this page: if a reply is lost and the person presses Create again, the API
   // returns the project it already made instead of a second one
   const [requestKey] = useState(() => crypto.randomUUID().replace(/-/g, ""));
@@ -85,7 +87,10 @@ export function NewProject() {
       toast(`${p.key} created`);
       nav(`/o/${summary.slug}/projects/${p.key}`);
     } catch (e) {
-      setError(problem(e));
+      // Every answer ends the busy state; the answers stay on the form either way
+      const lost = e instanceof Unconfirmed;
+      setUnsure(lost);
+      setError(lost ? "We couldn't confirm whether this finished. Your answers are kept. Check again looks for the project and won't make a second one." : problem(e));
       setBusy(false);
     }
   };
@@ -180,7 +185,7 @@ export function NewProject() {
         {/* Back, then Next or Create */}
         <div className="actions">
           {step > 0 && <button type="button" className="btn btn-ghost" onClick={() => slide("back", () => setStep(step - 1))}>Back</button>}
-          <button className="btn btn-primary" type="submit" disabled={!ready[step] || busy}>{step < STEPS.length - 1 ? "Next" : busy ? "Creating…" : "Create project"}</button>
+          <button className="btn btn-primary" type="submit" disabled={!ready[step] || busy}>{step < STEPS.length - 1 ? "Next" : busy ? "Creating…" : unsure ? "Check again" : "Create project"}</button>
         </div>
       </form>
     </>

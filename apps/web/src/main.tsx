@@ -84,6 +84,12 @@ if (LIVE) devUser.set("");
 // Code outside React (the live playback) navigates through the same router
 setNavigate((to) => void router.navigate(to));
 setCache({ invalidateQueries: () => queries.invalidateQueries(), clear: () => queries.clear() });
+// A write that got no answer may still have happened: re-read everything on screen (safe GETs) so the
+// page shows the real outcome. The write itself is never sent again on its own
+// Sign-in steps check their own outcome (re-reading the session here would reset the sign-in form)
+addEventListener("1neon:unconfirmed", (e) => {
+  if (!String((e as CustomEvent<{ path?: string }>).detail?.path).startsWith("/auth/")) void queries.invalidateQueries();
+});
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

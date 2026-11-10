@@ -834,6 +834,10 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
   // The option waiting on approval, and the conditions being typed
   const [approving, setApproving] = useState<Item>();
   const [conditions, setConditions] = useState("");
+  // Which option the typed conditions belong to: reopening the same one keeps them (after a lost
+  // reply, say), and another option starts blank
+  const [draftFor, setDraftFor] = useState<string>();
+  const startApprove = (o: Item) => { if (draftFor !== o.id) { setConditions(""); setDraftFor(o.id); } setApproving(o); };
   // The option open in its panel (details, comments, and for neon1 the edit fields)
   const [openId, setOpenId] = useState<string>();
   const opened = items.find((o) => o.id === openId);
@@ -855,8 +859,10 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
     setApproving(undefined);
     if (!o) return;
     try {
+      // Approvals are never retried on their own; a lost reply says so and the page re-reads
       await api(`${path}/items/${o.id}/approve`, { method: "POST", body: { version: o.version, conditions } });
       toast(`Approved: ${o.title}`);
+      setDraftFor(undefined);
     } catch (e) {
       if (e instanceof HttpError && e.status === 409) toast("That option changed since you opened it. Review it again, then approve.");
       else toast(problem(e));
@@ -887,7 +893,7 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
               <Meter label="Effort" value={f.effortScore} />
               {/* The decision maker approves a proposed option; editors move drafts along */}
               <div className="option-acts">
-                {o.status === "proposed" && decider && <button className={`btn ${decided ? "btn-ghost" : "btn-primary"}`} onClick={() => { setConditions(""); setApproving(o); }}>{decided ? "Choose this instead" : "Approve this option"}</button>}
+                {o.status === "proposed" && decider && <button className={`btn ${decided ? "btn-ghost" : "btn-primary"}`} onClick={() => startApprove(o)}>{decided ? "Choose this instead" : "Approve this option"}</button>}
                 {o.status === "proposed" && !decider && !decided && <span className="small muted">Waiting on {deciders.length ? deciders.join(" or ") : "a client admin"}</span>}
                 {/* Sharing an option and taking it back are neon1's to do; the client approves */}
                 {canWrite && me.operator && o.status === "draft" && <button className="btn btn-ghost" onClick={() => void setStatus(o, "proposed")}>Share with client</button>}
