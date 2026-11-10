@@ -720,7 +720,7 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
     );
   }
   // Requests are built as one guided sentence
-  if (kind === "request") return <RequestBuilder busy={adding} onSubmit={(ds) => void sendAll(ds)} onCancel={() => setOpen(false)} />;
+  if (kind === "request") return <RequestBuilder busy={adding} timeZone={org.timeZone} onSubmit={(ds) => void sendAll(ds)} onCancel={() => setOpen(false)} />;
 
   // Blank or non-numeric values are left unset
   const num = (s: string) => (s.trim() === "" || Number.isNaN(Number(s)) ? undefined : Number(s));

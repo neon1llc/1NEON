@@ -2,7 +2,7 @@
 // approving an option into an immutable decision, and the advisory edit markers.
 
 
-import { ApproveInput, CreateItemInput, assessed, completionAfter, DecisionFields, Item, OptionFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, type Project } from "@1neon/domain";
+import { ApproveInput, CreateItemInput, assessed, completionAfter, resolveTiming, DecisionFields, Item, OptionFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, type Project } from "@1neon/domain";
 import { z } from "zod";
 import { actorId, body, byRank, check, defined, fail, label, need, now, validateFields, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
@@ -44,6 +44,14 @@ export function itemRoutes(app: App, k: Kit) {
       updatedAt: ts,
       updatedBy: actorId(c),
     });
+    // A request timed "this month" or "this quarter" gets an absolute due date now, in the
+    // organization's time zone, and keeps the words apart. A date the form already showed the person
+    // wins; older tabs that send only the words get it resolved here
+    const timing = item.kind === "request" ? resolveTiming(item.fields.due, new Date(ts), c.get("tenant").timeZone) : undefined;
+    if (timing) {
+      item.requestedTiming = timing.requestedTiming;
+      item.dueDate ??= timing.dueDate;
+    }
     // Created already done: that is its completion
     item.completedAt = completionAfter(undefined, item.status, ts);
     // A status update is a health assessment: it sets the project's health and records who assessed it

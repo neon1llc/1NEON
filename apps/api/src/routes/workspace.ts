@@ -94,14 +94,15 @@ export function workspaceRoutes(app: App, k: Kit) {
     const today = now().slice(0, 10);
     const from = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
     const to = new Date(Date.now() + 42 * 864e5).toISOString().slice(0, 10);
-    const events: { date: string; title: string; projectKey: string; kind: string; itemId?: string; overdue: boolean; mine: boolean }[] = [];
+    // requestedTiming: the person's own words for a request's timing ("this month"), beside its date
+    const events: { date: string; title: string; projectKey: string; kind: string; itemId?: string; overdue: boolean; mine: boolean; requestedTiming?: string }[] = [];
     const me = actorId(c);
     for (const p of live) {
       if (p.targetDate && p.targetDate >= from && p.targetDate <= to) events.push({ date: p.targetDate, title: `${p.name} target`, projectKey: p.key, kind: "target", overdue: p.targetDate < today, mine: false });
       for (const i of await repo.listItems(t.id, p.id)) {
         if (!i.dueDate || i.status === "done" || i.status === "approved" || i.dueDate > to) continue;
         // Overdue items stay listed however old they are; future ones only up to six weeks out
-        events.push({ date: i.dueDate, title: i.title, projectKey: p.key, kind: i.kind, itemId: i.id, overdue: i.dueDate < today, mine: i.assigneeId === me });
+        events.push({ date: i.dueDate, title: i.title, projectKey: p.key, kind: i.kind, itemId: i.id, overdue: i.dueDate < today, mine: i.assigneeId === me, requestedTiming: i.requestedTiming });
       }
     }
     events.sort((a, b) => a.date.localeCompare(b.date));

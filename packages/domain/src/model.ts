@@ -61,6 +61,8 @@ export const Tenant = z.object({
   name: z.string().trim().min(1).max(80),
   status: z.enum(["active", "archived"]),
   stages: z.array(Stage).min(1).max(20),
+  // IANA time zone for calendar wording such as "this month"; missing means America/New_York
+  timeZone: z.string().max(64).optional(),
   ...versioned,
 });
 export type Tenant = z.infer<typeof Tenant>;
@@ -284,6 +286,9 @@ export const Item = z.object({
   // cleared by reopening; completing again sets a new time, so it is the latest completion. Items done
   // before this field existed have none, and Insights counts them as "completion date unknown"
   completedAt: isoDate.optional(),
+  // The timing the person asked for in their own words ("this month"), kept apart from dueDate, which
+  // holds the absolute date it was resolved to when the request was made
+  requestedTiming: z.string().max(80).optional(),
   /** Kind-specific fields, validated by `itemFields` below */
   fields: z.record(z.string(), z.unknown()).default({}),
   ...versioned,

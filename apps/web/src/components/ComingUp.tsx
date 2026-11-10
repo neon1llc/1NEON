@@ -20,11 +20,13 @@ interface Event {
   itemId?: string;
   overdue: boolean;
   mine: boolean;
+  // A request's timing in the person's words ("this month"), resolved to `date` when it was made
+  requestedTiming?: string;
 }
 
 
 // Short names for the kinds that show up here
-const KIND_WORD: Record<string, string> = { target: "Target", milestone: "Milestone", task: "Task", file_request: "File", change: "Change", check: "Check", handoff: "Handoff", training: "Training" };
+const KIND_WORD: Record<string, string> = { request: "Request", target: "Target", milestone: "Milestone", task: "Task", file_request: "File", change: "Change", check: "Check", handoff: "Handoff", training: "Training" };
 
 
 // A date string a number of days from another
@@ -83,7 +85,7 @@ export function ComingUp({ tid, base }: { tid: string; base: string }) {
                   <li key={i}>
                     <time>{new Date(e.date + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}</time>
                     <Link to={link(e)}>{e.title}</Link>
-                    <span className="s">{KIND_WORD[e.kind] ?? "Item"} · {e.projectKey}</span>
+                    <span className="s">{KIND_WORD[e.kind] ?? "Item"} · {e.projectKey}{e.requestedTiming ? ` · asked for ${e.requestedTiming}` : ""}</span>
                   </li>
                 ))}
                 {list.length > 6 && <li className="muted small">and {list.length - 6} more</li>}

@@ -94,3 +94,39 @@ describe("completion time", () => {
     expect(after.weeks).toEqual(before.weeks);
   });
 });
+
+
+// --- PS-05: relative request timing ---------------------------------------------------------------
+
+describe("request timing", () => {
+  it("resolves an old tab's this-month request to a due date that shows in Coming up and turns overdue", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-10T15:00:00Z"));
+    const p = (await repo.listProjects(s.acme.id)).find((x) => x.key === "FLOW-1")!;
+    // What a browser tab from before this change sends: the words' key and no date
+    const r = await call("POST", `${base()}/projects/${p.id}/items`, { kind: "request", title: "Save time for synthetic orders", fields: { due: "soon" } }, RAJ);
+    expect(r.status).toBe(201);
+    expect(r.json).toMatchObject({ dueDate: "2026-11-30", requestedTiming: "this month" });
+    const up = (await call("GET", `${base()}/upcoming`)).json;
+    expect(up.events.find((e: { itemId?: string }) => e.itemId === r.json.id)).toMatchObject({ date: "2026-11-30", overdue: false, requestedTiming: "this month" });
+    // A later month doesn't change what was asked: it's now overdue on the same date
+    vi.setSystemTime(new Date("2027-01-05T15:00:00Z"));
+    const later = (await call("GET", `${base()}/upcoming`)).json;
+    expect(later.events.find((e: { itemId?: string }) => e.itemId === r.json.id)).toMatchObject({ date: "2026-11-30", overdue: true });
+  });
+
+  it("keeps the date the form showed, and resolves a quarter at its boundary in the organization's zone", async () => {
+    const p = (await repo.listProjects(s.acme.id)).find((x) => x.key === "FLOW-1")!;
+    const shown = await call("POST", `${base()}/projects/${p.id}/items`, { kind: "request", title: "Shown date", dueDate: "2026-12-31", fields: { due: "quarter" } }, RAJ);
+    expect(shown.json).toMatchObject({ dueDate: "2026-12-31", requestedTiming: "this quarter" });
+    // 03:00 UTC on Jan 1 is still Dec 31 in New York, so this quarter is the one ending Dec 31
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2027-01-01T03:00:00Z"));
+    const edge = await call("POST", `${base()}/projects/${p.id}/items`, { kind: "request", title: "Edge", fields: { due: "quarter" } }, RAJ);
+    expect(edge.json.dueDate).toBe("2026-12-31");
+    // No rush stays undated
+    const rush = await call("POST", `${base()}/projects/${p.id}/items`, { kind: "request", title: "No rush", fields: { due: "later" } }, RAJ);
+    expect(rush.json.dueDate).toBeUndefined();
+    expect(rush.json.requestedTiming).toBeUndefined();
+  });
+});
