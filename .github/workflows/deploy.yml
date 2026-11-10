@@ -1,7 +1,7 @@
-# .github/workflows/deploy.yml - One release per commit on main: a secret scan, then Terraform, then the API
-# and the web app. App code never ships ahead of the infrastructure from the same commit, and nothing ships
-# if any step before it failed. Each part is off until its repository variable is set (AWS_TERRAFORM_ROLE_ARN,
-# AWS_DEPLOY_ROLE_ARN; see infra/README.md).
+# .github/workflows/deploy.yml - One release per commit on main: every gate passes first, then a single locked job applies Terraform and ships the API and web app from the artifact the gates built.
+# Nothing touches AWS until the secret scan, app checks, Terraform checks, and production build have all passed on this
+# commit. Off until AWS_DEPLOY_ROLE_ARN is set; Terraform also needs AWS_TERRAFORM_ROLE_ARN or an explicit skip
+# (see infra/README.md).
 
 name: deploy
 
@@ -13,8 +13,15 @@ on:
     # Root package.json and the shared tsconfig change the build too
     paths: ["apps/**", "packages/**", "package.json", "package-lock.json", "tsconfig.base.json", "infra/**", ".github/workflows/deploy.yml"]
   workflow_dispatch:
+    inputs:
+      # Skipping production Terraform is a choice made here (or with the SKIP_PRODUCTION_TERRAFORM
+      # repository variable), never the side effect of a variable nobody set
+      skip_terraform:
+        description: "Ship the app without planning or applying production Terraform"
+        type: boolean
+        default: false
 
-# Read-only by default; the job adds the OIDC token it needs
+# Read-only by default; the release job adds the OIDC token it needs
 permissions:
   contents: read
 
@@ -25,7 +32,9 @@ env:
   FUNCTION_PREFIX: 1neon-prod
 
 jobs:
-  # Full history, so a secret in any commit stops the deploy. The image is pinned by digest
+  # ---- Gates: none of these touch AWS, so any can fail with production unchanged ----
+
+  # Full history, so a secret in any commit stops the release. The image is pinned by digest
   secrets:
     runs-on: ubuntu-latest
     steps:
@@ -36,78 +45,10 @@ jobs:
 
       - run: docker run --rm -v "$PWD:/src" -w /src ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git --redact --no-banner .
 
-  # Production infrastructure for this commit. Skipped until the Terraform role exists; id-token lets the job
-  # assume it. Runs only after the secret scan passed on this same commit
-  terraform:
-    needs: secrets
-    if: vars.AWS_TERRAFORM_ROLE_ARN != ''
+  # App typecheck, tests, and the production build; then the Terraform checks. The build output is
+  # uploaded, and the release job ships that artifact rather than rebuilding it
+  gate:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-
-    # One run at a time, and never cancel an apply halfway
-    concurrency:
-      group: terraform-prod
-      cancel-in-progress: false
-
-    # Every command runs in the production stack
-    defaults:
-      run:
-        working-directory: infra/envs/prod
-
-    steps:
-      # Actions are pinned to commit SHAs; the checkout keeps no token
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # The same Terraform version people use locally; no wrapper, so output stays plain
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          terraform_version: 1.16.0
-          terraform_wrapper: false
-
-      # Short-lived credentials through GitHub OIDC; the role trusts only this repo's main branch
-      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        with:
-          role-to-assume: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
-          aws-region: us-east-1
-
-      # Init against the S3 backend, then save the plan. Exit code 2 means the plan has changes
-      - run: terraform init -input=false
-      - id: plan
-        run: |
-          set +e
-          terraform plan -input=false -no-color -detailed-exitcode -out=tfplan
-          code=$?
-          set -e
-          [ "$code" = 1 ] && exit 1
-          echo "changes=$([ "$code" = 2 ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
-      # Apply exactly the plan above, only when it changes something
-      - if: steps.plan.outputs.changes == 'yes'
-        run: terraform apply -input=false -no-color tfplan
-      # Release record: which commit the infrastructure now matches
-      - run: |
-          echo "infrastructure at ${GITHUB_SHA::7}, changes applied: ${{ steps.plan.outputs.changes }}" >> "$GITHUB_STEP_SUMMARY"
-
-  # The API and web app. Skipped until the deploy role exists; id-token lets the job assume it. Ships only
-  # after the secret scan passed and Terraform converged (or is switched off) on this same commit
-  deploy:
-    needs: [secrets, terraform]
-    if: >-
-      always() && vars.AWS_DEPLOY_ROLE_ARN != '' && needs.secrets.result == 'success'
-      && (needs.terraform.result == 'success' || needs.terraform.result == 'skipped')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-
-    # Let a running deploy finish; the next one starts after it
-    concurrency:
-      group: deploy-prod
-      cancel-in-progress: false
-
     steps:
       # Actions are pinned to commit SHAs; the checkout keeps no token
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -120,9 +61,27 @@ jobs:
           node-version: 22
           cache: npm
 
-      # The same checks as CI; nothing ships that fails them
+      # Exact lockfile install, then typecheck, tests (including the API and domain contract tests),
+      # and the production builds, which stamp the API with this commit
       - run: npm ci
       - run: npm run check
+
+      # The same Terraform checks as CI, with no AWS access
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.16.0
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive -diff infra
+      - run: terraform -chdir=infra/envs/prod init -backend=false -input=false
+      - run: terraform -chdir=infra/envs/prod validate -no-color
+      # Runs plan-time tests wherever the stack has them; none today
+      - name: Terraform tests
+        run: |
+          if [ -n "$(find infra -name '*.tftest.hcl' -print -quit)" ]; then
+            terraform -chdir=infra/envs/prod test -no-color
+          else
+            echo "no Terraform test files"
+          fi
 
       # A CycloneDX inventory of what ships (production dependencies only), kept with the run
       - run: npm sbom --sbom-format cyclonedx --omit dev > sbom.cdx.json
@@ -132,8 +91,134 @@ jobs:
           path: sbom.cdx.json
           retention-days: 90
 
+      # Stage what ships, with the identity the release job checks: this commit and this lockfile
+      - name: Stage the release
+        run: |
+          mkdir release
+          cp -r apps/api/dist release/api
+          cp -r apps/web/dist release/web
+          printf '{"commit":"%s","lock":"sha256:%s"}\n' "$GITHUB_SHA" "$(sha256sum package-lock.json | cut -d' ' -f1)" > release/identity.json
+          cat release/identity.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ github.sha }}
+          path: release
+          if-no-files-found: error
+          retention-days: 14
+
+  # ---- Release: one job, so one lock covers Terraform and the app together ----
+
+  # Runs only after every gate passed on this same commit. The release group is shared by every run
+  # and a running release is never cancelled, so infrastructure A, infrastructure B, app A cannot
+  # happen. (GitHub keeps one waiting run per group; a newer push replaces it, which is fine because
+  # the newest main commit contains the older one.) Skipped until the deploy role exists; id-token
+  # lets the job assume the roles
+  release:
+    needs: [secrets, gate]
+    if: vars.AWS_DEPLOY_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    concurrency:
+      group: release-prod
+      cancel-in-progress: false
+
+    env:
+      # "true" only by an explicit choice: the dispatch input, or the repository variable
+      SKIP_TERRAFORM: ${{ (github.event_name == 'workflow_dispatch' && inputs.skip_terraform) || vars.SKIP_PRODUCTION_TERRAFORM == 'true' }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Production Terraform is either run or explicitly skipped, never silently dropped
+      - name: Check the Terraform switch
+        env:
+          TERRAFORM_ROLE_ARN: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
+        run: |
+          if [ "$SKIP_TERRAFORM" = "true" ]; then
+            echo "::warning::production Terraform is explicitly skipped for this release"
+            echo "terraform skipped by choice" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -z "$TERRAFORM_ROLE_ARN" ]; then
+            echo "::error::AWS_TERRAFORM_ROLE_ARN is not set. Set it, or skip Terraform on purpose (skip_terraform input or SKIP_PRODUCTION_TERRAFORM=true)"
+            exit 1
+          fi
+
+      # A release that waited in the queue must not roll production back behind a newer commit:
+      # if main has moved on, this one stops before any AWS call, and the newer run ships it all
+      - name: Stop if main has moved on
+        if: github.event_name == 'push'
+        run: |
+          head=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" refs/heads/main | cut -f1)
+          [ -n "$head" ] || { echo "::error::could not read the head of main"; exit 1; }
+          if [ "$head" != "$GITHUB_SHA" ]; then
+            echo "::notice::main is now ${head::7}; this release (${GITHUB_SHA::7}) is superseded"
+            echo "superseded=yes" >> "$GITHUB_ENV"
+          fi
+
+      - if: env.superseded != 'yes'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-${{ github.sha }}
+          path: release
+
+      # The artifact must have been built from this commit and this lockfile, not another run's
+      - name: Check the artifact
+        if: env.superseded != 'yes'
+        run: |
+          lock="sha256:$(sha256sum package-lock.json | cut -d' ' -f1)"
+          want="{\"commit\":\"$GITHUB_SHA\",\"lock\":\"$lock\"}"
+          [ "$(cat release/identity.json)" = "$want" ] || { echo "::error::artifact identity is $(cat release/identity.json), expected $want"; exit 1; }
+          echo "release ${GITHUB_SHA::7}, lockfile $lock" >> "$GITHUB_STEP_SUMMARY"
+
+      # ---- Infrastructure first: the app never ships ahead of the stack it needs ----
+
+      # The same Terraform version people use locally; no wrapper, so output stays plain
+      - if: env.superseded != 'yes' && env.SKIP_TERRAFORM != 'true'
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.16.0
+          terraform_wrapper: false
+
       # Short-lived credentials through GitHub OIDC; the role trusts only this repo's main branch
-      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      - if: env.superseded != 'yes' && env.SKIP_TERRAFORM != 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # Init against the S3 backend, then save the plan. Exit code 2 means the plan has changes
+      - name: Plan
+        id: plan
+        if: env.superseded != 'yes' && env.SKIP_TERRAFORM != 'true'
+        working-directory: infra/envs/prod
+        run: |
+          terraform init -input=false
+          set +e
+          terraform plan -input=false -no-color -detailed-exitcode -out=tfplan
+          code=$?
+          set -e
+          [ "$code" = 1 ] && exit 1
+          echo "changes=$([ "$code" = 2 ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+      # Apply exactly the plan above, only when it changes something
+      - name: Apply
+        if: env.superseded != 'yes' && env.SKIP_TERRAFORM != 'true' && steps.plan.outputs.changes == 'yes'
+        working-directory: infra/envs/prod
+        run: terraform apply -input=false -no-color tfplan
+      # Release record: which commit the infrastructure now matches
+      - name: Record infrastructure
+        if: env.superseded != 'yes' && env.SKIP_TERRAFORM != 'true'
+        run: |
+          echo "infrastructure at ${GITHUB_SHA::7}, changes applied: ${{ steps.plan.outputs.changes }}" >> "$GITHUB_STEP_SUMMARY"
+
+      # ---- Then the app, from the artifact the gates built ----
+
+      # Switch to the deploy role (a second assumption replaces the Terraform one)
+      - if: env.superseded != 'yes'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
@@ -141,6 +226,7 @@ jobs:
       # Refuse to ship into the wrong place: the caller must be the role's own account, and the
       # app bucket must exist there
       - name: Check the target
+        if: env.superseded != 'yes'
         env:
           ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
         run: |
@@ -151,7 +237,8 @@ jobs:
 
       # API first, so the new app never calls an old API. Source maps stay out of the zip
       - name: Ship Lambda functions
-        working-directory: apps/api/dist
+        if: env.superseded != 'yes'
+        working-directory: release/api
         run: |
           for fn in api auth-triggers; do
             name="$FUNCTION_PREFIX-${fn/auth-triggers/auth-trigger}"
@@ -165,7 +252,8 @@ jobs:
       # New assets go up first and old ones stay, so open tabs and a rollback still find their files;
       # the shell switches over only once everything it names is in place
       - name: Upload the web app
-        working-directory: apps/web/dist
+        if: env.superseded != 'yes'
+        working-directory: release/web
         run: |
           aws s3 sync 1NEON "s3://$APP_BUCKET/1NEON" --exclude '*.map' --exclude index.html --exclude arrive.js \
             --cache-control 'public, max-age=31536000, immutable'
@@ -176,11 +264,13 @@ jobs:
 
       # Drop cached app files so the new shell and assets show at once
       - name: Invalidate the CDN
+        if: env.superseded != 'yes'
         run: aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths '/1NEON/*' >/dev/null
 
       # Through neon1.tech: the API reports this commit, and the shell plus every asset it names loads.
       # Each curl is checked on its own, so a cut-off transfer fails the step
       - name: Verify
+        if: env.superseded != 'yes'
         run: |
           set -euo pipefail
           want="${GITHUB_SHA::7}"
@@ -197,7 +287,8 @@ jobs:
       # Old hashed assets are kept for 14 days for open tabs and rollback, then removed (none old is fine). Anything this
       # build still uses is never removed, however old
       - name: Prune old assets
-        working-directory: apps/web/dist
+        if: env.superseded != 'yes'
+        working-directory: release/web
         run: |
           set -euo pipefail
           cutoff=$(date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
@@ -209,5 +300,6 @@ jobs:
             done
 
       # Release record: the commit the API reports and the app serves
-      - run: |
+      - if: env.superseded != 'yes'
+        run: |
           echo "app at ${GITHUB_SHA::7}, verified through neon1.tech" >> "$GITHUB_STEP_SUMMARY"
