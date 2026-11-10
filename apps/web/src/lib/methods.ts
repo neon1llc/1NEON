@@ -8,4 +8,4 @@ export const SIGN_IN_METHODS = "Sign in with a code sent to your email, or with 
 
 // The step-up rule (packages/domain access.ts STRONG_AUTH): admin actions need a recent confirmation
 // with any one enrolled factor (apps/api routes/factors.ts accepts all three)
-export const CONFIRM_METHODS = "Inviting people, changing access or settings, and deleting also need a confirmation with a passkey, an authenticator app, or a text-message code.";
+export const CONFIRM_METHODS = "Admin actions (inviting people, changing access or settings, and deleting a project or someone else's comment or file) also need a recent confirmation with a passkey, an authenticator app, or a text-message code.";

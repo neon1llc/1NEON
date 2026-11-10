@@ -11,7 +11,7 @@ The portal where you and I run your projects together. Each project keeps what y
 Yes, three ways, and none needs an account. The [guided walkthrough](/1NEON/live) plays a fictional project on the real portal in about a minute, with controls to pause, pick a chapter, or exit; the full story takes about six. The [interactive demo](/1NEON/demo/) is a working copy with made-up clients where you pick who to be and try anything; your changes stay in your browser until you choose **Start over**. The [sample project](/1NEON/example) is one made-up project to read at your own pace, from request to handover. With a minute to spare, start with the walkthrough. Short walkthroughs show a single thing: [joining from an invitation](/1NEON/live?play=invite), [adding a passkey](/1NEON/live?play=passkey), [adding an authenticator app](/1NEON/live?play=authenticator), and [texts and text codes](/1NEON/live?play=texts).
 
 ### How do I get in?
-You need an invite. Open the link in your invite email, enter your email address, and type the code I send you. No password needed. [Watch it](/1NEON/live?play=invite).
+You need an invite. Open the link in your invite email and enter your email address. Sign in with a code sent to your email, or with a passkey. No password needed. [Watch it](/1NEON/live?play=invite).
 
 ### I didn't get the sign-in code.
 Check your spam or promotions folder, then wait a minute and choose **Send a new code**. Codes work for a few minutes, in the browser where you asked for them. [Watch it](/1NEON/live?play=invite).
@@ -106,13 +106,13 @@ Admins go to **People** and choose **Invite people**. The person gets an email w
 Once texts are switched on, yes. Add your mobile number on your profile, agree to texts, save, then type the code 1NEON texts you. Texts only say that something new is waiting, with a link; they never name your organization, projects, or files. Reply STOP to any text to turn them off. [Watch it](/1NEON/live?play=texts).
 
 ### Why does it ask me to confirm it's me?
-Inviting people, changing access, and changing settings need a second check, so a stolen email account isn't enough to make changes. On your profile, under Two-step verification, add a passkey, an authenticator app, or text-message codes, then confirm with it when asked. Any one works, and a second is a backup if you lose the first. Once confirmed, you won't be asked again for 12 hours in that sign-in. [Watch it](/1NEON/live?play=passkey).
+Admin actions (inviting people, changing access or settings, and deleting a project or someone else's comment or file) also need a recent confirmation with a passkey, an authenticator app, or a text-message code. That way a stolen email account isn't enough to make changes. On your profile, under Two-step verification, add any of the three, then confirm with it when asked. A second one is a backup if you lose the first. Once confirmed, you won't be asked again for 12 hours in that sign-in. [Watch it](/1NEON/live?play=passkey).
 
 ### Can I use an authenticator app?
 Yes. On your profile, choose **Set up** next to Authenticator app, scan the code with Google Authenticator, Microsoft Authenticator, 1Password, Authy, or similar, and type the 6-digit code it shows. [Watch it](/1NEON/live?play=authenticator).
 
 ### What's a passkey?
-A sign-in that uses your face, fingerprint, or device PIN instead of a code. It's faster and can't be phished. Add one on your profile under Two-step verification; next time you sign in, 1NEON offers it first. [Watch it](/1NEON/live?play=passkey).
+A sign-in that uses your face, fingerprint, or device PIN instead of a code. It's faster, and it's phishing-resistant: it only works on the real 1NEON site, so a look-alike page can't use it. Add one on your profile under Two-step verification; next time you sign in, 1NEON offers it first. [Watch it](/1NEON/live?play=passkey).
 
 ## Your account
 
