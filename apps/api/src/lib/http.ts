@@ -26,7 +26,7 @@ export const now = () => new Date().toISOString();
 
 
 /** Stop the request with a JSON error the web app can show as written */
-export function fail(status: 400 | 401 | 403 | 404 | 409 | 410 | 412 | 428 | 429 | 503, error: string, message: string, current?: unknown): never {
+export function fail(status: 400 | 401 | 403 | 404 | 409 | 410 | 412 | 428 | 429 | 502 | 503, error: string, message: string, current?: unknown): never {
   throw new HTTPException(status, { res: Response.json({ error, message, current }, { status }) });
 }
 

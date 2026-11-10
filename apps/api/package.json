@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@1neon/domain": "0.1.0",
+    "@anthropic-ai/bedrock-sdk": "^1.1.1",
+    "@anthropic-ai/sdk": "^1.7.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.900.0",
     "@aws-sdk/client-dynamodb": "^3.900.0",
     "@aws-sdk/client-pinpoint-sms-voice-v2": "^3.1164.0",

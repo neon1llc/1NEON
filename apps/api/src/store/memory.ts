@@ -66,9 +66,9 @@ export class MemoryTable implements TableStore {
   }
 
   // Atomic counter; a missing row starts at zero
-  async increment(pk: string, sk: string) {
+  async increment(pk: string, sk: string, by = 1) {
     const r = this.rows.get(k(pk, sk)) ?? { PK: pk, SK: sk, n: 0 };
-    const n = Number(r.n ?? 0) + 1;
+    const n = Number(r.n ?? 0) + by;
     this.rows.set(k(pk, sk), { ...r, n });
     return n;
   }

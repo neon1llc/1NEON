@@ -134,13 +134,13 @@ export class DynamoTable implements TableStore {
   }
 
   /** Counters for client IDs and project keys; ADD is atomic, so two creates never share a number */
-  async increment(pk: string, sk: string) {
+  async increment(pk: string, sk: string, by = 1) {
     const r = await this.doc.send(
       new UpdateCommand({
         TableName: this.table,
         Key: { PK: pk, SK: sk },
         UpdateExpression: "ADD n :one",
-        ExpressionAttributeValues: { ":one": 1 },
+        ExpressionAttributeValues: { ":one": by },
         ReturnValues: "UPDATED_NEW",
       }),
     );

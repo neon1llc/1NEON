@@ -22,6 +22,10 @@ export interface Config {
   operatorEmails: string[];
   /** Local development only: trust an `x-dev-user` header instead of Cognito */
   devAuth: boolean;
+  /** Neo's model on Bedrock (an inference profile ID); unset means Neo is off */
+  neoModel?: string;
+  /** The month's ceiling for Neo's model spend, in US dollars */
+  neoMonthlyUsd?: number;
 }
 
 
@@ -44,5 +48,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     smsFrom: env.SMS_FROM || undefined,
     operatorEmails: (env.OPERATOR_EMAILS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
     devAuth,
+    neoModel: env.NEO_MODEL || undefined,
+    // A missing, zero, or nonsense value falls back to $8, never to unlimited
+    neoMonthlyUsd: Number(env.NEO_MONTHLY_USD) > 0 ? Math.min(Number(env.NEO_MONTHLY_USD), 50) : 8,
   };
 }

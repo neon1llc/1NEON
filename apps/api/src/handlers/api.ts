@@ -11,6 +11,8 @@ import { beforeDeadline, drainOutbox } from "../outbox.ts";
 import { sweepFiles } from "../files.ts";
 import { DynamoTable } from "../store/dynamo.ts";
 import { Repo } from "../store/repo.ts";
+import { bedrockNeo } from "../neo/bedrock.ts";
+import { DEFAULT_BUDGET } from "../routes/neo.ts";
 
 
 // Built once per cold start and reused across invocations
@@ -37,6 +39,8 @@ const app = createApp({
   auth: new CognitoAuth({ userPoolId: cfg.userPoolId, clientId: cfg.clientId, authDomain: cfg.authDomain, publicUrl: cfg.publicUrl }),
   // Messages wait in the outbox for the scheduled worker below, never inside a request
   outbox: "worker",
+  // Neo for signed-in people, once a model is configured; capped by the month's budget
+  neo: cfg.neoModel ? { model: bedrockNeo(), modelId: cfg.neoModel, budget: { ...DEFAULT_BUDGET, monthlyUsd: cfg.neoMonthlyUsd ?? DEFAULT_BUDGET.monthlyUsd } } : undefined,
 });
 
 

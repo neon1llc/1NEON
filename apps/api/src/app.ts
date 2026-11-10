@@ -25,6 +25,7 @@ import { factorRoutes } from "./routes/factors.ts";
 import { editRoutes, itemRoutes } from "./routes/items.ts";
 import { memberRoutes } from "./routes/members.ts";
 import { meRoutes } from "./routes/me.ts";
+import { neoRoutes } from "./routes/neo.ts";
 import { notificationRoutes } from "./routes/notifications.ts";
 import { orgRoutes } from "./routes/orgs.ts";
 import { projectRoutes } from "./routes/projects.ts";
@@ -125,6 +126,9 @@ export function createApp(d: Deps) {
   // --- The signed-in person: profile, number check, and second steps -------
   meRoutes(app, k);
   factorRoutes(app, k);
+
+  // --- Neo for signed-in people: reads as the caller through this same app --
+  neoRoutes(app, k);
 
   // --- Operator: organizations and the All clients view --------------------
   orgRoutes(app, k);

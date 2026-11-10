@@ -8,6 +8,8 @@ import type { CognitoAuth } from "../auth.ts";
 import type { Config } from "../config.ts";
 import type { Directory, Mailer, Storage, Texter } from "../services.ts";
 import type { Repo } from "../store/repo.ts";
+import type { NeoModel } from "../neo/agent.ts";
+import type { NeoBudget } from "../routes/neo.ts";
 import type { WriteOp } from "../store/types.ts";
 import { actorId, check, fail, who, type Env } from "./http.ts";
 
@@ -25,6 +27,8 @@ export interface Deps {
   // "worker": a scheduled worker sends queued messages (production). "inline" (the default): sent
   // right after the change, for local runs, tests, and the browser demo
   outbox?: "inline" | "worker";
+  // Optional: Neo for signed-in people (Bedrock in production). Without it, /neo answers 503
+  neo?: { model: NeoModel; modelId: string; budget?: NeoBudget };
 }
 
 
