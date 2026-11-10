@@ -73,8 +73,10 @@ export function LiveBar({ player }: { player: Player }) {
             <ChevronLeft size={16} aria-hidden="true" /><span>{prev?.title}</span>
           </button>
           <div className="live-mid">
-            <button className="live-play" onClick={() => player.toggle()} aria-label={v.done ? "Watch again" : v.paused ? "Play" : "Pause"} title={v.done ? "Watch again" : undefined}>
-              {v.done ? <RotateCcw size={15} aria-hidden="true" /> : v.paused ? <Play size={15} aria-hidden="true" /> : <Pause size={15} aria-hidden="true" />}
+            {/* Before it starts (reduced motion, or a background tab) the one button says Start */}
+            <button className={`live-play${v.idle ? " start" : ""}`} onClick={() => player.toggle()} aria-label={v.idle ? undefined : v.done ? "Watch again" : v.paused ? "Play" : "Pause"} title={v.done ? "Watch again" : undefined}>
+              {v.done ? <RotateCcw size={15} aria-hidden="true" /> : v.paused || v.idle ? <Play size={15} aria-hidden="true" /> : <Pause size={15} aria-hidden="true" />}
+              {v.idle && <span>Start</span>}
             </button>
             {/* Speed: a slider from half to twice the calm default, remembered on this device */}
             <span className="live-speed-wrap">
@@ -92,8 +94,9 @@ export function LiveBar({ player }: { player: Player }) {
               )}
             </span>
             <button className="live-now" onClick={openList} aria-expanded={list} aria-controls="live-list">
-              <span className="live-title">{v.index + 1}/{player.sections.length} · {v.title}</span>
-              <span className="live-cap">{v.skipping ? "Catching up…" : v.caption || " "}</span>
+              <span className="live-title">{v.idle ? player.show.title : `${v.index + 1}/${player.sections.length} · ${v.title}`}</span>
+              {/* Before starting: how long it takes, so the visitor knows before committing */}
+              <span className="live-cap">{v.idle ? `${player.show.length ?? "A few minutes"}. Start when you're ready.` : v.skipping ? "Catching up…" : v.caption || " "}</span>
               <ChevronDown className="live-caret" size={14} aria-hidden="true" />
             </button>
           </div>
@@ -120,9 +123,9 @@ export function LiveBar({ player }: { player: Player }) {
         </ol>
         {(short || SHORTS.length > 0) && <p className="live-list-h">{short ? "Other demos" : "Short demos"}</p>}
         <ul>
-          {short && <li><a href="/1NEON/live"><span className="n">▸</span><span>A whole project<small>From a first sign-in to ongoing care</small></span></a></li>}
+          {short && <li><a href="/1NEON/live?play=full"><span className="n">▸</span><span>The full story<small>A whole project, from a first sign-in to ongoing care · about 6 minutes</small></span></a></li>}
           {SHORTS.filter((s) => s.id !== player.show.id).map((s) => (
-            <li key={s.id}><a href={`/1NEON/live?play=${s.id}`}><span className="n">▸</span><span>{s.title}<small>{s.blurb}</small></span></a></li>
+            <li key={s.id}><a href={`/1NEON/live?play=${s.id}`}><span className="n">▸</span><span>{s.title}<small>{s.blurb}{s.length ? ` · ${s.length}` : ""}</small></span></a></li>
           ))}
         </ul>
       </div>

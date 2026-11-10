@@ -126,6 +126,11 @@ if (LIVE) {
     const host = document.body.appendChild(document.createElement("div"));
     host.className = "live-layer";
     createRoot(host).render(<LiveBar player={player} />);
-    setTimeout(() => player.start(), 1200);
+    // Plays on its own once the page settles, unless motion is reduced (then it waits on Start, the
+    // page holding still) or the tab is in the background (then it starts when the tab is seen)
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const go = () => { if (!document.hidden) setTimeout(() => void player.start(), 1200); else addEventListener("visibilitychange", go, { once: true }); };
+      go();
+    }
   });
 }

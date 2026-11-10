@@ -29,6 +29,8 @@ export interface Show {
   path?: string;
   /** Said when it ends */
   end?: string;
+  /** How long it takes at the default speed, said before it starts ("about 1½ minutes") */
+  length?: string;
 }
 
 /** What the controls show */
@@ -40,6 +42,8 @@ export interface View {
   paused: boolean;
   skipping: boolean;
   done: boolean;
+  /** Not started yet: waiting on Start (reduced motion, or a tab opened in the background) */
+  idle: boolean;
 }
 
 
@@ -344,10 +348,10 @@ export class Player {
 
   constructor(project: Section[]) {
     const short = SHORTS.find((s) => s.id === PLAY.show);
-    this.show = short ?? { id: PROJECT, title: "A whole project", blurb: "From a first sign-in to ongoing care", sections: project, end: "That's a whole project, start to finish." };
+    this.show = short ?? { id: PROJECT, title: "The full story", blurb: "A whole project, from a first sign-in to ongoing care", length: "about 6 minutes", sections: project, end: "That's a whole project, start to finish." };
     // A section named in the link (or saved by a refresh) starts there, catching up on the way
     this.first = Math.max(0, this.show.sections.findIndex((s) => s.id === PLAY.at));
-    this.view = { index: this.first, title: this.sections[this.first]!.title, caption: "", progress: 0, paused: false, skipping: false, done: false };
+    this.view = { index: this.first, title: this.sections[this.first]!.title, caption: "", progress: 0, paused: false, skipping: false, done: false, idle: true };
   }
 
   /** The sections of the show playing */
@@ -378,9 +382,14 @@ export class Player {
 
   /** Start: the seed as the first section's start, on the show's own first page, then play */
   async start() {
+    if (this.started) return;
     this.started = true;
-    this.emit({});
+    this.emit({ idle: false });
     this.cursor ??= new Cursor();
+    // A tab sent to the background pauses, so nothing plays unseen; Play picks it up again
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && !this.view.paused && !this.view.done) this.emit({ paused: true, caption: "Paused while this tab was in the background" });
+    });
     // Clicks in the portal while paused mean someone explored; note it for resuming
     document.addEventListener("pointerdown", (e) => {
       if (this.view.paused && (e.target as Element).closest("#root")) this.touched = true;
@@ -412,6 +421,7 @@ export class Player {
     return (ms * 1.5) / this.speed;
   }
   toggle() {
+    if (this.view.idle) return void this.start();
     if (this.view.paused || this.view.done) this.resume();
     else this.pause();
   }
