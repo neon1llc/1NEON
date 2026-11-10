@@ -76,6 +76,10 @@ select:disabled { cursor: default; opacity: .7; }
 /* Placeholders at the muted color, which passes contrast in both themes */
 ::placeholder { color: var(--muted); opacity: 1; }
 input:focus, textarea:focus, select:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: transparent; }
+/* Boxes and dots keep the brand color, and show a ring only for keyboard focus, never a square on click */
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+input[type="checkbox"]:focus, input[type="radio"]:focus { outline: none; }
+input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
 
 /* App shell: the full menu opens over the page from the menu buttons; "mini" also keeps a slim icon
    rail on screen at every size, and the page makes room for it */
@@ -102,8 +106,9 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--focus); out
 .side .ico { border: 1px solid var(--line-strong); color: var(--accent); font: 700 11px var(--mono); }
 .side .ico svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .side .ico svg[viewBox="0 0 64 64"] { stroke-width: 5; }
-.side .ico.mark { border-color: var(--accent); }
-.side .ico.mark svg { width: 20px; height: 20px; stroke-width: 6; }
+/* The 1NEON mark is the bare rings, never boxed like the menu icons */
+.side .ico.mark { border: 0; }
+.side .ico.mark svg { width: 24px; height: 24px; stroke-width: 5; }
 .side .badge { font-size: 12px; }
 .side .av-box { border: 0; }
 .side .av-box .av { width: var(--box) !important; height: var(--box) !important; border: 0; }
@@ -622,6 +627,10 @@ details.history summary { cursor: pointer; font: 12px var(--mono); color: var(--
 /* A yes/no field in the grid (an option's Recommended): the box beside its word, at the row's foot */
 .props label.check { display: flex; align-items: center; gap: 8px; align-self: end; min-height: 40px; }
 .props label.check input { width: auto; }
+/* An option's ratings: one titled group spanning the row, three across at every width */
+.props fieldset.ratings { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 2px 0 0; padding: 10px 12px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.props fieldset.ratings legend { padding: 0 6px; font: 12px var(--mono); color: var(--muted); }
+@media (max-width: 520px) { .props fieldset.ratings { gap: 6px; padding: 8px; } .props fieldset.ratings select { padding-left: 8px; padding-right: 22px; font-size: 14px; } .props label.check { grid-column: 1 / -1; } }
 .comment-box textarea { min-height: 44px; }
 .title-input { resize: none; min-height: 0; line-height: 1.35; }
 .trend { width: 100%; height: 48px; display: block; margin: 8px 0 4px; }
