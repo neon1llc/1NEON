@@ -9,7 +9,7 @@ import { checkTotp } from "../totp.ts";
 import { newId } from "@1neon/domain";
 import { keys } from "../store/repo.ts";
 import { ConflictError, type Row, type WriteOp } from "../store/types.ts";
-import { withTimeout } from "../outbox.ts";
+import { bounded } from "../outbox.ts";
 import { accountAllows, isOptOut, CODE_MS, CODE_TRIES, CODES_PER_HOUR, CODES_PER_HOUR_PERSON, newCode } from "../sms.ts";
 import { fail, now, who, type Env } from "./http.ts";
 import type { Kit } from "./kit.ts";
@@ -117,7 +117,7 @@ export function assurance(k: Kit) {
     if (code === undefined) fail(429, "busy", "Too many requests at once. Wait a moment and try again.");
     // The person waits for this one, so it gets the same time limit as queued sends
     try {
-      await withTimeout(texter.send(to, words(code)), 5_000);
+      await bounded((signal) => texter.send(to, words(code), signal), 5_000);
     } catch (e) {
       if (isOptOut(e)) fail(409, "carrier_opted_out", "This number replied STOP earlier. Text START to the number 1NEON texts come from, then ask for a code again.");
       throw e;

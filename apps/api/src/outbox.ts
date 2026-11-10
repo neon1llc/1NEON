@@ -1,7 +1,12 @@
 // apps/api/src/outbox.ts - Durable notification and invitation delivery. Each audit event (and each
 // invitation) writes an outbox row in the same transaction as the change itself, so a committed
-// change always has its messages queued. A worker outside the request sends them with a time limit,
-// counts attempts, retries with backoff, never sends one delivery twice, and keeps failures visible.
+// change always has its messages queued. A worker outside the request sends them within one
+// absolute deadline, counts attempts, retries with backoff, and keeps failures visible.
+//
+// Delivery is at least once. A per-recipient receipt stops a resend once a provider has accepted a
+// message and the receipt is saved, but a provider can accept a message and the receipt write can
+// still fail, or a send can time out here and be accepted later; the next pass then sends again.
+// "Accepted" means the provider took the message; it is not proof that it was delivered.
 
 
 import { groupOf, wants, type AuditEvent, type Member, type User } from "@1neon/domain";
@@ -17,7 +22,10 @@ import { ConflictError, type Row, type WriteOp } from "./store/types.ts";
 
 // Every pending outbox row lives in one small partition, read whole by the worker
 const OUTBOX = "OUTBOX";
-// One row per delivery (outbox row, recipient, channel): its presence with state "sent" stops a resend
+// One receipt per delivery (outbox row, recipient, channel). States: "submitting" is written just
+// before the provider call, "accepted" once the provider took it ("sent" in receipts from before this
+// distinction means the same). An accepted receipt stops a resend; a submitting one left by an earlier
+// pass means the outcome is unknown, and the resend is logged as a possible duplicate
 const DELIVERY = "OUTBOX#DELIVERY";
 // Retry schedule after each failed pass, then the row is marked failed for an operator to look at
 const BACKOFF_MS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 3 * 60 * 60_000];
@@ -27,6 +35,8 @@ const LEASE_MS = 60_000;
 const SEND_TIMEOUT_MS = 5_000;
 // Failed rows and delivery receipts are kept a month, then expire
 const KEEP_S = 30 * 24 * 3600;
+// Time kept back from the deadline for saving progress; no new recipient starts inside it
+const RESERVE_MS = 1_000;
 
 
 /** What an outbox row carries: an audit event to fan out, or one invitation email */
@@ -61,6 +71,22 @@ export interface OutboxDeps {
 }
 
 
+/**
+ * One pass's clock. `deadline` is absolute (epoch ms): every storage call and provider call is cut
+ * off there. `soft` is the deadline less the bookkeeping reserve: nothing new starts after it
+ */
+interface Clock {
+  deadline: number;
+  soft: number;
+}
+
+
+/** The deadline passed while waiting on storage or a provider; the pass stops where it is */
+export class DeadlineError extends Error {
+  override name = "Deadline";
+}
+
+
 /** One pass's counts, logged without message bodies or addresses */
 export interface DrainResult {
   processed: number;
@@ -69,102 +95,174 @@ export interface DrainResult {
   failed: number;
   pending: number;
   oldestAgeSec: number;
+  // Rows left part-way at the deadline, to resume on the next pass without counting a failed attempt
+  deferred: number;
+  // Resends where an earlier pass started the same delivery and its outcome is unknown
+  possibleDuplicates: number;
 }
 
 
 /**
  * Send what's due. `ids` limits the pass to rows just written (the inline mode used locally and in
- * tests); without it every due row is considered. Stops starting new rows after `budgetMs` so a pass
- * always ends well inside the Lambda timeout.
+ * tests); without it every due row is considered. One absolute deadline (`deadline`, or now plus
+ * `budgetMs`) bounds the whole pass: the outbox read, target lookups, receipts, and each provider
+ * call. No new row or recipient starts within `reserveMs` of it, so progress can still be saved; a
+ * row cut short keeps its receipts and resumes on the next pass.
  */
-export async function drainOutbox(d: OutboxDeps, opts: { ids?: string[]; budgetMs?: number; max?: number } = {}): Promise<DrainResult> {
-  const started = Date.now();
-  const budget = opts.budgetMs ?? 9_000;
-  const all = await d.repo.table.query(OUTBOX);
+export async function drainOutbox(d: OutboxDeps, opts: { ids?: string[]; budgetMs?: number; deadline?: number; reserveMs?: number; max?: number } = {}): Promise<DrainResult> {
+  const deadline = opts.deadline ?? Date.now() + (opts.budgetMs ?? 9_000);
+  const clock: Clock = { deadline, soft: deadline - (opts.reserveMs ?? RESERVE_MS) };
+  const io = <T>(p: Promise<T>) => beforeDeadline(p, clock.deadline);
+  const all = await io(d.repo.table.query(OUTBOX));
   const pending = all.filter((r) => r.state === "pending");
   const due = pending
     .filter((r) => (opts.ids ? opts.ids.includes(r.SK) : Date.parse(String(r.nextAt)) <= Date.now() && !(typeof r.leaseUntil === "string" && Date.parse(r.leaseUntil) > Date.now())))
     .sort((a, b) => String(a.nextAt).localeCompare(String(b.nextAt)))
     .slice(0, opts.max ?? 25);
-  const out: DrainResult = { processed: 0, sent: 0, retrying: 0, failed: 0, pending: pending.length, oldestAgeSec: 0 };
-  for (const row of due) {
-    if (Date.now() - started > budget) break;
-    // Claim the row; a worker that loses the race skips it
-    const claimed = { ...row, leaseUntil: new Date(Date.now() + LEASE_MS).toISOString(), version: Number(row.version) + 1 };
-    try {
-      await d.repo.table.write([{ put: claimed, guard: { version: Number(row.version) } }]);
-    } catch (e) {
-      if (e instanceof ConflictError) continue;
-      throw e;
+  const out: DrainResult = { processed: 0, sent: 0, retrying: 0, failed: 0, pending: pending.length, oldestAgeSec: ageOf(pending), deferred: 0, possibleDuplicates: 0 };
+  try {
+    for (const row of due) {
+      if (Date.now() >= clock.soft) break;
+      // Claim the row; a worker that loses the race skips it
+      const claimed = { ...row, leaseUntil: new Date(Date.now() + LEASE_MS).toISOString(), version: Number(row.version) + 1 };
+      try {
+        await io(d.repo.table.write([{ put: claimed, guard: { version: Number(row.version) } }]));
+      } catch (e) {
+        if (e instanceof ConflictError) continue;
+        throw e;
+      }
+      out.processed++;
+      const result = await deliver(d, claimed, clock);
+      out.sent += result.sent;
+      out.possibleDuplicates += result.ambiguous;
+      if (result.open === 0 && result.deferred === 0) {
+        // Everything accepted or given up: the row is done
+        await io(d.repo.table.write([{ delete: { PK: OUTBOX, SK: row.SK }, guard: { version: claimed.version } }])).catch(ignoreConflict);
+        continue;
+      }
+      if (result.open === 0) {
+        // Cut short by the deadline, not by a failure: release it for the next pass, attempts unchanged
+        out.deferred++;
+        await io(d.repo.table.write([{ put: { ...claimed, leaseUntil: undefined, nextAt: new Date().toISOString(), version: claimed.version + 1 }, guard: { version: claimed.version } }])).catch(ignoreConflict);
+        continue;
+      }
+      const attempts = Number(row.attempts ?? 0) + 1;
+      const give = attempts > BACKOFF_MS.length;
+      if (give) out.failed++;
+      else out.retrying++;
+      const next: Row = give
+        ? { ...claimed, state: "failed", attempts, leaseUntil: undefined, failedAt: new Date().toISOString(), ttl: Math.floor(Date.now() / 1000) + KEEP_S, version: claimed.version + 1 }
+        : { ...claimed, attempts, leaseUntil: undefined, nextAt: new Date(Date.now() + BACKOFF_MS[attempts - 1]!).toISOString(), version: claimed.version + 1 };
+      await io(d.repo.table.write([{ put: next, guard: { version: claimed.version } }])).catch(ignoreConflict);
+      if (give) await settleInvite(d, claimed, "failed", clock);
     }
-    out.processed++;
-    const result = await deliver(d, claimed);
-    out.sent += result.sent;
-    if (result.open === 0) {
-      // Everything sent or given up: the row is done
-      await d.repo.table.write([{ delete: { PK: OUTBOX, SK: row.SK }, guard: { version: claimed.version } }]).catch(ignoreConflict);
-      continue;
-    }
-    const attempts = Number(row.attempts ?? 0) + 1;
-    const give = attempts > BACKOFF_MS.length;
-    if (give) out.failed++;
-    else out.retrying++;
-    const next: Row = give
-      ? { ...claimed, state: "failed", attempts, leaseUntil: undefined, failedAt: new Date().toISOString(), ttl: Math.floor(Date.now() / 1000) + KEEP_S, version: claimed.version + 1 }
-      : { ...claimed, attempts, leaseUntil: undefined, nextAt: new Date(Date.now() + BACKOFF_MS[attempts - 1]!).toISOString(), version: claimed.version + 1 };
-    await d.repo.table.write([{ put: next, guard: { version: claimed.version } }]).catch(ignoreConflict);
-    if (give) await settleInvite(d, claimed, "failed");
+  } catch (e) {
+    // Storage or a provider hung past the deadline: stop here. A claimed row's lease runs out and the
+    // next pass picks it up; receipts already saved keep their recipients from a resend
+    if (!(e instanceof DeadlineError)) throw e;
+    console.error(JSON.stringify({ level: "error", message: "outbox pass hit its deadline" }));
+    return out;
   }
-  // Queue health for logs and alarms: how many wait, and how old the oldest is
-  const left = (await d.repo.table.query(OUTBOX)).filter((r) => r.state === "pending");
-  out.pending = left.length;
-  out.oldestAgeSec = left.length ? Math.round((Date.now() - Math.min(...left.map((r) => Date.parse(String(r.createdAt))))) / 1000) : 0;
+  // Queue health for logs and alarms: how many wait, and how old the oldest is. Read again only when
+  // there's time; otherwise the counts from the start of the pass stand
+  if (Date.now() < clock.soft) {
+    const left = (await io(d.repo.table.query(OUTBOX)).catch(() => undefined))?.filter((r) => r.state === "pending");
+    if (left) {
+      out.pending = left.length;
+      out.oldestAgeSec = ageOf(left);
+    }
+  }
   return out;
 }
 
 
-/** Try every delivery a row implies; returns how many sent now and how many are still open */
-async function deliver(d: OutboxDeps, row: Row): Promise<{ sent: number; open: number }> {
+/** Age in seconds of the oldest row in a list, or zero */
+function ageOf(rows: Row[]) {
+  return rows.length ? Math.round((Date.now() - Math.min(...rows.map((r) => Date.parse(String(r.createdAt))))) / 1000) : 0;
+}
+
+
+/** One recipient on one channel; `send` takes an abort signal the provider call should honor */
+interface Target {
+  key: string;
+  channel: "email" | "sms";
+  send: (signal: AbortSignal) => Promise<void>;
+  optedOut?: () => Promise<void>;
+}
+
+
+/**
+ * Try every delivery a row implies, in order, until the clock's soft limit. Returns how many were
+ * accepted now, how many failed (open), how many weren't started for lack of time (deferred), and how
+ * many were resends of a delivery whose earlier outcome is unknown (ambiguous)
+ */
+async function deliver(d: OutboxDeps, row: Row, clock: Clock): Promise<{ sent: number; open: number; deferred: number; ambiguous: number }> {
+  const io = <T>(p: Promise<T>) => beforeDeadline(p, clock.deadline);
   const payload = row.payload as OutboxPayload;
-  const targets = payload.kind === "invite" ? [{ key: payload.email, channel: "email" as const, send: () => sendInvite(d, payload) }] : await eventTargets(d, payload.event);
+  const targets: Target[] = payload.kind === "invite" ? [{ key: payload.email, channel: "email", send: (signal) => sendInvite(d, payload, signal) }] : await eventTargets(d, payload.event, clock);
   let sent = 0;
   let open = 0;
-  for (const t of targets) {
+  let deferred = 0;
+  let ambiguous = 0;
+  for (const [i, t] of targets.entries()) {
+    // Not enough time left to send and record one more: leave the rest for the next pass
+    const room = clock.soft - Date.now();
+    if (room <= 0) {
+      deferred = targets.length - i;
+      break;
+    }
     const id = `${row.SK}#${t.key}#${t.channel}`;
-    // Sent before (a replay or a retried pass): never again
-    if ((await d.repo.table.get(DELIVERY, id))?.state === "sent") continue;
+    const receipt = await io(d.repo.table.get(DELIVERY, id));
+    // Accepted before (a replay or a resumed pass): not again
+    if (receipt?.state === "accepted" || receipt?.state === "sent") continue;
+    // Started before with no recorded outcome: the provider may have taken it, so this may duplicate
+    if (receipt?.state === "submitting") ambiguous++;
+    const ttl = Math.floor(Date.now() / 1000) + KEEP_S;
+    const limit = d.sendTimeoutMs ?? SEND_TIMEOUT_MS;
+    // The call gets its normal limit, or less when the deadline is closer
+    const cut = room < limit;
     try {
-      await withTimeout(t.send(), d.sendTimeoutMs ?? SEND_TIMEOUT_MS);
-      await d.repo.table.write([{ put: { PK: DELIVERY, SK: id, state: "sent", at: new Date().toISOString(), ttl: Math.floor(Date.now() / 1000) + KEEP_S }, guard: { always: true } }]);
+      await io(d.repo.table.write([{ put: { PK: DELIVERY, SK: id, state: "submitting", at: new Date().toISOString(), ttl }, guard: { always: true } }]));
+      await bounded((signal) => t.send(signal), cut ? room : limit);
+      await io(d.repo.table.write([{ put: { PK: DELIVERY, SK: id, state: "accepted", at: new Date().toISOString(), ttl }, guard: { always: true } }]));
       sent++;
     } catch (e) {
+      if (e instanceof DeadlineError) throw e;
+      // Timed out only because the pass ran short: not a provider failure. Its receipt stays
+      // "submitting", so the resumed pass logs the resend as a possible duplicate
+      if (cut && (e as Error).name === "Timeout") {
+        deferred = targets.length - i;
+        break;
+      }
       // A carrier opt-out is final for that person: record it instead of retrying
       if (t.channel === "sms" && isOptOut(e)) {
-        await t.optedOut?.();
+        await io(t.optedOut?.() ?? Promise.resolve());
         continue;
       }
       open++;
       console.error(JSON.stringify({ level: "error", message: "outbox delivery failed", channel: t.channel, outbox: row.SK, error: (e as Error).name || "Error" }));
     }
   }
-  if (payload.kind === "invite" && open === 0) await settleInvite(d, row, "sent");
-  return { sent, open };
+  if (payload.kind === "invite" && open === 0 && deferred === 0) await settleInvite(d, row, "sent", clock);
+  return { sent, open, deferred, ambiguous };
 }
 
 
-/** Who should hear about an event, on which channels, decided when the event is sent */
-async function eventTargets(d: OutboxDeps, e: AuditEvent) {
+/** Who should hear about an event, on which channels, decided when the event is sent; every lookup
+ * is bounded by the pass's deadline */
+async function eventTargets(d: OutboxDeps, e: AuditEvent, clock: Clock): Promise<Target[]> {
   const { repo, cfg } = d;
-  const [members, tenant, actor] = await Promise.all([repo.listMembers(e.tenantId), repo.getTenant(e.tenantId), repo.getUser(e.actorId)]);
+  const io = <T>(p: Promise<T>) => beforeDeadline(p, clock.deadline);
+  const [members, tenant, actor] = await io(Promise.all([repo.listMembers(e.tenantId), repo.getTenant(e.tenantId), repo.getUser(e.actorId)]));
   const by = actor?.name || actor?.email || "Someone";
-  const targets: { key: string; channel: "email" | "sms"; send: () => Promise<void>; optedOut?: () => Promise<void> }[] = [];
+  const targets: Target[] = [];
   for (const m of members) {
     if (m.status !== "joined" || m.userId === e.actorId) continue;
-    const u = await repo.getUser(m.userId);
+    const u = await io(repo.getUser(m.userId));
     if (!u) continue;
     if (wants(u.notify, e.action, "email")) {
       const mail = noticeEmail({ orgName: tenant?.name ?? "1NEON", by, summary: e.summary, url: `${cfg.publicUrl}/1NEON/o/${tenant?.slug ?? ""}/workspace`, important: groupOf(e.action).level === "critical" });
-      targets.push({ key: u.id, channel: "email", send: () => d.mailer.send(u.email, mail.subject, mail.text, mail.html) });
+      targets.push({ key: u.id, channel: "email", send: (signal) => d.mailer.send(u.email, mail.subject, mail.text, mail.html, undefined, signal) });
     }
     // Texts only to a verified number the person still has, within the budgets, with no project detail
     if (d.texter && smsReady(u) && wants(u.notify, e.action, "sms")) {
@@ -172,9 +270,9 @@ async function eventTargets(d: OutboxDeps, e: AuditEvent) {
       targets.push({
         key: u.id,
         channel: "sms",
-        send: async () => {
+        send: async (signal) => {
           if (!(await smsSendAllowed(repo, u.id))) throw Object.assign(new Error("text budget reached"), { name: "TextBudget" });
-          await texter.send(u.smsPhone!, textNotice(cfg.publicUrl));
+          await texter.send(u.smsPhone!, textNotice(cfg.publicUrl), signal);
         },
         optedOut: () => markOptedOut(repo, u),
       });
@@ -185,22 +283,22 @@ async function eventTargets(d: OutboxDeps, e: AuditEvent) {
 
 
 /** Send one invitation email */
-async function sendInvite(d: OutboxDeps, p: Extract<OutboxPayload, { kind: "invite" }>) {
+async function sendInvite(d: OutboxDeps, p: Extract<OutboxPayload, { kind: "invite" }>, signal?: AbortSignal) {
   const mail = inviteEmail({ orgName: p.orgName, inviter: p.inviter, url: p.url });
-  await d.mailer.send(p.email, mail.subject, mail.text, mail.html);
+  await d.mailer.send(p.email, mail.subject, mail.text, mail.html, undefined, signal);
 }
 
 
 /** Record an invitation's outcome on the membership, if it is still the latest one queued */
-async function settleInvite(d: OutboxDeps, row: Row, state: "sent" | "failed") {
+async function settleInvite(d: OutboxDeps, row: Row, state: "sent" | "failed", clock: Clock) {
   const p = row.payload as OutboxPayload;
   if (p.kind !== "invite") return;
   for (let tries = 0; tries < 3; tries++) {
-    const m = await d.repo.getMember(p.tenantId, p.userId);
+    const m = await beforeDeadline(d.repo.getMember(p.tenantId, p.userId), clock.deadline);
     if (!m?.invite || m.invite.queuedAt !== row.createdAt) return;
     const next: Member = { ...m, invite: { ...m.invite, state, sentAt: state === "sent" ? new Date().toISOString() : undefined }, version: m.version + 1 };
     try {
-      await d.repo.saveMember(next, { version: m.version });
+      await beforeDeadline(d.repo.saveMember(next, { version: m.version }), clock.deadline);
       return;
     } catch (e) {
       if (!(e instanceof ConflictError)) throw e;
@@ -223,6 +321,34 @@ async function markOptedOut(repo: Repo, u: User) {
 export function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([p, new Promise<T>((_, reject) => { timer = setTimeout(() => reject(Object.assign(new Error("send timed out"), { name: "Timeout" })), ms); })]).finally(() => clearTimeout(timer));
+}
+
+
+/**
+ * Run a provider call with an abort signal that fires after `ms`, and reject at that point either
+ * way. SDK clients that honor the signal cancel the request; one that ignores it may still be
+ * accepted later, which is why delivery is at least once
+ */
+export function bounded<T>(call: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms);
+  // A provider that rejects because of our abort reports it as our timeout, whatever it calls it
+  const p = call(ctl.signal).catch((e) => {
+    throw ctl.signal.aborted ? Object.assign(new Error("send timed out"), { name: "Timeout" }) : e;
+  });
+  return withTimeout(p, ms).finally(() => clearTimeout(timer));
+}
+
+
+/** Reject with DeadlineError if `p` hasn't settled by the absolute time `deadline` (epoch ms) */
+export function beforeDeadline<T>(p: Promise<T>, deadline: number): Promise<T> {
+  const ms = deadline - Date.now();
+  if (ms <= 0) {
+    p.catch(() => undefined);
+    return Promise.reject(new DeadlineError("deadline passed"));
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([p, new Promise<T>((_, reject) => { timer = setTimeout(() => reject(new DeadlineError("deadline passed")), ms); })]).finally(() => clearTimeout(timer));
 }
 
 

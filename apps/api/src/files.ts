@@ -112,10 +112,12 @@ async function commit(d: FileDeps, x: DocumentRecord, next: DocumentRecord, ops:
 // --- Sweep ----------------------------------------------------------------
 
 /** Settle every watched file; called by the scheduled worker. Returns how many changed state */
-export async function sweepFiles(d: FileDeps, opts: { max?: number } = {}): Promise<{ watched: number; settled: number }> {
+export async function sweepFiles(d: FileDeps, opts: { max?: number; deadline?: number } = {}): Promise<{ watched: number; settled: number; deferred?: boolean }> {
   const rows = (await d.repo.table.query(WATCH)).slice(0, opts.max ?? 50);
   let settled = 0;
   for (const r of rows) {
+    // The scheduled pass shares one deadline with the outbox: stop before it, the next pass carries on
+    if (opts.deadline !== undefined && Date.now() >= opts.deadline) return { watched: rows.length, settled, deferred: true };
     const x = await d.repo.getDoc(String(r.tenantId), r.projectId ? String(r.projectId) : undefined, String(r.id));
     // Removed meanwhile: nothing left to watch
     if (!x) {

@@ -92,6 +92,17 @@ describe("file states", () => {
     expect(await repo.table.query("DOCWATCH")).toHaveLength(0);
   });
 
+  it("leaves the sweep for the next pass when the scheduled deadline has passed", async () => {
+    const f = await start();
+    f.put();
+    storage.verdicts.set(f.doc.key, "pending");
+    await f.done();
+    storage.verdicts.set(f.doc.key, "clean");
+    expect(await sweepFiles({ repo, storage }, { deadline: Date.now() - 1 })).toMatchObject({ settled: 0, deferred: true });
+    expect((await repo.getDoc(s.acme.id, f.doc.projectId, f.doc.id))!.state).toBe("checking");
+    expect(await sweep()).toMatchObject({ settled: 1 });
+  });
+
   it("keeps a file receiving while bytes are in flight, then marks it missing", async () => {
     const f = await start();
     expect((await f.done()).json.state).toBe("receiving");
