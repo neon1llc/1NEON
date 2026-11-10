@@ -42,7 +42,9 @@ export interface OrgResponse {
 /** GET /t/:tid/workspace */
 export interface Workspace {
   counts: { projects: number; deciding: number; building: number; people: number; invited: number; documents: number };
-  waiting: { projectId: string; projectKey: string; projectName: string; itemId: string; title: string; kind: string; action: "choose" | "upload" | "do"; count?: number }[];
+  waiting: { projectId: string; projectKey: string; projectName: string; itemId: string; title: string; kind: string; action: "choose" | "upload" | "do"; count?: number; dueDate?: string }[];
+  // How many actions wait in all; `waiting` is a preview of them unless ?waiting=all was asked
+  waitingTotal?: number;
   // Each event with who did it, by name (blank for the system)
   activity: (AuditEvent & { by?: string })[];
   updates?: { projectKey: string; projectName: string; title: string; body: string; health: string; at: string; by: string }[];

@@ -5,7 +5,7 @@
 import { KIND_LAYER, type ItemKind } from "@1neon/domain";
 import { useQuery } from "@tanstack/react-query";
 import { Check, CircleCheck, FileUp, ListTodo } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { ComingUp } from "../components/ComingUp.tsx";
 import { Problem, Stale } from "../components/Reads.tsx";
 import { useHelp } from "../components/Help.tsx";
@@ -32,8 +32,11 @@ export function WorkspacePage() {
   const me = useSession();
   const help = useHelp();
   const base = `/o/${summary.slug}`;
+  // ?needs=all is the View all list: every waiting action (bounded by the API), not just the preview
+  const [params] = useSearchParams();
+  const showAll = params.get("needs") === "all";
   // Counts, waiting items, and activity in one call, refreshed every 30 seconds
-  const ws = useQuery({ queryKey: qk.workspace(org.id), queryFn: () => read<Workspace>(`/t/${org.id}/workspace`, { counts: "object", waiting: "array", activity: "array" }), refetchInterval: 30_000 });
+  const ws = useQuery({ queryKey: [...qk.workspace(org.id), showAll ? "all" : "preview"], queryFn: () => read<Workspace>(`/t/${org.id}/workspace${showAll ? "?waiting=all" : ""}`, { counts: "object", waiting: "array", activity: "array" }), refetchInterval: 30_000 });
   useTopBar(<span>{org.name}</span>, [org.name]);
   const c = ws.data?.counts;
   const first = (me.user.name || "").split(" ")[0];
@@ -46,7 +49,9 @@ export function WorkspacePage() {
     ...(canAdmin ? [{ done: Boolean(me.factors?.any), label: "Add a second step for admin actions", act: <Link to="/me#security">Add</Link> }] : []),
   ];
   const setupLeft = steps.filter((s) => !s.done).length;
-  const n = ws.data?.waiting.length ?? 0;
+  // The true count of waiting actions; the list may be a preview of it (older APIs sent no total)
+  const n = ws.data?.waitingTotal ?? ws.data?.waiting.length ?? 0;
+  const shown = ws.data?.waiting.length ?? 0;
   // A failure with nothing to show (or one that hides what was shown) replaces the cards, so no card
   // claims "all caught up" or "no activity" for data that never arrived
   const blocked = ws.isError && (!ws.data || hidesData(failureOf(ws.error)));
@@ -61,7 +66,7 @@ export function WorkspacePage() {
         <div className="home-main">
         {/* Needs you: the main event, each with the one action it asks for */}
         <section className="card needs" data-tour="needs-you" aria-busy={ws.isPending}>
-          <h2 className="section-h">Needs you</h2>
+          <h2 className="section-h">Needs you{shown < n && <small>Showing {shown} of {n}</small>}</h2>
           {ws.data && n === 0 && <p className="empty-line"><Check size={18} aria-hidden="true" /> You're all caught up.</p>}
           <ul className="todo">
             {ws.data?.waiting.map((w) => {
@@ -78,6 +83,9 @@ export function WorkspacePage() {
               );
             })}
           </ul>
+          {/* A preview says so and leads to the rest; the full list leads back */}
+          {shown < n && !showAll && <p className="small"><Link to="?needs=all">View all {n}</Link></p>}
+          {showAll && <p className="small">{shown < n ? `The first ${shown} of ${n}, most pressing first. ` : ""}<Link to=".">Back to the preview</Link></p>}
         </section>
 
         <ComingUp tid={org.id} base={base} />

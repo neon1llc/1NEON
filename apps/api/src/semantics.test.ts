@@ -130,3 +130,37 @@ describe("request timing", () => {
     expect(rush.json.requestedTiming).toBeUndefined();
   });
 });
+
+
+// --- PS-06: totals beside bounded previews ---------------------------------------------------------
+
+describe("needs you and coming up", () => {
+  it("returns the true total beside a preview of ten, and every action behind View all", async () => {
+    const p = (await repo.listProjects(s.acme.id)).find((x) => x.key === "FLOW-1")!;
+    const raj = (await repo.userIdForEmail(RAJ))!;
+    const before = (await call("GET", `${base()}/workspace`, undefined, RAJ)).json.waitingTotal as number;
+    for (let k = 0; k < 12; k++) await call("POST", `${base()}/projects/${p.id}/items`, { kind: "task", title: `Synthetic pending ${k + 1}`, assigneeId: raj, dueDate: `2099-01-${String(28 - k).padStart(2, "0")}` });
+    const ws = (await call("GET", `${base()}/workspace`, undefined, RAJ)).json;
+    expect(ws.waiting).toHaveLength(10);
+    expect(ws.waitingTotal).toBe(before + 12);
+    const all = (await call("GET", `${base()}/workspace?waiting=all`, undefined, RAJ)).json;
+    expect(all.waiting).toHaveLength(all.waitingTotal);
+    expect(all.waiting.filter((w: { title: string }) => w.title.startsWith("Synthetic pending"))).toHaveLength(12);
+    // Within the same action, earlier due dates come first
+    const mine = all.waiting.filter((w: { title: string }) => w.title.startsWith("Synthetic pending")).map((w: { dueDate: string }) => w.dueDate);
+    expect(mine).toEqual([...mine].sort());
+  });
+
+  it("keeps an unresolved project target listed as overdue after two weeks", async () => {
+    const p = (await repo.listProjects(s.acme.id)).find((x) => x.key === "SEC-1")!;
+    const old = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+    await call("PATCH", `${base()}/projects/${p.id}`, { version: p.version, targetDate: old });
+    const up = (await call("GET", `${base()}/upcoming`)).json;
+    expect(up.events.find((e: { kind: string; projectKey: string }) => e.kind === "target" && e.projectKey === "SEC-1")).toMatchObject({ date: old, overdue: true });
+    // Once the project is closed, an old target has been dealt with
+    const cur = (await repo.getProject(s.acme.id, p.id))!;
+    await call("POST", `${base()}/projects/${p.id}/move`, { version: cur.version, stageId: "closed" });
+    const after = (await call("GET", `${base()}/upcoming`)).json;
+    expect(after.events.find((e: { kind: string; projectKey: string }) => e.kind === "target" && e.projectKey === "SEC-1")).toBeUndefined();
+  });
+});
