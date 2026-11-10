@@ -11,6 +11,7 @@ import { api, DEMO as IN_DEMO, LIVE as IN_LIVE, devUser, HttpError, pickPerson, 
 import { failureOf, read } from "../lib/reads.ts";
 import { passkeyAssertion } from "../lib/passkey.ts";
 import { SIGN_IN_METHODS } from "../lib/methods.ts";
+import { usePersisting } from "../lib/persist.ts";
 import { cleanCode, clearStep, loadStep, saveStep, session } from "../lib/signin.ts";
 import type { Me, OrgResponse, OrgSummary } from "../lib/types.ts";
 import { Bell } from "./Bell.tsx";
@@ -285,6 +286,7 @@ function SignIn() {
         {PICKER && (
           <div className="dev demo-pick" aria-label="Demo people">
             <p className="fine">A working copy of 1NEON with made-up clients. Everything you do stays in this browser.</p>
+            {!IN_LIVE && <TabOnly />}
             <p className="eyebrow">Try it as</p>
             {(IN_LIVE ? LIVE_PEOPLE : PEOPLE).map(([e, name, role]) => (
               <button key={e} onClick={() => pick(e)}><b>{name}</b><span>{role}</span></button>
@@ -481,6 +483,14 @@ function Frame({ org, all, reads, children }: { org?: OrgSummary; all?: boolean;
 
 
 
+/** Said in the demo once this browser refuses to save it: the demo still works, from memory */
+function TabOnly() {
+  const ok = usePersisting();
+  if (ok) return null;
+  return <span className="demo-tab-only" role="status">This demo lasts until you close or reload this tab.</span>;
+}
+
+
 /** The demo's strip above the portal: what this is, who you're being, and a way to start over */
 function DemoBar() {
   const me = useSession();
@@ -494,6 +504,7 @@ function DemoBar() {
     <div className="demo-bar" role="region" aria-label="Demo">
       <span className="demo-tag">demo</span>
       <span className="demo-note">You're {me.user.name || me.user.email}. Everything stays in this browser.</span>
+      <TabOnly />
       <span className="demo-acts">
         <button className="linkish" onClick={switchPerson}>Switch person</button>
         <button className="linkish" onClick={startOver}>Start over</button>

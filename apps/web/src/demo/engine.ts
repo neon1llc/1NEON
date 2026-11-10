@@ -10,6 +10,8 @@ import { MemoryTable } from "../../../api/src/store/memory.ts";
 import { Repo } from "../../../api/src/store/repo.ts";
 import type { Row } from "../../../api/src/store/types.ts";
 import type { LiveSession } from "../live/signin.ts";
+import { devUser } from "../lib/devuser.ts";
+import { persistFailed } from "../lib/persist.ts";
 
 
 // One IndexedDB record holds the whole demo: every row and every uploaded file
@@ -24,16 +26,19 @@ export type Mail = { to: string; subject: string; text: string; html: string; at
 export type Text = { to: string; body: string; at: number };
 
 
-// Open (or create) the demo's database; a blocked or missing IndexedDB means no saving, not no demo
+// Open (or create) the demo's database; a blocked or missing IndexedDB means no saving, not no demo.
+// Either way the page is told, so it can say the demo lasts only as long as the tab
 function db(): Promise<IDBDatabase | undefined> {
   return new Promise((done) => {
+    const none = () => { persistFailed(); done(undefined); };
     try {
       const r = indexedDB.open(DB, 1);
       r.onupgradeneeded = () => r.result.createObjectStore(STORE);
       r.onsuccess = () => done(r.result);
-      r.onerror = () => done(undefined);
+      r.onerror = none;
+      r.onblocked = none;
     } catch {
-      done(undefined);
+      none();
     }
   });
 }
@@ -44,17 +49,33 @@ async function load(): Promise<Saved | undefined> {
   const d = await db();
   if (!d) return undefined;
   return new Promise((done) => {
-    const r = d.transaction(STORE).objectStore(STORE).get(KEY);
-    r.onsuccess = () => done(r.result as Saved | undefined);
-    r.onerror = () => done(undefined);
+    try {
+      const r = d.transaction(STORE).objectStore(STORE).get(KEY);
+      r.onsuccess = () => done(r.result as Saved | undefined);
+      r.onerror = () => done(undefined);
+    } catch {
+      done(undefined);
+    }
   });
 }
-async function store(s: Saved | undefined) {
+/** Write (or with undefined, delete) the saved demo, resolving only once the transaction is
+ * committed. True when it was; a failure (quota, a closed database) is reported, never thrown */
+async function store(s: Saved | undefined): Promise<boolean> {
   const d = await db();
-  if (!d) return;
-  const t = d.transaction(STORE, "readwrite").objectStore(STORE);
-  if (s) t.put(s, KEY);
-  else t.delete(KEY);
+  if (!d) return false;
+  return new Promise((done) => {
+    const fail = () => { persistFailed(); done(false); };
+    try {
+      const tx = d.transaction(STORE, "readwrite");
+      tx.oncomplete = () => done(true);
+      tx.onerror = fail;
+      tx.onabort = fail;
+      if (s) tx.objectStore(STORE).put(s, KEY);
+      else tx.objectStore(STORE).delete(KEY);
+    } catch {
+      fail();
+    }
+  });
 }
 
 
@@ -96,10 +117,12 @@ const ready = (async () => {
 
 // Saves are coalesced, so a burst of changes writes once
 let pending: ReturnType<typeof setTimeout> | undefined;
+// The save in flight, if any, so a reset can wait for it
+let saving: Promise<boolean> = Promise.resolve(true);
 function save() {
   if (live) return;
   clearTimeout(pending);
-  pending = setTimeout(() => void store({ rows: table.snapshot(), files: [...storage.files] }), 150);
+  pending = setTimeout(() => { saving = store({ rows: table.snapshot(), files: [...storage.files] }); }, 150);
 }
 
 
@@ -113,7 +136,7 @@ export async function demoFetch(url: string, init: RequestInit = {}): Promise<Re
       const { liveStep } = await import("../live/signin.ts");
       return liveStep(req, new Repo(table), mailer, (s) => {
         session = s;
-        try { localStorage.setItem("1neon.liveUser", s.email); } catch { /* storage blocked */ }
+        devUser.set(s.email);
       });
     }
     // The session rides along for its own person only, never for someone acting as another
@@ -125,9 +148,12 @@ export async function demoFetch(url: string, init: RequestInit = {}): Promise<Re
 }
 
 
-/** Forget everything this device changed, back to the starting demo */
+/** Forget everything this device changed, back to the starting demo. Resolves once the saved copy
+ * is really deleted (or there was none to delete), so the reload that follows starts fresh */
 export async function resetDemo() {
   clearTimeout(pending);
+  // A save already under way finishes first, so it can't land after the delete
+  await saving;
   await store(undefined);
 }
 

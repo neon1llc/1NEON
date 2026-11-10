@@ -5,10 +5,8 @@
 import type { ApiError } from "@1neon/domain";
 
 
-// Every API call is same-origin under /1NEON/api; the dev user lives in localStorage
+// Every API call is same-origin under /1NEON/api
 const BASE = "/1NEON/api";
-// The live playback keeps its own "who am I", so it never changes who you are in the demo
-const DEV_KEY = location.pathname.startsWith("/1NEON/live") ? "1neon.liveUser" : "1neon.devUser";
 
 
 /** A non-2xx reply, carrying the API's { error, message, current? } body */
@@ -22,25 +20,9 @@ export class HttpError extends Error {
 }
 
 
-/** Local development only: the API trusts this header when DEV_AUTH=1 */
-export const devUser = {
-  // Storage can throw in private browsing; treat that as no dev user
-  get: () => {
-    try {
-      return localStorage.getItem(DEV_KEY) ?? "";
-    } catch {
-      return "";
-    }
-  },
-  set: (email: string) => {
-    try {
-      if (email) localStorage.setItem(DEV_KEY, email);
-      else localStorage.removeItem(DEV_KEY);
-    } catch {
-      /* private mode */
-    }
-  },
-};
+// Who you're being in the demo and local development: memory first, storage optional (devuser.ts)
+export { devUser } from "./devuser.ts";
+import { devUser } from "./devuser.ts";
 
 
 // True only in Vite's dev server; production builds drop the dev paths
