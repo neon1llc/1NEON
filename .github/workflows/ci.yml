@@ -43,6 +43,14 @@ jobs:
           node-version: 22
           cache: npm
 
+      # One version everywhere: the changelog's top entry and package.json agree
+      - name: Check the release number
+        run: |
+          top=$(sed -n 's/^## v\([0-9][0-9.]*[0-9a-z.-]*\).*/\1/p' CHANGELOG.md | head -1)
+          pkg=$(node -p "require('./package.json').version")
+          [ "$top" = "$pkg" ] || { echo "::error::CHANGELOG.md says v$top but package.json says $pkg"; exit 1; }
+          echo "release v$top"
+
       # Exact lockfile install, then typecheck, tests, and production builds of API and web
       - run: npm ci
       - run: npm run check
