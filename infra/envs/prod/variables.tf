@@ -61,3 +61,19 @@ variable "texts_live" {
   type        = bool
   default     = true
 }
+
+
+# Neo for signed-in people. Off (empty) until the neon1-boundary-1neon boundary allows
+# bedrock:InvokeModel on this profile and the model is enabled in Bedrock; then set the profile ID
+variable "neo_model" {
+  description = "Bedrock inference profile ID for Neo, or empty to keep Neo off."
+  type        = string
+  default     = ""
+}
+
+# Neo stops for the month once its estimated model spend reaches this many dollars
+variable "neo_monthly_usd" {
+  description = "Monthly ceiling for Neo's estimated model spend, in dollars."
+  type        = number
+  default     = 8
+}

@@ -27,6 +27,17 @@ variable "texts_live" {
   type    = bool
   default = false
 }
+# Neo's model on Bedrock (an inference profile ID, such as us.anthropic.claude-sonnet-5-5). Empty keeps
+# Neo off: no permission, no setting, and the panel says Neo isn't available
+variable "neo_model" {
+  type    = string
+  default = ""
+}
+# The month's ceiling for Neo's estimated model spend, in dollars
+variable "neo_monthly_usd" {
+  type    = number
+  default = 8
+}
 variable "log_retention_days" {
   type    = number
   default = 90
@@ -120,6 +131,18 @@ data "aws_iam_policy_document" "api" {
     actions   = ["ses:SendEmail"]
     resources = [var.ses_identity_arn, "arn:aws:ses:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:configuration-set/${var.ses_configuration_set}"]
   }
+  # Neo: one model through one cross-region inference profile, which routes to the model in any US region
+  dynamic "statement" {
+    for_each = var.neo_model == "" ? [] : [var.neo_model]
+    content {
+      sid     = "Neo"
+      actions = ["bedrock:InvokeModel"]
+      resources = [
+        "arn:aws:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${statement.value}",
+        "arn:aws:bedrock:us-*::foundation-model/${replace(statement.value, "/^(us|global)\\./", "")}",
+      ]
+    }
+  }
 }
 
 
@@ -175,8 +198,9 @@ resource "aws_lambda_function" "api" {
   architectures = ["arm64"]
   handler       = "index.handler"
   memory_size   = 1024
-  timeout       = 15
-  filename      = data.archive_file.api_placeholder.output_path
+  # Room for a Neo question (24 seconds at most) inside the HTTP API's 30-second ceiling
+  timeout  = 28
+  filename = data.archive_file.api_placeholder.output_path
 
   # Everything config.ts reads; connection reuse keeps SDK calls fast between invocations
   environment {
@@ -191,6 +215,8 @@ resource "aws_lambda_function" "api" {
       MAIL_FROM                           = var.mail_from
       SMS_FROM                            = var.texts_live ? var.sms_number_arn : ""
       OPERATOR_EMAILS                     = var.operator_emails
+      NEO_MODEL                           = var.neo_model
+      NEO_MONTHLY_USD                     = tostring(var.neo_monthly_usd)
       NODE_OPTIONS                        = "--enable-source-maps"
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
     }
@@ -248,7 +274,7 @@ resource "aws_apigatewayv2_integration" "api" {
   integration_type       = "AWS_PROXY"
   integration_uri        = aws_lambda_function.api.invoke_arn
   payload_format_version = "2.0"
-  timeout_milliseconds   = 15000
+  timeout_milliseconds   = 28000
 }
 
 

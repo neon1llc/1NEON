@@ -79,6 +79,8 @@ module "api" {
   client_id             = module.auth.client_id
   sms_number_arn        = module.sms.number_arn
   texts_live            = var.texts_live
+  neo_model             = var.neo_model
+  neo_monthly_usd       = var.neo_monthly_usd
 }
 
 
