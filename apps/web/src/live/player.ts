@@ -7,6 +7,7 @@
 import { devUser, liveEngine } from "../lib/api.ts";
 import { clearCache, navigate, refreshAll, REWIND } from "../lib/nav.ts";
 import { clearStep, session } from "../lib/signin.ts";
+import { endTour } from "../components/Help.tsx";
 import { opening } from "./opening.ts";
 import { SHORTS } from "./shorts.ts";
 import { PLAY, PROJECT, remember } from "./where.ts";
@@ -312,6 +313,7 @@ function shapeFor(el: Element): "arrow" | "hand" | "beam" {
 
 /** Anything a cut section might leave on screen: lifted cards, pretend windows, hovers, open dialogs */
 function tidy() {
+  endTour();
   for (const el of document.querySelectorAll(".live-ghost, .live-desk-file, .live-pop, .live-prop")) el.remove();
   for (const el of document.querySelectorAll(".live-lifted, .live-target, .vhover")) el.classList.remove("live-lifted", "live-target", "vhover");
   for (const d of document.querySelectorAll<HTMLDialogElement>("dialog[open]")) d.close();
@@ -519,6 +521,9 @@ export class Player {
         // Started partway in (a link from the FAQs): the story so far is in place, but she still comes
         // in the front door. Signed out, she thinks why she's here, signs in, and walks to the page
         if (i === this.first && devUser.get()) {
+          // Where the story left off, once the address has settled (the last section caught up may end
+          // on a click that navigates a moment later, such as Create project)
+          await this.settle();
           const path = location.pathname.replace(/^\/1NEON\/live/, "") || "/";
           devUser.set("");
           clearCache();
@@ -575,14 +580,23 @@ export class Player {
   // Back to it would fail, restart, and replay everything from the beginning
   private async save(k: number, engine: Awaited<ReturnType<typeof liveEngine>>) {
     if (!engine || this.snaps.has(k)) return;
+    await this.settle();
+    if (this.snaps.has(k)) return;
+    // The query stays with the page (the invite link's ?email= fills the sign-in), less the walkthrough's own ?play=
+    const q = new URLSearchParams(location.search);
+    q.delete("play");
+    const query = q.size ? `?${q}` : "";
+    this.snaps.set(k, { data: engine.snapshot(), path: (location.pathname.replace(/^\/1NEON\/live/, "") || "/") + query, who: devUser.get() });
+  }
+
+  // Wait until the address has held still for 400ms (2.5 seconds at most)
+  private async settle() {
     const end = performance.now() + 2500;
     let last = location.pathname, since = performance.now();
     while (performance.now() < end && performance.now() - since < 400) {
       await sleep(50);
       if (location.pathname !== last) { last = location.pathname; since = performance.now(); }
     }
-    if (this.snaps.has(k)) return;
-    this.snaps.set(k, { data: engine.snapshot(), path: location.pathname.replace(/^\/1NEON\/live/, "") || "/", who: devUser.get() });
   }
 
   // Put the data back, then the page, then refetch what's shown
