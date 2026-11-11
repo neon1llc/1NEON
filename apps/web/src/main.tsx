@@ -1,6 +1,8 @@
 // apps/web/src/main.tsx - Web app entry: data cache, toasts, and the route table under /1NEON.
 
 
+// First, before any schema runs: Zod without eval, which the CSP forbids
+import "./lib/zod-config.ts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -17,6 +19,15 @@ import { setCache, setNavigate } from "./lib/nav.ts";
 import { offline } from "./lib/reads.ts";
 import { Example } from "./pages/Example.tsx";
 import "./styles/app.css";
+
+
+// A walkthrough moves through many pages on its own. Each move replaces the address instead of adding
+// to the history, so the browser's Back leaves the walkthrough for the page that linked to it, rather
+// than stepping back through pages the story visited (which also pulled the page out from under it)
+if (LIVE) {
+  const replace = history.replaceState.bind(history);
+  history.pushState = (data: unknown, unused: string, url?: string | URL | null) => replace(data, unused, url);
+}
 
 
 // Signed-in pages load on first visit, so the sign-in screen and the public pages don't download the

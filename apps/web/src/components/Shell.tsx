@@ -10,6 +10,7 @@ import { api, DEMO as IN_DEMO, LIVE as IN_LIVE, devUser, HttpError, pickPerson, 
 import { failureOf, read } from "../lib/reads.ts";
 import { passkeyAssertion } from "../lib/passkey.ts";
 import { SIGN_IN_METHODS } from "../lib/methods.ts";
+import { REWIND } from "../lib/nav.ts";
 import { usePersisting } from "../lib/persist.ts";
 import { cleanCode, clearStep, loadStep, saveStep, session } from "../lib/signin.ts";
 import type { Me, OrgResponse, OrgSummary } from "../lib/types.ts";
@@ -75,6 +76,19 @@ const lastSeen = () => {
 
 
 export function Root() {
+  // A walkthrough rewinding to a section's start remounts everything below, fresh
+  const [epoch, setEpoch] = useState(0);
+  useEffect(() => {
+    const rewind = () => setEpoch((n) => n + 1);
+    addEventListener(REWIND, rewind);
+    return () => removeEventListener(REWIND, rewind);
+  }, []);
+  return <App key={epoch} />;
+}
+
+
+/** The app under Root: the session check, then sign-in or the signed-in pages */
+function App() {
   const me = useMe();
   const loc = useLocation();
   const qc = useQueryClient();
@@ -176,7 +190,10 @@ function Wordmark() {
   return (
     <>
       <h1 className={`word${open ? " open" : ""}`} tabIndex={0} aria-label="1NEON" aria-describedby="word-meaning"
-        onMouseEnter={() => show()} onMouseLeave={hide} onFocus={() => show()} onBlur={hide} onClick={() => show(4600)}>
+        // Hover is a mouse's only: a tap on a phone fires a hover that never ends, so it opens through the
+        // click's timed spell-out instead. Focus opens it only from the keyboard, for the same reason
+        onPointerEnter={(e) => e.pointerType === "mouse" && show()} onPointerLeave={(e) => e.pointerType === "mouse" && hide()}
+        onFocus={(e) => e.currentTarget.matches(":focus-visible") && show()} onBlur={hide} onClick={() => show(4600)}>
         <span className="wm" aria-hidden="true">
           {/* The 1NEON mark beside the word, sized with it so it stays beside it when the word spells out */}
           <Rings />

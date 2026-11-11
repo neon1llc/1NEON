@@ -215,6 +215,10 @@ export class Phone {
  * touched: the page asks, this sheet appears, and Continue answers with a made-up passkey.
  */
 export function fakePasskeys(email: string) {
+  // Some browsers have no passkey support at all here (an in-app browser, a page that isn't secure):
+  // the demo brings its own stand-in, so it plays the same everywhere, and takes it away again after
+  const missing = !navigator.credentials;
+  if (missing) Object.defineProperty(navigator, "credentials", { configurable: true, value: { create: async () => null, get: async () => null } });
   const real = { create: navigator.credentials.create.bind(navigator.credentials), get: navigator.credentials.get.bind(navigator.credentials) };
   const bytes = (s: string) => new TextEncoder().encode(s).buffer as ArrayBuffer;
   // Show the sheet and wait for Continue or Cancel
@@ -250,6 +254,7 @@ export function fakePasskeys(email: string) {
   navigator.credentials.get = swap(false);
   /** Put the browser's own passkey calls back */
   return () => {
+    if (missing) return void delete (navigator as { credentials?: unknown }).credentials;
     navigator.credentials.create = real.create;
     navigator.credentials.get = real.get;
   };

@@ -8,6 +8,10 @@ export function setNavigate(fn: (to: string) => void) {
   go = fn;
 }
 
+/** Sent on window when the guided walkthrough rewinds to a section's start: the app remounts, so
+ * nothing held on screen from before (a sign-in step, an open dialog, a tour offer) greets the replay */
+export const REWIND = "1neon:live-rewind";
+
 /** Go to a route inside the app, under its base path */
 export function navigate(to: string) {
   go(to);
