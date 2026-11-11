@@ -2,6 +2,11 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.3.3 - 2026-11-11
+
+### Fixed
+- In DuckDuckGo on iPhone, the strip below the bottom tab bar shows the theme's background instead of the page scrolling underneath it, whether the browser's toolbar is showing or not.
+
 ## v0.3.2 - 2026-11-11
 
 ### Changed
