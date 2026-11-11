@@ -304,6 +304,11 @@ export const OptionFields = z.object({
   effortScore: Score.default(3),
   timeline: z.string().max(80).default(""),
   recommended: z.boolean().default(false),
+  // neon1's estimate of its own working time ("about 10 hours"), what the client pays vendors
+  // directly, and the one result the client will be able to check. All optional, as written
+  hours: z.string().max(80).default(""),
+  outsideCosts: z.string().max(160).default(""),
+  result: z.string().max(300).default(""),
 });
 
 
@@ -313,6 +318,9 @@ export const DecisionTerms = z.object({
   body: z.string().max(8000).default(""),
   cost: z.string().max(80).default(""),
   timeline: z.string().max(80).default(""),
+  hours: z.string().max(80).optional(),
+  outsideCosts: z.string().max(160).optional(),
+  result: z.string().max(300).optional(),
   costScore: Score.optional(),
   qualityScore: Score.optional(),
   effortScore: Score.optional(),

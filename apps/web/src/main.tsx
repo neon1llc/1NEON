@@ -71,6 +71,7 @@ const router = createBrowserRouter(
             { path: "projects", lazy: page(() => import("./pages/Projects.tsx"), "Projects") },
             { path: "projects/new", lazy: page(() => import("./pages/NewProject.tsx"), "NewProject") },
             { path: "projects/:key", lazy: page(() => import("./pages/Project.tsx"), "ProjectPage") },
+            { path: "projects/:key/proposal", lazy: page(() => import("./pages/Proposal.tsx"), "ProposalPage") },
             { path: "projects/:key/:tab", lazy: page(() => import("./pages/Project.tsx"), "ProjectPage") },
             { path: "layer/:layer", lazy: page(() => import("./pages/LayerPage.tsx"), "LayerPage") },
             { path: "people", lazy: page(() => import("./pages/People.tsx"), "People") },

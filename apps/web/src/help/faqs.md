@@ -72,7 +72,10 @@ Charts made from your organization's own data: open and overdue work, how often 
 ## Decisions and approvals
 
 ### How do I approve an option?
-Open the project's **Needs** layer, compare the options, and choose **Approve this option**. You can add conditions, such as "only after 6pm". The approval is recorded with your name, the time, and a copy of the option's terms (title, description, cost, and timeline) exactly as you saw them. Options come from neon1; to ask for a change, comment on the option. [Watch it](/1NEON/live?play=decide).
+Open the project's **Needs** layer, compare the options, and choose **Approve this option**. You can add conditions, such as "only after 6pm". The approval is recorded with your name, the time, and a copy of the option's terms (title, description, price, hours, timeline, and outside costs) exactly as you saw them. Options come from neon1; to ask for a change, comment on the option. [Watch it](/1NEON/live?play=decide).
+
+### Can I download the proposal?
+Yes. Under the options, choose **Read the full proposal**. It puts the discovery, the goals, every option with what's in and out, the hours and prices, what each of us will do, and the agreement on one page. Use **Print or save as PDF** to keep a copy or sign it on paper. Approving in 1NEON counts the same as signing it. [Watch it](/1NEON/live?play=decide).
 
 ### Who can approve?
 The person named as the project's decision maker. If nobody is named, an admin of your organization can. Only an admin of your organization can name or change the decision maker, under **People** on the project's overview, after confirming it's them; editors can change everyone else on the project. Each change is recorded with the old and new decision maker, and neon1 can't be named, since it proposes the options. (In neon1's own organization, where neon1 is the client, it can.) [Watch it](/1NEON/live?play=decide).

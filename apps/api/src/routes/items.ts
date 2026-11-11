@@ -159,7 +159,7 @@ export function itemRoutes(app: App, k: Kit) {
     const approver = who(c).user;
     // The terms exactly as approved travel with the decision, so it never depends on the option later
     const of = OptionFields.parse(option.fields);
-    const terms = { title: option.title, body: option.body, cost: of.cost, timeline: of.timeline, costScore: of.costScore, qualityScore: of.qualityScore, effortScore: of.effortScore, recommended: of.recommended };
+    const terms = { title: option.title, body: option.body, cost: of.cost, timeline: of.timeline, hours: of.hours || undefined, outsideCosts: of.outsideCosts || undefined, result: of.result || undefined, costScore: of.costScore, qualityScore: of.qualityScore, effortScore: of.effortScore, recommended: of.recommended };
     const earlier = (await repo.listItems(p.tenantId, p.id)).filter((i) => i.kind === "decision").map((i) => i.id);
     const decision = Item.parse({
       tenantId: p.tenantId,

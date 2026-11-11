@@ -1179,3 +1179,58 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
 @media (max-width: 520px) { .cal .ag-group li { grid-template-columns: 64px minmax(0, 1fr); } }
 .cal-day-head { flex-wrap: wrap; }
 .cal-day-head .btn { white-space: nowrap; }
+
+/* --- Proposal (pages/Proposal.tsx): a paper page in neon1's letter look, in either theme --- */
+.proposal-link { margin: 4px 0 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.proposal { --pp-green: #035704; --pp-ink: #16201a; --pp-muted: #55655b; --pp-line: #cfdcd2;
+  max-width: 860px; margin: 0 auto 32px; padding: 36px 40px 28px; background: #fff; color: var(--pp-ink);
+  border: 1px solid var(--line); border-radius: var(--r-sm, 8px); font-size: 14.5px; line-height: 1.5; font-family: var(--sans, inherit); }
+.proposal h2, .proposal h3 { font-family: inherit; }
+.proposal a { color: var(--pp-green); }
+.pp-tools { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; max-width: 860px; margin: 0 auto 12px; }
+.pp-note { max-width: 860px; margin: 0 auto 12px; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--accent-soft); font-size: 13px; }
+.pp-head { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 18px; }
+.pp-mark { display: flex; gap: 10px; align-items: flex-start; color: var(--pp-green); }
+.pp-mark svg { width: 46px; height: 46px; flex: none; }
+.pp-mark div { display: grid; color: var(--pp-ink); font-size: 12.5px; }
+.pp-mark b { color: var(--pp-green); font-size: 22px; line-height: 1.1; }
+.pp-title { display: grid; text-align: right; color: var(--pp-green); font-size: 13px; }
+.pp-title b { font-size: 20px; line-height: 1.2; }
+.pp-title span:nth-child(2) { font-size: 15px; font-weight: 600; }
+.pp-facts, .pp-costs, .pp-duties { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: 13.5px; }
+.pp-facts th, .pp-facts td, .pp-costs th, .pp-costs td, .pp-duties th, .pp-duties td { border: 1px solid var(--pp-line); padding: 6px 8px; text-align: left; vertical-align: top; }
+.pp-facts th, .pp-costs thead th, .pp-duties thead th { background: #eef6f0; color: var(--pp-green); font-weight: 600; }
+.pp-facts th { width: 18%; white-space: nowrap; }
+.pp-duties td { width: 50%; }
+.pp-section { margin: 0 0 14px; break-inside: auto; }
+.pp-bar { margin: 18px 0 10px; padding: 5px 10px; background: var(--pp-green); color: #fff; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; font-weight: 700; break-after: avoid; }
+.pp-sub { margin: 10px 0 4px; font-weight: 700; color: var(--pp-green); }
+.proposal p { margin: 0 0 8px; }
+.pp-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.pp-list li { position: relative; padding-left: 22px; margin: 0 0 4px; }
+.pp-list li::before { content: "⇒"; position: absolute; left: 0; color: var(--pp-green); font-weight: 700; }
+.pp-option { margin: 0 0 14px; padding: 0 0 10px; border-bottom: 1px solid var(--pp-line); break-inside: avoid; }
+.pp-option:last-child { border-bottom: 0; }
+.pp-option h3 { margin: 6px 0 6px; font-size: 16px; font-weight: 700; color: var(--pp-ink); }
+.pp-tag { margin-left: 8px; padding: 1px 7px; border: 1px solid var(--pp-green); border-radius: 999px; color: var(--pp-green); font-size: 11px; font-weight: 600; vertical-align: middle; }
+.pp-terms { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13.5px; }
+.pp-muted, .pp-small { color: var(--pp-muted); }
+.pp-small { font-size: 12.5px; }
+.pp-accepted, .pp-sign { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--pp-line); }
+.pp-sign p { margin: 10px 0; }
+.pp-foot { display: grid; justify-items: center; gap: 2px; margin-top: 20px; padding-top: 10px; border-top: 1px solid var(--pp-line); color: var(--pp-muted); font-size: 12px; }
+.pp-foot span:first-child { color: var(--pp-green); font-style: italic; font-size: 13px; }
+@media (max-width: 640px) {
+  .proposal { padding: 20px 16px; font-size: 14px; }
+  .pp-title { text-align: left; }
+  .pp-costs { display: block; overflow-x: auto; }
+}
+/* Printing shows only the proposal, as a plain white page */
+@media print {
+  @page { margin: 14mm; }
+  body * { visibility: hidden; }
+  .proposal, .proposal * { visibility: visible; }
+  .proposal { position: absolute; inset: 0 0 auto 0; max-width: none; margin: 0; padding: 0; border: 0; }
+  .pp-tools, .pp-note { display: none; }
+  .pp-bar, .pp-facts th, .pp-costs thead th, .pp-duties thead th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

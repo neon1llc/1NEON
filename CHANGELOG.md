@@ -2,6 +2,16 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.4.0 - 2026-11-11
+
+### Added
+- **Read the full proposal**, under a project's options: discovery, goals, every shared option with what's in and out, neon1's hours, price, timeline, and outside costs, what each side will do, and the agreement, as one page in neon1's letterhead look. **Print or save as PDF** prints only the proposal. Once an option is approved, the page shows who approved which version and when; before that, it has signature lines.
+- Options carry neon1's estimated hours, the costs paid directly to vendors, and the result the client can check. All three are copied into the decision when an option is approved.
+
+### Changed
+- The bakery's options in the walkthrough and the example are re-estimated from the actual work: about 3, 10, and 17 hours, with prices and timelines to match, and each lists what's included, what isn't, and what it depends on. In the walkthrough, Maria reads the full proposal before she approves.
+- An option's card shows its first paragraph; the full details are in its panel and the proposal.
+
 ## v0.3.3 - 2026-11-11
 
 ### Fixed

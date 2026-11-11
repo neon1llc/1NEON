@@ -982,8 +982,10 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
                 <DeleteItem item={o} path={path} label="Option" />
               </div>
               <h4><button type="button" className="item-open" onClick={() => setOpenId(o.id)}>{o.title}</button></h4>
-              {o.body && <p className="small muted" style={{ marginTop: 0, whiteSpace: "pre-wrap" }}>{o.body}</p>}
+              {/* The card shows the first paragraph; the panel and the proposal show every detail */}
+              {o.body && <p className="small muted" style={{ marginTop: 0, whiteSpace: "pre-wrap" }}>{o.body.split(/\n\s*\n/)[0]}</p>}
               {f.cost && <p className="mono small" style={{ margin: "0 0 8px" }}>{f.cost}{f.timeline ? ` · ${f.timeline}` : ""}{DEMO && <span className="tag" style={{ marginLeft: 6 }}>illustrative</span>}</p>}
+              {(f.hours || f.outsideCosts) && <p className="small muted" style={{ margin: "0 0 8px" }}>{[f.hours && `neon1's time: ${f.hours}`, f.outsideCosts && `Paid directly: ${f.outsideCosts}`].filter(Boolean).join(" · ")}</p>}
               <CostSplit cost={f.cost} />
               {/* Cost, quality, and effort, scored so more bars is always better: neon1's own judgment */}
               <p className="assess-h">neon1's assessment</p>
@@ -1002,6 +1004,10 @@ function Options({ items, path, project }: { items: Item[]; path: string; projec
           );
         })}
       </div>
+      {/* Every shared option, with discovery, responsibilities, and the agreement, as one document */}
+      {items.some((o) => o.status === "proposed" || o.status === "approved") && (
+        <p className="proposal-link"><Link className="btn btn-ghost btn-sm" to={`/o/${org.slug}/projects/${project.key}/proposal`}>Read the full proposal</Link> <span className="small muted">Everything above as one document to print or save as a PDF, with what each of us will do.</span></p>
+      )}
       {/* What the scores mean, once for all the options */}
       <p className="small muted assess-rubric">
         <b>neon1's assessment</b>, from 1 to 5, where more filled dots is always better. <b>Cost</b>: the total cost. <b>Quality</b>: how fully it meets the agreed requirements. <b>Effort</b>: your team's effort to adopt and run it. The written price on each option is what you'd agree to{DEMO ? "; every figure in this demo is illustrative" : ""}.

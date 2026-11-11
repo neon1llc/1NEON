@@ -50,14 +50,32 @@ export async function patch(match: (i: I) => boolean, body: Record<string, unkno
 
 // --- Pradeep's side, shared with the short preview (preview.ts) ------------------------
 
-/** Three options with cost, quality, and effort, shared for approval; the project moves to Decide */
+/**
+ * Three options, each with what's in and out, neon1's hours, the price, what the bakery pays vendors
+ * directly, and the result she can check; shared for approval, and the project moves to Decide.
+ * The hours are what the work takes one experienced person, estimated task by task: no padding
+ */
 export async function proposeOptions() {
   await moveTo("propose");
   // Illustrative figures for a fictional bakery, not a quote
   const opts: [string, string, Record<string, unknown>][] = [
-    ["A. Quick fix", "An order form that writes straight into the spreadsheet.", { cost: "$400 fixed", costScore: 5, qualityScore: 2, effortScore: 5, timeline: "2 days" }],
-    ["B. Solid setup", "The form, plus emailed orders read into the same list, with a 7pm summary.", { cost: "$1,600 fixed", costScore: 4, qualityScore: 4, effortScore: 4, timeline: "1 week", recommended: true }],
-    ["C. Fuller build", "All of that, plus an order page with pickup times and reminders.", { cost: "$4,000 fixed + $10/mo", costScore: 2, qualityScore: 5, effortScore: 2, timeline: "3 weeks" }],
+    ["A. Quick fix", [
+      "An order form that writes straight into your order spreadsheet, and an email reply that points customers to it.",
+      "Includes:\n- A Google Form with your items, quantities, pickup day and time, name, phone, and notes\n- Each order lands as a row in your spreadsheet, sorted by pickup\n- An automatic reply to order emails with the form's link, and the link on your website and Google profile\n- Five test orders with you, then a 15-minute walkthrough for you and Sam",
+      "Not included:\n- Orders that still come by email or voicemail, which are typed in as today\n- A daily summary",
+    ].join("\n\n"), { cost: "$500 fixed", hours: "about 3 hours", timeline: "2 days", outsideCosts: "None. It uses your Google account", result: "Form orders appear in the spreadsheet within a minute, with nothing retyped.", costScore: 5, qualityScore: 2, effortScore: 4 }],
+    ["B. Solid setup", [
+      "The form from A, plus order emails and voicemails added to the same list on their own, and a summary at 7pm.",
+      "Includes:\n- Everything in A\n- Order emails and voicemail transcripts copied into the list as they arrive, each marked to check, so nothing is retyped or missed\n- A 7pm email to you and Sam: tomorrow's pickups, and anything still to check\n- A dry run on last week's 41 real orders before go-live\n- A week side by side with the old way, with two short check-ins\n- A one-page runbook and a 30-minute walkthrough, recorded for new staff",
+      "Not included:\n- Taking payment online\n- Changes to your phone service",
+      "Depends on:\n- Your phone service emailing voicemail transcripts. Most do, and if yours doesn't, a free Google Voice number can",
+    ].join("\n\n"), { cost: "$1,700 fixed", hours: "about 10 hours", timeline: "2 weeks", outsideCosts: "None. It uses your Google account", result: "Every order is in one list by 7pm, with under 10 minutes of checking a night.", costScore: 4, qualityScore: 4, effortScore: 4, recommended: true }],
+    ["C. Fuller build", [
+      "Everything in B, plus an online order page where customers choose a pickup time, pay ahead, and get a reminder.",
+      "Includes:\n- Everything in B\n- An order page on Square's free online store, with your menu, pickup times, and holiday cutoffs\n- Payment when ordering, and an email or text reminder the day before pickup\n- Online orders copied into the same list",
+      "Not included:\n- Delivery\n- Photography; I set up the photos you send",
+      "Depends on:\n- Your menu with prices, a week before go-live",
+    ].join("\n\n"), { cost: "$2,900 fixed", hours: "about 17 hours", timeline: "3 weeks", outsideCosts: "About $20/mo for the link to your spreadsheet, plus Square's card fees on online orders", result: "Most orders arrive paid, with a pickup time, and never pass through the inbox.", costScore: 3, qualityScore: 5, effortScore: 3 }],
   ];
   for (const [title, body, fields] of opts) {
     const o = await add("option", title, { body, fields });
@@ -71,7 +89,7 @@ export async function proposeOptions() {
 export async function planWork() {
   await add("milestone", "Staff trial starts", { dueDate: new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 10) });
   await add("task", "Order form connected to the spreadsheet");
-  await add("task", "Emailed orders read into the same list");
+  await add("task", "Order emails and voicemails added to the list");
   await add("task", "Daily summary at 7pm");
   await add("update", "Form is live; email reading starts Monday", { fields: { health: "on_track" } });
 }
@@ -79,7 +97,7 @@ export async function planWork() {
 /** The three tasks, done */
 export async function finishWork() {
   await patch((i) => i.title === "Order form connected to the spreadsheet", { status: "done" });
-  await patch((i) => i.title === "Emailed orders read into the same list", { status: "done" });
+  await patch((i) => i.title === "Order emails and voicemails added to the list", { status: "done" });
   await patch((i) => i.title === "Daily summary at 7pm", { status: "done" });
 }
 
@@ -354,7 +372,7 @@ export const STORY: Section[] = [
     title: "Options arrive",
     why: "Pradeep said the options are ready. Let me sign in and see where it's at.",
     run: async (s) => {
-      await s.say("Pradeep writes three options, each with its cost, quality, and effort");
+      await s.say("Pradeep writes three options, each with his hours, the price, and what it gets her");
       await s.others(async () => {
         await proposeOptions();
       }, 1200, "Pradeep proposed three options");
@@ -376,12 +394,20 @@ export const STORY: Section[] = [
       await s.say("She compares the three side by side");
       await s.think("I want to see them side by side.");
       await s.click({ sel: "a, button", text: "Compare options" }, 1200);
-      await s.think("A is cheap and fast, but it only fixes the form.");
+      await s.think("A is three hours. Quick, but the emails still get typed.");
       await s.hover({ sel: ".options article", text: "A. Quick fix" }, 900);
-      await s.think("B reads the emails too. That's the real time saver.");
+      await s.think("B catches the emails and voicemails too. That's the real time saver.");
       await s.hover({ sel: ".options article", text: "B. Solid setup" }, 900);
-      await s.think("C is nice, but more than we need right now.");
+      await s.think("C takes payment online. Nice, but more than we need before the holidays.");
       await s.hover({ sel: ".options article", text: "C. Fuller build" }, 900);
+      await s.say("The full proposal: what's in and out, the hours, and what each side will do");
+      await s.think("Let me read the whole proposal before I say yes.");
+      await s.click({ sel: "a", text: "Read the full proposal" }, 1200);
+      await s.scroll(700, 1400);
+      await s.think("What I do, what he does. Clear enough.");
+      await s.scroll(900, 1400);
+      await s.think("Approving in 1NEON counts as choosing. Good, no printing.");
+      await s.click({ sel: "a", text: "Back to options" }, 1200);
       await s.say("She approves the recommended one, with a condition");
       await s.think("B it is. Pradeep recommends it too.");
       await s.click({ sel: ".options article:nth-child(2) button", text: "Approve this option" }, 700);

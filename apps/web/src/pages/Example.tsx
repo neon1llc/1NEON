@@ -13,12 +13,12 @@ const STORY: Record<Layer, { lead: string; cards: Card[] }> = {
     lead: "What the client wants, the ways to get there, and the choice.",
     cards: [
       { title: "Request", lines: [["Currently", "every night we copy about 40 orders from email and voicemail notes into a spreadsheet. It takes an hour, and a few orders get missed each week."], ["Goal", "orders land in one list on their own, and nobody retypes them."], ["Due", "before the holiday rush."]] },
-      { title: "Options", lines: ["Every proposal offers a few choices, each with its cost, effort, and what it gets you. The figures are illustrative."], list: [
-        { text: "Quick fix: an order form that writes straight into the spreadsheet, about 4 hours" },
-        { text: "Solid setup: the form, plus emailed orders read into the same list, with a daily summary, about 16 hours", state: "picked" },
-        { text: "Fuller build: all of that, plus a small order page with pickup times and reminders, about 40 hours" },
+      { title: "Options", lines: ["Every proposal offers a few choices, each with what's in and out, the hours it takes, the price, and the result you can check. The figures are illustrative."], list: [
+        { text: "Quick fix: an order form that writes straight into the spreadsheet, about 3 hours" },
+        { text: "Solid setup: the form, plus order emails and voicemails added to the same list, with a 7pm summary, about 10 hours", state: "picked" },
+        { text: "Fuller build: all of that, plus an online order page with pickup times, payment, and reminders, about 17 hours" },
       ] },
-      { title: "Decision", lines: ["The owner approved Solid setup in the portal on Oct 3. The decision, who made it, and the estimate stay with the project."] },
+      { title: "Decision", lines: ["The owner read the full proposal, then approved Solid setup in the portal on Oct 3. The decision, who made it, and the exact terms stay with the project."] },
     ],
   },
   execution: {
@@ -26,11 +26,11 @@ const STORY: Record<Layer, { lead: string; cards: Card[] }> = {
     cards: [
       { title: "Work", lines: [], list: [
         { text: "Order form connected to the spreadsheet", state: "done" },
-        { text: "Emailed orders read into the same list", state: "done" },
+        { text: "Order emails and voicemails added to the list", state: "done" },
         { text: "Daily summary at 7pm", state: "done" },
-        { text: "Two weeks running side by side with the old way", state: "now" },
+        { text: "A week running side by side with the old way", state: "now" },
       ] },
-      { title: "Update · Oct 17", lines: [["Health", "on track. Emailed orders now arrive in the list within a minute. One order with a photo attachment needed a manual fix; that case is handled now. Waiting on you: confirm the summary should go to both owners."]] },
+      { title: "Update · Oct 17", lines: [["Health", "on track. Order emails and voicemails now arrive in the list within a minute. One order with a photo attachment needed a manual fix; that case is handled now. Waiting on you: confirm the summary should go to both owners."]] },
     ],
   },
   observation: {

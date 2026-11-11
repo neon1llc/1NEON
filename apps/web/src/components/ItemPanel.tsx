@@ -43,7 +43,7 @@ interface Comment {
 
 
 /** The fields the panel edits, as form values (no owner or due date is an empty string). `f` holds a
- * kind's own fields as text: an option's cost, timeline, scores, and recommendation; a measure's unit,
+ * kind's own fields as text: an option's cost, timeline, hours, outside costs, result, scores, and recommendation; a measure's unit,
  * starting point, and target */
 type Draft = { title: string; body: string; status: string; assigneeId: string; dueDate: string; f: Record<string, string> };
 const draftOf = (i: Item): Draft => ({ title: i.title, body: i.body, status: i.status, assigneeId: i.assigneeId ?? "", dueDate: i.dueDate ?? "", f: kindFields(i) });
@@ -52,7 +52,7 @@ const draftOf = (i: Item): Draft => ({ title: i.title, body: i.body, status: i.s
 function kindFields(i: Item): Record<string, string> {
   if (i.kind === "option") {
     const o = OptionFields.parse(i.fields);
-    return { cost: o.cost, timeline: o.timeline, costScore: String(o.costScore), qualityScore: String(o.qualityScore), effortScore: String(o.effortScore), recommended: o.recommended ? "yes" : "" };
+    return { cost: o.cost, timeline: o.timeline, hours: o.hours, outsideCosts: o.outsideCosts, result: o.result, costScore: String(o.costScore), qualityScore: String(o.qualityScore), effortScore: String(o.effortScore), recommended: o.recommended ? "yes" : "" };
   }
   if (i.kind === "metric") {
     const m = MetricFields.parse(i.fields);
@@ -367,6 +367,10 @@ function KindFields({ kind, f, onChange }: { kind: ItemKind; f: Record<string, s
     <div className="props">
       <label>Cost<input value={f.cost ?? ""} onChange={(e) => set("cost", e.target.value)} placeholder="e.g. $4,800 fixed" maxLength={80} /></label>
       <label>Timeline<input value={f.timeline ?? ""} onChange={(e) => set("timeline", e.target.value)} placeholder="e.g. 3 weeks" maxLength={80} /></label>
+      {/* neon1's own working time, what the client pays vendors directly, and the checkable result */}
+      <label>Hours<input value={f.hours ?? ""} onChange={(e) => set("hours", e.target.value)} placeholder="e.g. about 10 hours" maxLength={80} /></label>
+      <label>Outside costs<input value={f.outsideCosts ?? ""} onChange={(e) => set("outsideCosts", e.target.value)} placeholder="e.g. none; uses your Google account" maxLength={160} /></label>
+      <label>Result<input value={f.result ?? ""} onChange={(e) => set("result", e.target.value)} placeholder="e.g. every order in one list by 7pm" maxLength={300} /></label>
       <label className="check"><input type="checkbox" checked={f.recommended === "yes"} onChange={(e) => set("recommended", e.target.checked ? "yes" : "")} /> Recommended</label>
       {/* The three ratings read as one group, on one line at every width */}
       <fieldset className="ratings">
