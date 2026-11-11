@@ -48,7 +48,13 @@ export function LiveBar({ player }: { player: Player }) {
   useEffect(() => {
     if (!list && !speedOpen) return;
     const away = (e: Event) => { if (!box.current?.contains(e.target as Node)) { setList(false); setSpeedOpen(false); } };
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { setList(false); setSpeedOpen(false); } };
+    // Escape from inside a list returns focus to the bar's control that opened it (AP-04)
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const inside = box.current?.contains(document.activeElement) && document.activeElement !== box.current;
+      setList(false); setSpeedOpen(false);
+      if (inside) box.current?.querySelector<HTMLButtonElement>(speedOpen ? ".live-speed" : ".live-now")?.focus();
+    };
     addEventListener("pointerdown", away);
     addEventListener("keydown", esc);
     return () => { removeEventListener("pointerdown", away); removeEventListener("keydown", esc); };

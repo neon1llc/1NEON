@@ -13,6 +13,19 @@ import { keys } from "../store/repo.ts";
 const EDIT_MS = 2 * 60 * 1000;
 
 
+// A stable key for a create's requestId, the same in the API and the in-browser demo (which runs these
+// routes, so no node:crypto): two independent 32-bit FNV-1a passes, about 64 bits, in base 36
+function replayKey(s: string): string {
+  let a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193) >>> 0;
+    b = Math.imul(b ^ c, 0x5bd1e995) >>> 0;
+  }
+  return a.toString(36).padStart(7, "0") + b.toString(36).padStart(7, "0");
+}
+
+
 export function itemRoutes(app: App, k: Kit) {
   const { repo, project, activeMembers } = k;
 
@@ -29,14 +42,23 @@ export function itemRoutes(app: App, k: Kit) {
     if (input.status !== undefined && !settableStatus(input.kind, input.status)) fail(400, "invalid_status", `"${input.status}" isn't a status for this kind of item.`);
     if (input.assigneeId) await activeMembers(p.tenantId, [input.assigneeId]);
     const fields = validateFields(input.kind, input.fields);
+    // A create with a requestId has an item id derived from it (person, project, request), so a repeat
+    // finds the item already made and answers with it, unchanged, instead of making another (EP-04)
+    const replayId = input.requestId ? `i_r${replayKey(`${p.tenantId}|${p.id}|${actorId(c)}|${input.requestId}`)}` : undefined;
+    if (replayId) {
+      const made = await repo.getItem(p.tenantId, p.id, replayId);
+      if (made) return c.json(made, 200);
+    }
     const items = (await repo.listItems(p.tenantId, p.id)).filter((i) => i.kind === input.kind).sort(byRank);
     const ts = now();
+    const { requestId: _request, ...stored } = input;
+    void _request;
     const item = Item.parse({
-      ...input,
+      ...stored,
       fields,
       tenantId: p.tenantId,
       projectId: p.id,
-      id: newId("i"),
+      id: replayId ?? newId("i"),
       status: input.status ?? (input.kind === "option" ? "draft" : "open"),
       rank: rankBetween(items.at(-1)?.rank ?? "", ""),
       version: 1,
@@ -58,7 +80,14 @@ export function itemRoutes(app: App, k: Kit) {
     // and when, in the same transaction, even when the health stays the same (that refreshes it)
     const health = item.kind === "update" ? (item.fields as { health?: Project["health"] }).health : undefined;
     const healthOp = health ? [repo.projectOp({ ...p, health, ...assessed(health, actorId(c), ts), version: p.version + 1, updatedAt: ts, updatedBy: actorId(c) }, { version: p.version })] : [];
-    await repo.table.write([repo.itemOp(item, { create: true }), ...healthOp, repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: `${item.kind}.created`, target: item.id, summary: `${p.key}: added ${label(item.kind)} "${item.title}"` })]);
+    try {
+      await repo.table.write([repo.itemOp(item, { create: true }), ...healthOp, repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: `${item.kind}.created`, target: item.id, summary: `${p.key}: added ${label(item.kind)} "${item.title}"` })]);
+    } catch (e) {
+      // Two copies of the same request racing: the one that lost answers with the winner's item
+      const made = replayId ? await repo.getItem(p.tenantId, p.id, replayId) : undefined;
+      if (made) return c.json(made, 200);
+      throw e;
+    }
     return c.json(item, 201);
   });
 

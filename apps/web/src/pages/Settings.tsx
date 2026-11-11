@@ -2,7 +2,7 @@
 
 
 import type { Layer, Stage, Tenant } from "@1neon/domain";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { LayerBadge, LAYERS, layerName, useToast } from "../components/ui.tsx";
 import { api } from "../lib/api.ts";
@@ -19,6 +19,9 @@ export function Settings() {
   const [stages, setStages] = useState<Stage[]>(org.stages);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // The working copy as it is now, read when a save answers (AX-06)
+  const stagesNow = useRef(stages);
+  stagesNow.current = stages;
   useTopBar(<span>{org.name} · Settings</span>, [org.name]);
   // Unsaved changes enable Save and Undo
   const dirty = JSON.stringify(stages) !== JSON.stringify(org.stages);
@@ -36,11 +39,16 @@ export function Settings() {
     setBusy(true);
     setError("");
     try {
+      const sent = stages;
       const next = await api<Tenant>(`/t/${org.id}/stages`, { method: "PUT", body: { version: org.version, stages } });
       qc.setQueryData(["org", summary.id], { org: next, access });
-      // Take the saved copy back, so what's on screen is exactly what was stored
-      setStages(next.stages);
-      toast("Workflow saved");
+      // Take the saved copy back, so what's on screen is exactly what was stored, unless the person kept
+      // editing while it saved: then their newer edits stay, compared now against the saved version, so
+      // Save stays on for them (AX-06)
+      if (stagesNow.current === sent) {
+        setStages(next.stages);
+        toast("Workflow saved");
+      } else toast("Saved the earlier version. Your newer changes are still here to save.");
     } catch (e) {
       setError(problem(e));
     }

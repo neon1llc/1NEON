@@ -164,3 +164,60 @@ describe("needs you and coming up", () => {
     expect(after.events.find((e: { kind: string; projectKey: string }) => e.kind === "target" && e.projectKey === "SEC-1")).toBeUndefined();
   });
 });
+
+
+// --- Review 2026-11-11: AUTH-P01 organization calendar, AUTH-P03 one measure rule ---------------------
+
+describe("organization calendar", () => {
+  it("reads Today, overdue, and on time in the organization's zone, not UTC (AUTH-P01)", async () => {
+    const p = await newProject();
+    const due = await call("POST", `${base()}/projects/${p.id}/items`, { kind: "task", title: "Synthetic due today", dueDate: "2026-11-10" });
+    const late = await call("POST", `${base()}/projects/${p.id}/items`, { kind: "task", title: "Synthetic finished late", dueDate: "2026-11-10" });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // 01:30 UTC on the 11th is still the evening of the 10th in New York (the default zone)
+    vi.setSystemTime(new Date("2026-11-11T01:30:00Z"));
+    const up = (await call("GET", `${base()}/upcoming`)).json;
+    expect(up.today).toBe("2026-11-10");
+    expect(up.events.find((e: { itemId?: string }) => e.itemId === due.json.id)?.overdue).toBe(false);
+    // Done at 04:30 UTC is 23:30 on the 10th in New York: on time. Done at 05:30 UTC is the 11th: late
+    vi.setSystemTime(new Date("2026-11-11T04:30:00Z"));
+    await call("PATCH", `${base()}/projects/${p.id}/items/${due.json.id}`, { version: due.json.version, status: "done" });
+    vi.setSystemTime(new Date("2026-11-11T05:30:00Z"));
+    await call("PATCH", `${base()}/projects/${p.id}/items/${late.json.id}`, { version: late.json.version, status: "done" });
+    const work = (await call("GET", `${base()}/insights`)).json.work;
+    expect(work.onTime).toBeGreaterThanOrEqual(1);
+    expect(work.late).toBeGreaterThanOrEqual(1);
+  });
+
+  it("counts a measure at target in Insights by the same rule as its card (AUTH-P03)", async () => {
+    const p = await newProject();
+    const before = (await call("GET", `${base()}/insights`)).json.measures.reached;
+    // Baseline already at target and higher is better: 11 is past the target, so reached
+    await call("POST", `${base()}/projects/${p.id}/items`, { kind: "metric", title: "Synthetic at target", fields: { unit: "x", baseline: 10, target: 10, direction: "up", readings: [{ at: "2026-11-01", value: 11, note: "" }] } });
+    // Lower is better with the same numbers: 11 is worse, so not reached
+    await call("POST", `${base()}/projects/${p.id}/items`, { kind: "metric", title: "Synthetic lower", fields: { unit: "x", baseline: 10, target: 10, direction: "down", readings: [{ at: "2026-11-01", value: 11, note: "" }] } });
+    expect((await call("GET", `${base()}/insights`)).json.measures.reached).toBe(before + 1);
+  });
+});
+
+
+// --- Review 2026-11-11: EP-04 a create retried with its requestId makes one item ----------------------
+
+describe("retry-safe creates", () => {
+  it("answers a repeated request with the item already made, for that person only (EP-04)", async () => {
+    const p = await newProject();
+    const body = { kind: "request", title: "Synthetic need", requestId: "synthetic-0001-abc" };
+    const first = await call("POST", `${base()}/projects/${p.id}/items`, body);
+    const again = await call("POST", `${base()}/projects/${p.id}/items`, body);
+    expect(first.status).toBe(201);
+    expect(again.status).toBe(200);
+    expect(again.json.id).toBe(first.json.id);
+    const items = (await call("GET", `${base()}/projects/${p.id}`)).json.items.filter((i: { title: string }) => i.title === "Synthetic need");
+    expect(items).toHaveLength(1);
+    expect(first.json.requestId).toBeUndefined();
+    // No requestId: every create is its own item, as before
+    await call("POST", `${base()}/projects/${p.id}/items`, { kind: "request", title: "Synthetic plain" });
+    await call("POST", `${base()}/projects/${p.id}/items`, { kind: "request", title: "Synthetic plain" });
+    expect((await call("GET", `${base()}/projects/${p.id}`)).json.items.filter((i: { title: string }) => i.title === "Synthetic plain")).toHaveLength(2);
+  });
+});

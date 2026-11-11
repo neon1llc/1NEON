@@ -46,3 +46,18 @@ describe("measure values", () => {
     ]);
   });
 });
+
+
+// Review 2026-11-11, EP-08: one number rule for every measure entry point
+import { numberProblem as _np } from "./measures.ts";
+describe("numberProblem", () => {
+  it("accepts blank, zero, negatives, and decimals, and refuses what it can't read without guessing", () => {
+    expect(_np("")).toBeUndefined();
+    expect(_np("0")).toBeUndefined();
+    expect(_np("-3.5")).toBeUndefined();
+    expect(_np("1..2")).toMatch(/number/);
+    expect(_np("1,5")).toMatch(/point/);
+    expect(_np("1e3")).toMatch(/number/);
+    expect(_np("", { required: true })).toMatch(/number/);
+  });
+});

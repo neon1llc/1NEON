@@ -19,11 +19,11 @@ export function Palette({ me, org, open, setOpen, onHelp, onTour }: { me: Me; or
   // Projects to jump to; fetched only while the palette is open
   const projects = useQuery({ queryKey: ["projects", org?.id], queryFn: () => read<Project[]>(`/t/${org!.id}/projects`, "array"), enabled: open && Boolean(org) });
 
-  // Ctrl K / ⌘K anywhere, and "/" when not typing in a field
+  // Ctrl K / ⌘K anywhere. A bare "/" did too, but a single-character shortcut catches speech input and
+  // other character keys (WCAG 2.1.4, AP-11); the visible Search button and Ctrl K remain
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      const typing = e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
-      if ((e.key === "k" && (e.metaKey || e.ctrlKey)) || (e.key === "/" && !typing)) {
+      if (e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey) && !e.altKey && !e.isComposing) {
         e.preventDefault();
         setOpen(true);
       }

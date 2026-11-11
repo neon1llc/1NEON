@@ -441,11 +441,44 @@ export function betterWhen(m: z.infer<typeof MetricFields>): "up" | "down" {
 export function metricProgress(m: z.infer<typeof MetricFields>): number | undefined {
   const latest = m.readings.at(-1)?.value;
   if (latest === undefined || m.baseline === undefined || m.target === undefined) return undefined;
-  if (m.target === m.baseline) return latest === m.target ? 1 : 0;
+  // Baseline already at target: reached while the latest reading is at the target or past it in the
+  // better direction (the stored direction, since there is no baseline-to-target slope to read it from)
+  if (m.target === m.baseline) return (m.direction === "down" ? latest <= m.target : latest >= m.target) ? 1 : 0;
   const p = (latest - m.baseline) / (m.target - m.baseline);
   return Math.max(0, Math.min(1, p));
 }
 
+
+
+/**
+ * The project's current agreement (AUTH-P06): the decision no later decision supersedes. Approved
+ * options and their decisions stay as history; this picks which one is in force, the same way for the
+ * Overview, Next step, and anything else that names it. `ambiguous` is true when more than one decision
+ * is unsuperseded (the latest approval is shown, and callers may say so); `legacy` when a project has an
+ * approved option but no decision record, so the option is named without decision terms
+ */
+export function currentDecision<T extends { id: string; kind: string; status: string; fields: Record<string, unknown>; updatedAt?: string }>(items: T[]):
+  { decision?: T; option?: T; ambiguous: boolean; legacy: boolean } {
+  const decisions = items.filter((i) => i.kind === "decision");
+  const replaced = new Set(decisions.flatMap((d) => (Array.isArray(d.fields.supersedes) ? (d.fields.supersedes as string[]) : [])));
+  const live = decisions.filter((d) => !replaced.has(d.id)).sort((a, b) => String(a.fields.approvedAt ?? "").localeCompare(String(b.fields.approvedAt ?? "")));
+  const decision = live.at(-1);
+  if (decision) return { decision, option: items.find((i) => i.id === decision.fields.optionId), ambiguous: live.length > 1, legacy: false };
+  const approved = items.filter((i) => i.kind === "option" && i.status === "approved").sort((a, b) => String(a.updatedAt ?? "").localeCompare(String(b.updatedAt ?? "")));
+  return { option: approved.at(-1), ambiguous: approved.length > 1, legacy: approved.length > 0 };
+}
+
+
+/**
+ * Whether a measure has reached its target: one rule for project cards, Insights, and anything else
+ * (AUTH-P03). undefined when it can't be judged yet (no baseline, target, or reading)
+ */
+export function metricReached(fields: unknown): boolean | undefined {
+  const m = MetricFields.safeParse(fields);
+  if (!m.success) return undefined;
+  const p = metricProgress(m.data);
+  return p === undefined ? undefined : p >= 1;
+}
 
 
 /**

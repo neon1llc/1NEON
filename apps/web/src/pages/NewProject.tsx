@@ -3,7 +3,7 @@
 
 
 import { TEMPLATES } from "@1neon/domain";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { dateLabel, useToast } from "../components/ui.tsx";
@@ -27,6 +27,13 @@ export function NewProject() {
   const toast = useToast();
   const refresh = useRefresh(org.id);
   const [step, setStep] = useState(0);
+  // The step's heading takes focus after Next or Back, never on first arrival (AP-05)
+  const stepHeading = useRef<HTMLHeadingElement>(null);
+  const firstStep = useRef(true);
+  useEffect(() => {
+    if (firstStep.current) { firstStep.current = false; return; }
+    stepHeading.current?.focus({ preventScroll: true });
+  }, [step]);
   // Answers from every step, kept until Create
   const [template, setTemplate] = useState("blank");
   const [name, setName] = useState("");
@@ -109,6 +116,8 @@ export function NewProject() {
           <span key={s} className={i === step ? "on" : i < step ? "done" : ""} aria-current={i === step ? "step" : undefined}>{i + 1}. {s}</span>
         ))}
       </div>
+      {/* Each step announces itself and takes focus when reached by Next or Back (AP-05) */}
+      <h2 ref={stepHeading} tabIndex={-1} className="sr">Step {step + 1} of {STEPS.length}: {STEPS[step]}</h2>
       {/* Enter moves to the next step; on the last step it creates the project */}
       {/* The form pans like an assembly line: forward to the left, Back to the right */}
       <form

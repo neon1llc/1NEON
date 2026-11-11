@@ -197,7 +197,7 @@ function Goals({ value, onChange }: { value: string[]; onChange: (v: string[]) =
       {adding ? (
         <input className="chip-input" aria-label="Your own action" autoFocus value={word} maxLength={40} placeholder="e.g. automate billing"
           onChange={(e) => setWord(e.target.value)} onBlur={add}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } if (e.key === "Escape") { setWord(""); setAdding(false); } }} />
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); add(); } if (e.key === "Escape") { setWord(""); setAdding(false); } }} />
       ) : (
         <button type="button" className="chip add" onClick={() => setAdding(true)} aria-label="Add your own action">+</button>
       )}

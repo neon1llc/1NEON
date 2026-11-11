@@ -4,7 +4,7 @@
 
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { api } from "../lib/api.ts";
 import { problem } from "../lib/hooks.ts";
@@ -130,29 +130,40 @@ export function TotpSetup({ open, onClose, onDone }: { open: boolean; onClose: (
   const toast = useToast();
   const [setup, setSetup] = useState<{ qr: string; secret: string; uri: string }>();
   const [code, setCode] = useState("");
-  // A fresh secret each time the dialog opens
+  // What went wrong, kept in the dialog beside the code until the next try (AP-09), not a passing toast
+  const [error, setError] = useState("");
+  // Each opening is a generation: a start or confirm reply that belongs to an earlier opening (Cancel,
+  // then open again) is ignored, success and failure alike, so the dialog only ever shows its own
+  // setup (AI-01). The server keeps one pending secret per person, so the newest start is the one in force
+  const generation = useRef(0);
   useEffect(() => {
-    if (!open) return;
+    const mine = ++generation.current;
     setSetup(undefined);
     setCode("");
+    setError("");
+    if (!open) return;
     api<{ qr: string; secret: string; uri: string }>("/me/totp/start", { method: "POST", body: {} })
-      .then(setSetup)
-      .catch((e) => { toast(problem(e)); onClose(); });
+      .then((s) => { if (generation.current === mine) setSetup(s); })
+      .catch((e) => { if (generation.current === mine) setError(`${problem(e)} Close this and choose Set up again.`); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   // Its own pending state, apart from the profile's Save, so a slow check can't be sent twice
   const [busy, setBusy] = useState(false);
   const confirm = async () => {
     if (busy) return;
+    const mine = generation.current;
     setBusy(true);
+    setError("");
     try {
       await api("/me/totp/confirm", { method: "POST", body: { code } });
+      if (generation.current !== mine) return;
       toast("Authenticator app added.");
       onDone();
     } catch (e) {
-      toast(problem(e));
+      if (generation.current === mine) setError(problem(e));
+    } finally {
+      if (generation.current === mine) setBusy(false);
     }
-    setBusy(false);
   };
   return (
     <Dialog open={open} onClose={onClose} label="Add an authenticator app">
@@ -174,10 +185,11 @@ export function TotpSetup({ open, onClose, onDone }: { open: boolean; onClose: (
       {/* A submit here stops at this form: React bubbles events through portals, so without the stop
           an enclosing form (the profile) would submit too */}
       <form className="actions" onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); void confirm(); }}>
-        <input aria-label="6-digit code" inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit code" value={code} onChange={(e) => setCode(cleanCode(e.target.value))} style={{ maxWidth: 160 }} />
+        <input aria-label="6-digit code" inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit code" value={code} onChange={(e) => setCode(cleanCode(e.target.value))} style={{ maxWidth: 160 }} aria-invalid={error ? true : undefined} aria-describedby={error ? "totp-error" : undefined} />
         <button className="btn btn-primary" disabled={!setup || code.length < 6 || busy}>{busy ? "Checking…" : "Turn on"}</button>
         <button className="btn btn-ghost" type="button" onClick={onClose}>Cancel</button>
       </form>
+      {error && <p id="totp-error" className="notice" role="alert">{error}</p>}
     </Dialog>
   );
 }

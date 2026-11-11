@@ -2,18 +2,19 @@
 // Execute, Observe, Normalize).
 
 
-import { betterWhen, canApprove, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, ProjectRole, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
+import { betterWhen, canApprove, currentDecision, todayIn, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, ProjectRole, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
 import { ArrowRight, Pencil, Trash2 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
 import { GUIDE, Pick, RequestBuilder, Starters } from "../components/Guide.tsx";
 import { ItemPanel, STATUS_WORDS, useDeleteItem, useMayDelete } from "../components/ItemPanel.tsx";
 import { gate, Stale } from "../components/Reads.tsx";
 import { Link, NavLink, useLocation, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
-import { Avatar, ConflictDialog, Dialog, Empty, Health, LayerBadge, LAYERS, layerHint, layerName, layerProgress, OnionProgress, Trend, ago, dateLabel, daysSince, layerFromSlug, layerSlug, useToast } from "../components/ui.tsx";
+import { Avatar, ConflictDialog, Dialog, Empty, Health, HEALTH_LABEL, LayerBadge, LAYERS, layerHint, layerName, layerProgress, OnionProgress, Trend, ago, dateLabel, daysSince, layerFromSlug, layerSlug, useToast } from "../components/ui.tsx";
 import { api, DEMO, HttpError } from "../lib/api.ts";
 import { firstYear, money, parseCost, type Recurring } from "../lib/cost.ts";
+import { numberProblem, optionalNumber } from "../lib/measures.ts";
 import { problem, useMembers, useProject, useProjects, useRefresh, useSubmit } from "../lib/hooks.ts";
 import { aimBetween } from "../lib/motion.ts";
 import type { EditMarker } from "../lib/types.ts";
@@ -154,8 +155,9 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
       {canWrite && back && <button className="btn btn-primary btn-sm" onClick={() => void moveTo(back, "reopened in")}>Reopen</button>}
     </div>
   );
-  // Once an option is approved, the others stop asking for a decision
-  const approved = items.find((i) => i.kind === "option" && i.status === "approved");
+  // Once an option is approved, the others stop asking for a decision. The one named is the current
+  // agreement (the decision nothing later replaced), never simply the first approved option (AUTH-P06)
+  const approved = currentDecision(items).option;
   const options = items.filter((i) => i.kind === "option");
   const proposed = approved ? [] : options.filter((i) => i.status === "proposed");
   const files = items.filter((i) => i.kind === "file_request" && i.status !== "done");
@@ -254,15 +256,15 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
     try {
       await api(`/t/${org.id}/projects/${p.id}/items`, { method: "POST", body: { kind: "update", title: post.title, fields: { health: post.health } } });
       setPosting(false);
-      setPost({ title: "", health: post.health });
+      setPost({ title: "", health: post.health }); // reset again from the project when the next update opens
       toast("Update posted");
     } catch (e) {
       toast(problem(e));
     }
     refresh();
   });
-  // The latest decision, measures, and status update feed the overview
-  const decision = items.filter((i) => i.kind === "decision").at(-1);
+  // The current decision (the same one Next step names), measures, and status update feed the overview
+  const decision = currentDecision(items).decision;
   const metrics = items.filter((i) => i.kind === "metric");
   const update = items.filter((i) => i.kind === "update").at(-1);
   const names = new Map(members.data?.map((m) => [m.userId, m.name || m.email]) ?? []);
@@ -293,7 +295,12 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
     ...("people" in conflict.patch ? [{ label: "People", mine: people(conflict.patch.people as Project["people"]), theirs: people(conflict.current.people) }] : []),
     ...("health" in conflict.patch ? [{ label: "Health", mine: String(conflict.patch.health).replace("_", " "), theirs: conflict.current.health.replace("_", " ") }] : []),
     ...("archived" in conflict.patch ? [{ label: "Archived", mine: conflict.patch.archived ? "yes" : "no", theirs: conflict.current.archived ? "yes" : "no" }] : []),
+    // Calendar dates, shown as dates without a time-zone shift; blank on either side says so (EP-02)
+    ...("targetDate" in conflict.patch ? [{ label: "Target date", mine: conflict.patch.targetDate ? dateLabel(String(conflict.patch.targetDate)) : "Not set", theirs: conflict.current.targetDate ? dateLabel(conflict.current.targetDate) : "Not set" }] : []),
   ] : [];
+  // A field this list can't describe still gets a row, so Keep mine never sends a change nobody saw
+  const described = new Set(["name", "summary", "outcome", "people", "health", "archived", "targetDate"]);
+  for (const k of conflict ? Object.keys(conflict.patch).filter((k) => !described.has(k)) : []) conflictFields.push({ label: k, mine: String(conflict!.patch[k] ?? "Not set"), theirs: "see the latest version" });
 
   return (
     <div className="two">
@@ -359,7 +366,11 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
             ) : <span className="small">{p.targetDate ? dateLabel(p.targetDate) : "none set"}</span>}
           </div>
           {update && <div className="small"><span className="muted">Latest update ({ago(update.updatedAt)})</span><br />{update.title}</div>}
-          {canWrite && <button className="btn btn-ghost btn-sm" style={{ justifySelf: "start" }} onClick={() => setPosting(true)}>Post an update</button>}
+          {canWrite && <button className="btn btn-ghost btn-sm" style={{ justifySelf: "start" }} onClick={() => {
+            // A new update starts from the project's health as it is now; an unsent draft keeps its own (EP-01)
+            if (!post.title.trim()) setPost({ title: "", health: p.health });
+            setPosting(true);
+          }}>Post an update</button>}
           {p.flags.length > 0 && <div className="small"><span className="tag warn">sensitive data: {p.flags.join(", ")}</span></div>}
         </div>
         {/* Project roles, with a fallback for people who left the organization */}
@@ -387,9 +398,11 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
         <h2>How is it going?</h2>
         <form className="form" onSubmit={(e) => { e.preventDefault(); if (post.title.trim()) void postUpdate(); }}>
           <div><label htmlFor="up-h">Health</label>
-            <select id="up-h" value={post.health} onChange={(e) => setPost({ ...post, health: e.target.value })}>
+            <select id="up-h" value={post.health} onChange={(e) => setPost({ ...post, health: e.target.value })} aria-describedby={post.health !== p.health ? "up-h-now" : undefined}>
               <option value="on_track">On track</option><option value="at_risk">At risk</option><option value="off_track">Off track</option><option value="not_started">Not assessed</option>
             </select>
+            {/* Posting sets the project's health, so a difference from the current one is said out loud */}
+            {post.health !== p.health && <p id="up-h-now" className="small muted" style={{ margin: "4px 0 0" }}>The project is {HEALTH_LABEL[p.health as keyof typeof HEALTH_LABEL]?.toLowerCase() ?? p.health} now; posting changes it.</p>}
           </div>
           <div><label htmlFor="up-t">In a sentence</label><textarea id="up-t" rows={2} style={{ minHeight: 0 }} value={post.title} onChange={(e) => setPost({ ...post, title: e.target.value })} maxLength={160} placeholder="e.g. migration finished; testing starts Monday" /></div>
           <div className="actions"><button className="btn btn-primary" disabled={!post.title.trim() || sending}>{sending ? "Posting…" : "Post"}</button><button type="button" className="btn btn-ghost" onClick={() => setPosting(false)}>Cancel</button></div>
@@ -497,13 +510,15 @@ function PeopleDialog({ open, onClose, people, version, onSave }: { open: boolea
 
 
 /** A measure: latest reading (or the baseline), the range, and progress toward the target */
-function MetricCard({ item, path, onReading }: { item: Item; path: string; onReading?: (value: number) => void }) {
+function MetricCard({ item, path, onReading }: { item: Item; path: string; onReading?: (value: number) => Promise<boolean> }) {
   // Fields are validated on read, so a malformed record can't break the page
   const m = MetricFields.parse(item.fields);
   const latest = m.readings.at(-1);
   const pct = metricProgress(m);
   // The reading being typed, and the edit panel (opened from the title, like every item)
   const [value, setValue] = useState("");
+  const [readingError, setReadingError] = useState<string>();
+  const [savingReading, setSavingReading] = useState(false);
   const [open, setOpen] = useState(false);
   return (
     <div className="card metric" id={`item-${item.id}`}>
@@ -522,9 +537,21 @@ function MetricCard({ item, path, onReading }: { item: Item; path: string; onRea
       {pct !== undefined && <div className="progress" role="img" aria-label={`${Math.round(pct * 100)} percent of the way`}><i style={{ width: `${pct * 100}%` }} /></div>}
       {/* Editors log a reading dated today */}
       {onReading && (
-        <form style={{ display: "flex", gap: 6, marginTop: 10 }} onSubmit={(e) => { e.preventDefault(); const n = Number(value); if (value.trim() && !Number.isNaN(n)) { onReading(n); setValue(""); } }}>
-          <input aria-label={`New reading for ${item.title}`} inputMode="decimal" placeholder={`Today's reading${m.unit ? `, in ${m.unit}` : ""}`} value={value} onChange={(e) => setValue(e.target.value)} style={{ minHeight: 32, padding: "4px 10px" }} />
-          <button className="btn btn-ghost" style={{ minHeight: 32, padding: "4px 12px" }}>Add</button>
+        <form style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }} onSubmit={(e) => {
+          e.preventDefault();
+          // A reading that isn't a number says so and keeps the text, rather than doing nothing (EP-08)
+          const bad = numberProblem(value, { required: true });
+          setReadingError(bad);
+          const n = optionalNumber(value);
+          if (bad || !n.ok || n.value === undefined || savingReading) return;
+          // The box clears only after the reading is saved, and only if it still holds what was sent
+          const sent = value;
+          setSavingReading(true);
+          void onReading(n.value).then((saved) => { setSavingReading(false); if (saved) setValue((now) => (now === sent ? "" : now)); });
+        }}>
+          <input aria-label={`New reading for ${item.title}`} inputMode="decimal" placeholder={`Today's reading${m.unit ? `, in ${m.unit}` : ""}`} value={value} onChange={(e) => { setValue(e.target.value); setReadingError(undefined); }} style={{ minHeight: 32, padding: "4px 10px" }} aria-invalid={readingError ? true : undefined} aria-describedby={readingError ? `reading-err-${item.id}` : undefined} />
+          <button className="btn btn-ghost" style={{ minHeight: 32, padding: "4px 12px" }} disabled={savingReading}>{savingReading ? "Adding…" : "Add"}</button>
+          {readingError && <span id={`reading-err-${item.id}`} className="small late" role="alert" style={{ flexBasis: "100%" }}>{readingError}</span>}
         </form>
       )}
     </div>
@@ -557,14 +584,18 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
   }, [hash, items.length]);
 
   // Quick edits (done, readings): on a conflict, say so and show the latest instead of a dialog
-  const patch = async (item: Item, body: Record<string, unknown>) => {
+  // True once saved; on a failure the caller keeps what the person typed (EP-03)
+  const patch = async (item: Item, body: Record<string, unknown>): Promise<boolean> => {
+    let ok = false;
     try {
       await api(`${path}/items/${item.id}`, { method: "PATCH", body: { version: item.version, ...body } });
+      ok = true;
     } catch (e) {
-      if (e instanceof HttpError && e.status === 409) toast(`Someone changed "${item.title}" first. Showing the latest now.`);
+      if (e instanceof HttpError && e.status === 409) toast(`Someone changed "${item.title}" first. Showing the latest now; your entry is still in the box.`);
       else toast(problem(e));
     }
     refresh();
+    return ok;
   };
 
   return (
@@ -588,7 +619,7 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
               list.length ? <div className="scores">{list.map((m) => (
                 <MetricCard key={m.id} item={m} path={path} onReading={canWrite ? (value) => {
                   const f = MetricFields.parse(m.fields);
-                  void patch(m, { fields: { readings: [...f.readings, { at: new Date().toISOString().slice(0, 10), value, note: "" }] } });
+                  return patch(m, { fields: { readings: [...f.readings, { at: todayIn(org.timeZone), value, note: "" }] } });
                 } : undefined} />
               ))}</div> : null
             ) : (
@@ -654,7 +685,7 @@ function ItemRow({ item, path, marker, onToggle, extra }: { item: Item; path: st
       <span className="item-meta">
         {/* Due date, in red once it has passed and the item isn't done */}
         {item.dueDate && (() => {
-          const late = item.status !== "done" && item.dueDate < new Date().toISOString().slice(0, 10);
+          const late = item.status !== "done" && item.dueDate < todayIn(org.timeZone);
           return <span className={`small ${late ? "late" : "muted"}`} title={late ? "Overdue" : "Due"}>{late && <span className="sr">Overdue, </span>}{dateLabel(item.dueDate)}</span>;
         })()}
         {/* A status update says how things stood and when */}
@@ -672,6 +703,14 @@ function ItemRow({ item, path, marker, onToggle, extra }: { item: Item; path: st
 
 /** The inline form that adds an item of one kind. Each kind says what belongs in it, with an example
  * and one-tap starters; requests are a sentence of taps; requirements pick must, should, or could */
+// A short, stable fingerprint of a draft's content, for its requestId (not security, just identity)
+function hashText(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+
 function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: string[] }) {
   const { org } = useOrg();
   const toast = useToast();
@@ -686,25 +725,48 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
   const label = KIND_LABEL[kind][0];
   // One add at a time: a double click or a second Enter can't create the item twice
   const [adding, runAdd] = useSubmit();
+  // The latest typed text, read after a send finishes, so a slow reply can tell whether the person kept
+  // typing meanwhile (EP-06)
+  const latest = useRef({ title, body });
+  latest.current = { title, body };
+  // A name for this open form's creates: each draft's requestId is it plus the draft's own content, so a
+  // retry of the same draft (after a lost reply or a partial batch) is answered with the item already
+  // made, while an edited draft counts as a new one (EP-04). A new form gets a new name
+  const session = useRef("");
+  if (!session.current && open) session.current = Math.random().toString(36).slice(2, 12).padEnd(10, "0");
+  const requestId = (d: unknown, n = 0) => `${session.current}-${n}-${hashText(JSON.stringify(d))}`;
 
-  // Each need in a request becomes its own item, sent in order, then the form closes
+  // Each need in a request becomes its own item, sent in order. A failure part-way says how many went,
+  // keeps the form, and a retry resends the rest; the ones already sent are recognized, not repeated
   const sendAll = (drafts: { title: string; body: string; dueDate?: string; fields: Record<string, unknown> }[]) => runAdd(async () => {
+    let sent = 0;
     try {
-      for (const d of drafts) await api(`${path}/items`, { method: "POST", body: { kind, ...d } });
+      for (const [n, d] of drafts.entries()) {
+        await api(`${path}/items`, { method: "POST", body: { kind, ...d, requestId: requestId(d, n) } });
+        sent++;
+      }
       setOpen(false);
+      session.current = "";
       if (drafts.length > 1) toast(`${drafts.length} requests sent`);
     } catch (e) {
-      toast(problem(e));
+      toast(sent ? `${sent} of ${drafts.length} sent. ${problem(e)} Send again to finish; the ones already sent won't repeat.` : problem(e));
     }
     refresh();
   });
-  // Send one item, then close the form
+  // Send one item, then close the form, unless the person typed something newer while it was sending:
+  // then the newer text stays, and the toast says the earlier version was added
   const send = (item: { title: string; body: string; fields: Record<string, unknown> }) => runAdd(async () => {
+    const snapshot = { title, body };
     try {
-      await api(`${path}/items`, { method: "POST", body: { kind, ...item } });
-      setTitle("");
-      setBody("");
-      setOpen(false);
+      await api(`${path}/items`, { method: "POST", body: { kind, ...item, requestId: requestId(item) } });
+      session.current = "";
+      if (latest.current.title === snapshot.title && latest.current.body === snapshot.body) {
+        setTitle("");
+        setBody("");
+        setOpen(false);
+      } else {
+        toast(`Added "${item.title}". Your newer text is still here.`);
+      }
     } catch (e) {
       toast(problem(e));
     }
@@ -723,10 +785,16 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
   // Requests are built as one guided sentence
   if (kind === "request") return <RequestBuilder busy={adding} timeZone={org.timeZone} onSubmit={(ds) => void sendAll(ds)} onCancel={() => setOpen(false)} />;
 
-  // Blank or non-numeric values are left unset
-  const num = (s: string) => (s.trim() === "" || Number.isNaN(Number(s)) ? undefined : Number(s));
+  // Measure numbers follow the one rule in lib/measures.ts: blank is unset, anything else must be a
+  // number, and a problem shows under its field and stops the add rather than dropping the value (EP-08)
+  const numBad = kind === "metric" ? { baseline: numberProblem(extra.baseline), target: numberProblem(extra.target) } : {};
+  const num = (s: string) => { const n = optionalNumber(s); return n.ok ? n.value : undefined; };
   // Measures, options, and requirements carry extra fields; every kind gets a title and details
   const submit = () => {
+    if (numBad.baseline || numBad.target) {
+      document.getElementById(numBad.baseline ? "add-now" : "add-target")?.focus();
+      return;
+    }
     const fields: Record<string, unknown> = {};
     if (kind === "metric") Object.assign(fields, { unit: extra.unit, baseline: num(extra.baseline), target: num(extra.target) });
     if (kind === "option") Object.assign(fields, { cost: extra.cost });
@@ -737,7 +805,7 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
     <form className="card add-form" onSubmit={(e) => { e.preventDefault(); if (title.trim()) submit(); }}>
       {guide && <p className="small muted hint">{guide.hint}</p>}
       {/* The title wraps as it grows; Enter adds the item, as a one-line field would */}
-      <textarea rows={1} className="title-line" aria-label={`${label} title`} placeholder={guide ? `e.g. ${guide.title}` : label} value={title} onChange={(e) => setTitle(e.target.value.replace(/\n/g, " "))} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (title.trim()) submit(); } }} maxLength={160} required autoFocus />
+      <textarea rows={1} className="title-line" aria-label={`${label} title`} placeholder={guide ? `e.g. ${guide.title}` : label} value={title} onChange={(e) => setTitle(e.target.value.replace(/\n/g, " "))} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); if (title.trim()) submit(); } }} maxLength={160} required autoFocus />
       {guide && !title && <Starters kind={kind} taken={taken} onPick={setTitle} />}
       {/* Requirements: how much it matters, as three chips */}
       {kind === "requirement" && (
@@ -748,10 +816,12 @@ function AddItem({ kind, path, taken }: { kind: ItemKind; path: string; taken: s
       {kind === "metric" && (
         <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr 1fr" }}>
           <input aria-label="Unit" placeholder="Unit, e.g. hours" value={extra.unit} onChange={(e) => setExtra({ ...extra, unit: e.target.value })} />
-          <input aria-label="Now" placeholder="Now" inputMode="decimal" value={extra.baseline} onChange={(e) => setExtra({ ...extra, baseline: e.target.value })} />
-          <input aria-label="Target" placeholder="Target" inputMode="decimal" value={extra.target} onChange={(e) => setExtra({ ...extra, target: e.target.value })} />
+          <input id="add-now" aria-label="Now" placeholder="Now" inputMode="decimal" value={extra.baseline} onChange={(e) => setExtra({ ...extra, baseline: e.target.value })} aria-invalid={numBad.baseline ? true : undefined} aria-describedby={numBad.baseline ? "add-now-err" : undefined} />
+          <input id="add-target" aria-label="Target" placeholder="Target" inputMode="decimal" value={extra.target} onChange={(e) => setExtra({ ...extra, target: e.target.value })} aria-invalid={numBad.target ? true : undefined} aria-describedby={numBad.target ? "add-target-err" : undefined} />
         </div>
       )}
+      {numBad.baseline && <p id="add-now-err" className="small late" style={{ margin: 0 }}>Now: {numBad.baseline}</p>}
+      {numBad.target && <p id="add-target-err" className="small late" style={{ margin: 0 }}>Target: {numBad.target}</p>}
       {kind === "option" && <input aria-label="Cost" placeholder="Cost, e.g. $4,800 fixed" value={extra.cost} onChange={(e) => setExtra({ ...extra, cost: e.target.value })} />}
       <div style={{ display: "flex", gap: 8 }}>
         <button className="btn btn-primary" type="submit" disabled={!title.trim() || adding}>{adding ? "Adding…" : "Add"}</button>

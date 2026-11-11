@@ -18,24 +18,60 @@ export interface FileTarget {
 }
 
 
-/** Upload each file: make its record, send the bytes straight to storage, then report it done.
- * Returns each file's state after that report: ready, or still checking (the scan runs on its own) */
-export async function uploadFiles(tid: string, files: File[], target: FileTarget): Promise<DocumentRecord[]> {
-  const out: DocumentRecord[] = [];
-  for (const f of files) {
-    const { doc, upload } = await api<{ doc: DocumentRecord; upload: string }>(`/t/${tid}/docs`, {
-      method: "POST",
-      body: { name: f.name, contentType: f.type || "application/octet-stream", size: f.size, ...target },
-    });
-    // A blocked or dropped connection throws rather than returning a status; both get a plain message
-    const r = await send(upload, { method: "PUT", headers: { "content-type": f.type || "application/octet-stream" }, body: f }).catch(() => undefined);
-    if (!r?.ok) throw new Error(`Couldn't send ${f.name} to storage. Check your connection and try again.`);
-    const after = await api<DocumentRecord>(`/t/${tid}/docs/${doc.id}/done${doc.projectId ? `?p=${doc.projectId}` : ""}`, { method: "POST" });
-    // A file that failed its check right away (wrong size, flagged) stops the batch with its reason
-    if (after.state === "failed" || after.state === "rejected") throw new Error(`${f.name}: ${fileProblem(after)}`);
-    out.push(after);
+/**
+ * One file's way through an upload (AX-04): its record once made, whether its bytes reached storage, and
+ * how it ended. A retry picks up where each file stopped: a file whose bytes arrived only needs its
+ * "done" report again, and a finished file is never sent twice
+ */
+export interface UploadJob {
+  file: File;
+  doc?: DocumentRecord;
+  sent?: boolean;
+  result?: DocumentRecord;
+  error?: string;
+}
+
+// How long one file's bytes may take to reach storage: a minute, plus time for the size at a slow
+// 32 KB/s, so a 100 MB file gets about an hour. A stall past it is cancelled and reported (AX-05)
+export const transferDeadline = (bytes: number) => 60_000 + Math.ceil(bytes / 32_768) * 1000;
+
+/** Upload each file: make its record, send the bytes straight to storage, then report it done. Every file
+ * gets its own outcome; one failure doesn't stop the rest, and nothing already finished is repeated.
+ * `signal` cancels what's still in flight (the server settles an abandoned record on its own) */
+export async function uploadFiles(tid: string, jobs: UploadJob[], target: FileTarget, signal?: AbortSignal): Promise<UploadJob[]> {
+  for (const job of jobs) {
+    if (job.result || signal?.aborted) continue;
+    const f = job.file;
+    job.error = undefined;
+    try {
+      let upload: string | undefined;
+      if (!job.doc || !job.sent) {
+        const made = await api<{ doc: DocumentRecord; upload: string }>(`/t/${tid}/docs`, {
+          method: "POST",
+          body: { name: f.name, contentType: f.type || "application/octet-stream", size: f.size, ...target },
+        });
+        job.doc = made.doc;
+        upload = made.upload;
+        // The bytes, bounded by a deadline and the caller's Cancel. A blocked or dropped connection throws
+        const stop = new AbortController();
+        const timer = setTimeout(() => stop.abort(), transferDeadline(f.size));
+        const cancel = () => stop.abort();
+        signal?.addEventListener("abort", cancel);
+        const r = await send(upload, { method: "PUT", headers: { "content-type": f.type || "application/octet-stream" }, body: f, signal: stop.signal }).catch(() => undefined);
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", cancel);
+        if (!r?.ok) throw new Error(signal?.aborted ? "cancelled" : stop.signal.aborted ? "took too long to send" : "couldn't reach storage");
+        job.sent = true;
+      }
+      // Report it done. If this reply is lost, a retry repeats only this step for the same record
+      const after = await api<DocumentRecord>(`/t/${tid}/docs/${job.doc!.id}/done${job.doc!.projectId ? `?p=${job.doc!.projectId}` : ""}`, { method: "POST" });
+      if (after.state === "failed" || after.state === "rejected") { job.result = after; job.error = fileProblem(after); continue; }
+      job.result = after;
+    } catch (e) {
+      job.error = e instanceof HttpError ? problem(e) : (e as Error).message || "didn't upload";
+    }
   }
-  return out;
+  return jobs;
 }
 
 
@@ -46,39 +82,71 @@ export function fileProblem(d: DocumentRecord) {
 }
 
 
-/** Runs uploads for any control, reports the result, and refreshes the page's data */
+/** Runs uploads for any control, reports the result, and refreshes the page's data. One batch at a time:
+ * a second drop while one runs is refused at once (a ref, not just aria-busy). Files that didn't make it
+ * stay listed with Retry and the batch can be cancelled (AX-04, AX-05) */
 export function useUpload(target: FileTarget, onDone?: () => void) {
   const { org } = useOrg();
   const toast = useToast();
   const refresh = useRefresh(org.id);
   const [busy, setBusy] = useState(false);
-  const run = async (files: File[]) => {
-    if (!files.length) return;
+  const running = useRef(false);
+  const stop = useRef<AbortController | null>(null);
+  const [left, setLeft] = useState<UploadJob[]>([]);
+  const go = async (jobs: UploadJob[]) => {
+    if (!jobs.length) return;
+    if (running.current) { toast("One upload at a time. Wait for this one to finish, then add more."); return; }
+    running.current = true;
     setBusy(true);
-    try {
-      const done = await uploadFiles(org.id, files, target);
-      const checking = done.filter((d) => fileState(d) !== "ready").length;
-      const what = files.length === 1 ? files[0]!.name : `${files.length} files`;
-      toast(checking ? `Uploaded ${what}. A quick malware check runs first; it opens once that's done.` : `Uploaded ${what}`);
+    stop.current = new AbortController();
+    await uploadFiles(org.id, jobs, target, stop.current.signal);
+    const ok = jobs.filter((j) => j.result && !j.error);
+    const bad = jobs.filter((j) => j.error);
+    const checking = ok.filter((j) => fileState(j.result!) !== "ready").length;
+    const what = (n: number) => (n === 1 ? "1 file" : `${n} files`);
+    if (!bad.length) {
+      const name = ok.length === 1 ? ok[0]!.file.name : what(ok.length);
+      toast(checking ? `Uploaded ${name}. A quick malware check runs first; it opens once that's done.` : `Uploaded ${name}`);
       onDone?.();
-    } catch (e) {
-      toast(e instanceof HttpError ? problem(e) : (e as Error).message);
+    } else {
+      toast(`${ok.length ? `${what(ok.length)} uploaded; ` : ""}${what(bad.length)} didn't: ${bad.map((j) => `${j.file.name} (${j.error})`).join(", ")}.`);
     }
+    // Only unfinished files that can be tried again stay for Retry (a flagged file can't)
+    setLeft(bad.filter((j) => !j.result));
     refresh();
+    stop.current = null;
+    running.current = false;
     setBusy(false);
   };
-  return { busy, run };
+  const run = (files: File[]) => go(files.map((file) => ({ file })));
+  const retry = () => go(left);
+  const cancel = () => stop.current?.abort();
+  return { busy, run, retry, cancel, left };
+}
+
+
+/** The status line under an upload control: Cancel while sending, Retry for what didn't make it */
+function UploadStatus({ busy, left, retry, cancel }: Pick<ReturnType<typeof useUpload>, "busy" | "left" | "retry" | "cancel">) {
+  if (busy) return <span className="small muted" role="status">Uploading… <button type="button" className="linkish" onClick={(e) => { e.stopPropagation(); cancel(); }}>Cancel</button></span>;
+  if (!left.length) return null;
+  return (
+    <span className="small warn-text" role="status">
+      {left.length === 1 ? `${left[0]!.file.name} didn't upload.` : `${left.length} files didn't upload.`}{" "}
+      <button type="button" className="linkish" onClick={(e) => { e.stopPropagation(); void retry(); }}>Retry</button>
+    </span>
+  );
 }
 
 
 /** A button that opens the file picker (camera, photos, or files on a phone) and uploads what's chosen */
 export function UploadButton({ target, label = "Upload files", className = "btn btn-ghost", onDone }: { target: FileTarget; label?: string; className?: string; onDone?: () => void }) {
   const input = useRef<HTMLInputElement>(null);
-  const { busy, run } = useUpload(target, onDone);
+  const up = useUpload(target, onDone);
   return (
     <>
-      <button type="button" className={className} disabled={busy} onClick={() => input.current?.click()}>{busy ? "Uploading…" : label}</button>
-      <input ref={input} type="file" multiple hidden onChange={(e) => { void run([...(e.target.files ?? [])]); e.target.value = ""; }} />
+      <button type="button" className={className} disabled={up.busy} onClick={() => input.current?.click()}>{up.busy ? "Uploading…" : label}</button>
+      <UploadStatus {...up} />
+      <input ref={input} type="file" multiple hidden onChange={(e) => { void up.run([...(e.target.files ?? [])]); e.target.value = ""; }} />
     </>
   );
 }
@@ -88,8 +156,10 @@ export function UploadButton({ target, label = "Upload files", className = "btn 
 export function DropZone({ target, children }: { target: FileTarget; children?: ReactNode }) {
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
-  const { busy, run } = useUpload(target);
+  const up = useUpload(target);
+  const { busy, run } = up;
   return (
+    <>
     <div
       data-tour="upload"
       className={`drop${over ? " over" : ""}`}
@@ -97,7 +167,8 @@ export function DropZone({ target, children }: { target: FileTarget; children?: 
       tabIndex={0}
       aria-busy={busy}
       onClick={() => input.current?.click()}
-      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && input.current?.click()}
+      // Space activates without scrolling the page, as on a native button (AP-10)
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!busy) input.current?.click(); } }}
       onDragOver={(e) => { e.preventDefault(); setOver(true); }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => { e.preventDefault(); setOver(false); void run([...e.dataTransfer.files]); }}
@@ -106,6 +177,9 @@ export function DropZone({ target, children }: { target: FileTarget; children?: 
       {children}
       <input ref={input} type="file" multiple hidden onChange={(e) => { void run([...(e.target.files ?? [])]); e.target.value = ""; }} />
     </div>
+    {/* Outside the drop area, so its Cancel and Retry aren't buttons inside a button */}
+    <UploadStatus {...up} />
+    </>
   );
 }
 

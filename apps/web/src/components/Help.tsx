@@ -187,7 +187,9 @@ export function runTour(steps: Step[], onDone?: () => void) {
     overlayOpacity: 0.6,
     stagePadding: 6,
     stageRadius: 10,
-    smoothScroll: true,
+    // With reduced motion the spotlight jumps instead of gliding, and the page doesn't smooth-scroll (AP-07)
+    animate: !matchMedia("(prefers-reduced-motion: reduce)").matches,
+    smoothScroll: !matchMedia("(prefers-reduced-motion: reduce)").matches,
     onDestroyed: () => onDone?.(),
   });
   d.drive();
@@ -267,6 +269,8 @@ export function HelpProvider({ me, children }: { me: Me; children: ReactNode }) 
       {children}
       {/* The help sheet: what this page is for, a few how-tos, and its tour */}
       <Dialog open={sheet} onClose={() => setSheet(false)} label={`Help: ${g.title}`} className="sheet">
+        {/* A visible way out beside Escape and the backdrop (AP-03); the dialog returns focus to the ? button */}
+        <button type="button" className="icon-btn sheet-close" onClick={() => setSheet(false)} aria-label="Close help" style={{ float: "right" }}>×</button>
         <p className="eyebrow">Help · {g.title}</p>
         <h2>{g.purpose}</h2>
         <ul className="howto">{g.howto.map((h) => <li key={h}>{h}</li>)}</ul>

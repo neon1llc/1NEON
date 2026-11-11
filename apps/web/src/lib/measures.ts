@@ -46,6 +46,20 @@ export function optionalNumber(raw: string): { ok: true; value?: number } | { ok
 }
 
 
+/**
+ * One rule for every number a measure takes (EP-08): new project, Add measure, the item panel, and a
+ * reading. A plain decimal with a point; a comma is never guessed into a point or dropped (1,5 isn't
+ * silently 15). Blank is "not set" where blank is allowed. Gives the words to show, or undefined if fine
+ */
+export function numberProblem(raw: string, { required = false } = {}): string | undefined {
+  const s = raw.trim();
+  if (s === "") return required ? "Enter a number." : undefined;
+  if (optionalNumber(s).ok) return undefined;
+  if (/^-?\d*,\d+$/.test(s)) return "Use a point for decimals, like 1.5.";
+  return required ? "Enter a number like 12, -3, or 4.5." : "Enter a number like 12, -3, or 4.5, or leave it blank.";
+}
+
+
 /** True when nothing at all was typed in this measure; such a row is left out, not an error */
 export function isBlank(m: MetricDraft) {
   return !m.title.trim() && !m.unit.trim() && !m.baseline.trim() && !m.target.trim();

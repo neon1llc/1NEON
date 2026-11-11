@@ -553,6 +553,24 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
   const section = parts.slice(0, parts[3] === "projects" && parts[4] && parts[4] !== "new" ? 5 : 4).join("/");
   // The full menu closes after navigating, and on Escape
   useEffect(() => setOpen(false), [loc.pathname]);
+  // Arriving on another page puts keyboard focus on its title, so a screen reader hears where it is and
+  // the next Tab starts in the page. Only when focus would otherwise be lost (on the body, gone, or in the
+  // menu that navigated); a link to a spot on the page (#item-...) and background refreshes keep theirs (AP-05)
+  const firstSection = useRef(true);
+  useEffect(() => {
+    if (firstSection.current) { firstSection.current = false; return; }
+    if (loc.hash) return;
+    const t = window.setTimeout(() => {
+      const at = document.activeElement;
+      const lost = !at || at === document.body || !at.isConnected || Boolean(side.current?.contains(at)) || Boolean(at.closest(".tabbar"));
+      const title = document.querySelector<HTMLElement>("#main h1, #main .page-title");
+      if (!lost || !title) return;
+      if (!title.hasAttribute("tabindex")) title.tabIndex = -1;
+      title.focus({ preventScroll: true });
+    }, 60);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section]);
   useEffect(() => {
     if (!open) return;
     const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);

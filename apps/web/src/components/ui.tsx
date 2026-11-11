@@ -37,7 +37,7 @@ export function Avatar({ id, name, editing, size = 26 }: { id: string; name: str
 
 // Project health, as a colored dot plus words (never color alone). The stored "not_started" reads as
 // Not assessed: health is the team's call, and starting work doesn't make a project on track
-const HEALTH_LABEL: Record<HealthT, string> = { on_track: "On track", at_risk: "At risk", off_track: "Off track", not_started: "Not assessed" };
+export const HEALTH_LABEL: Record<HealthT, string> = { on_track: "On track", at_risk: "At risk", off_track: "Off track", not_started: "Not assessed" };
 
 
 /** Health as a colored dot plus its label */
@@ -217,13 +217,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const show = useCallback((m: string) => {
     setMsg(m);
     window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setMsg(undefined), 3200);
+    // Longer messages (a partial upload, a retry note) stay long enough to read: 3.2s, plus a little per
+    // word, up to 10s
+    timer.current = window.setTimeout(() => setMsg(undefined), Math.min(10_000, 3200 + m.length * 45));
   }, []);
   return (
     <ToastCtx.Provider value={show}>
       {children}
+      {/* One announcement source: the live region speaks, and the visible toast is the same words for the
+          eye, hidden from assistive technology so nothing is read twice (AP-09) */}
       <div aria-live="polite" className="sr">{msg}</div>
-      {msg && <div className="toast" role="status">{msg}</div>}
+      {msg && <div className="toast" aria-hidden="true">{msg}</div>}
     </ToastCtx.Provider>
   );
 }

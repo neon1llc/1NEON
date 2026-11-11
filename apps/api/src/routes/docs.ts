@@ -58,7 +58,7 @@ export function docRoutes(app: App, k: Kit) {
     need(c, "read");
     const t = c.get("tenant");
     const projects = (await repo.listProjects(t.id)).filter((p) => !p.deletedAt);
-    return c.json({ docs: await allDocs(t.id, projects.map((p) => p.id)), projects: projects.map((p) => ({ id: p.id, key: p.key, name: p.name })) });
+    return c.json({ docs: await allDocs(t.id, projects.map((p) => p.id)), projects: projects.map((p) => ({ id: p.id, key: p.key, name: p.name, archived: Boolean(p.archived) })) });
   });
 
   // Start an upload. Anyone who can comment may upload, so clients can send the files that are needed
