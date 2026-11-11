@@ -13,7 +13,7 @@ import { problem, useMembers, useRefresh, useSubmit } from "../lib/hooks.ts";
 import { read } from "../lib/reads.ts";
 import { gate } from "./Reads.tsx";
 import { useOrg, useSession } from "./Shell.tsx";
-import { ago, Avatar, ConflictDialog, Dialog, useAsk, useToast } from "./ui.tsx";
+import { ago, Avatar, ConflictDialog, Dialog, useAsk, useToast, Changes } from "./ui.tsx";
 
 
 // Plain words for every status a person can pick
@@ -319,7 +319,7 @@ export function ItemPanel({ item, label, path, open, onClose }: { item: Item; la
       {(thread.data?.history.length ?? 0) > 0 && (
         <details className="history">
           <summary>History</summary>
-          <ul className="feed">{thread.data!.history.map((h) => <li key={h.id}><span>{h.summary} <small className="by">{nameOf(h.actorId)}</small></span><time>{ago(h.at)}</time></li>)}</ul>
+          <ul className="feed">{thread.data!.history.map((h) => <li key={h.id}><span>{h.summary} <small className="by">{nameOf(h.actorId)}</small><Changes e={h} /></span><time>{ago(h.at)}</time></li>)}</ul>
         </details>
       )}
       {/* Yours beside theirs for each field the person changed; Keep mine saves those fields over theirs */}

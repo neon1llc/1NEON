@@ -173,8 +173,8 @@ export const STORY: Section[] = [
       await s.say("Home shows what needs her, what's coming up, and what's new");
       await s.think("Okay, home. What's waiting on me?");
       await s.hover({ sel: "h2.section-h", text: "Needs you" }, 900);
-      await s.think("Nothing yet. And nothing coming up either.");
-      await s.hover({ sel: "h2.section-h", text: "Coming up" }, 900);
+      await s.think("Nothing yet. And nothing on the calendar either.");
+      await s.hover("[data-tour=coming-up] h2", 900);
       await s.think("The bell must be where news shows up.");
       await s.hover(".bell-btn", 900);
     },

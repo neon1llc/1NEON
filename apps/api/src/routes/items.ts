@@ -2,7 +2,7 @@
 // approving an option into an immutable decision, and the advisory edit markers.
 
 
-import { ApproveInput, CreateItemInput, assessed, completionAfter, resolveTiming, DecisionFields, Item, OptionFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, type Project } from "@1neon/domain";
+import { ApproveInput, CreateItemInput, changeRecord, itemChanges, assessed, completionAfter, resolveTiming, DecisionFields, Item, OptionFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, type Project } from "@1neon/domain";
 import { z } from "zod";
 import { actorId, body, byRank, check, defined, fail, label, need, now, validateFields, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
@@ -117,7 +117,11 @@ export function itemRoutes(app: App, k: Kit) {
     // Completion is its own event: an edit to wording, assignee, or fields never moves it
     next.completedAt = completionAfter(item, next.status, next.updatedAt);
     // Work starting never changes the project's health: that stays the team's assessment
-    await repo.table.write([repo.itemOp(next, { version }), repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: `${item.kind}.updated`, target: item.id, summary: `${p.key}: updated ${label(item.kind)} "${next.title}"` })]);
+    // What changed, in words: "status To do → Done", "due Nov 3, 2026 → Nov 10, 2026". A save that
+    // changed nothing still saves (and moves the version on), but records no activity
+    const names = new Map((await repo.listMembers(p.tenantId)).map((m) => [m.userId, m.name || m.email]));
+    const record = changeRecord(`${p.key}: updated ${label(item.kind)} "${next.title}"`, itemChanges(item, next, (id) => names.get(id) ?? "someone"));
+    await repo.table.write([repo.itemOp(next, { version }), ...(record ? [repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: `${item.kind}.updated`, target: item.id, ...record })] : [])]);
     await repo.clearEditing(p.tenantId, p.id, item.id, actorId(c));
     return c.json(next);
   });

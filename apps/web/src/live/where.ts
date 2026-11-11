@@ -1,11 +1,12 @@
 // apps/web/src/live/where.ts - Which show /1NEON/live plays, and where in it. ?play= names a short
-// demo or a section of the whole project; a refresh partway through picks up where it was. Read
+// demo or one chapter of the whole project, played on its own; a refresh partway through picks up
+// where it was. Read
 // once at load, before the in-browser API seeds, so the seed and the player agree.
 
 
 // The short demos, by the id their ?play= link uses (their sections live in shorts.ts)
 // "preview" is the short outcome-first tour the bare /1NEON/live opens with
-export const SHORT_IDS = ["preview", "invite", "passkey", "authenticator", "texts"] as const;
+export const SHORT_IDS = ["preview", "invite", "passkey", "authenticator", "texts", "calendar"] as const;
 export type ShortId = (typeof SHORT_IDS)[number];
 
 // The whole project's id, for the saved place; ?play=full asks for it from the start
@@ -16,6 +17,8 @@ const FULL = "full";
 export interface Play {
   show: ShortId | typeof PROJECT;
   at?: string;
+  /** A link to one chapter (from the FAQs): that chapter plays on its own, not the rest of the story */
+  focus?: boolean;
 }
 
 
@@ -41,7 +44,7 @@ export const PLAY: Play = (() => {
   const param = new URLSearchParams(location.search).get("play");
   if (isShort(param)) return { show: param };
   if (param === FULL) return { show: PROJECT };
-  if (param) return { show: PROJECT, at: param };
+  if (param) return { show: PROJECT, at: param, focus: true };
   const deep = !/^\/1NEON\/live\/?$/.test(location.pathname);
   if (deep) {
     try {

@@ -203,6 +203,51 @@ describe("organization calendar", () => {
 
 // --- Review 2026-11-11: EP-04 a create retried with its requestId makes one item ----------------------
 
+// --- Home calendar: the organization's own events, by month, with worded activity --------------------
+
+describe("calendar events", () => {
+  it("adds leave and a monthly call, shows them by month, and records each change in words", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-11T15:00:00Z"));
+    const leave = await call("POST", `${base()}/events`, { title: "Dana out", kind: "leave", personId: s.dana.id, date: "2026-11-30", endDate: "2026-12-02", repeat: "none" });
+    expect(leave.status).toBe(201);
+    const monthly = await call("POST", `${base()}/events`, { title: "Care check-in", kind: "care", date: "2026-11-20", time: "16:00", repeat: "monthly" });
+    expect(monthly.status).toBe(201);
+    // December shows the leave that started in November, and the next monthly call
+    const dec = (await call("GET", `${base()}/calendar?month=2026-12`)).json;
+    expect(dec.entries.find((e: { eventId?: string }) => e.eventId === leave.json.id)).toMatchObject({ date: "2026-11-30", endDate: "2026-12-02" });
+    expect(dec.entries.filter((e: { eventId?: string }) => e.eventId === monthly.json.id).map((e: { date: string }) => e.date)).toEqual(["2026-12-20"]);
+    expect(dec.repeating.map((e: { id: string }) => e.id)).toContain(monthly.json.id);
+    // A change says what moved; a save with no change records nothing
+    const moved = await call("PATCH", `${base()}/events/${monthly.json.id}`, { version: 1, time: "17:00" });
+    expect(moved.status).toBe(200);
+    const same = await call("PATCH", `${base()}/events/${monthly.json.id}`, { version: 2, time: "17:00" });
+    expect(same.status).toBe(200);
+    const log = (await call("GET", `${base()}/activity`)).json.filter((a: { target: string }) => a.target === monthly.json.id);
+    expect(log.map((a: { summary: string }) => a.summary)).toContain('Updated care plan date "Care check-in": time 16:00 → 17:00');
+    expect(log.filter((a: { action: string }) => a.action === "calendar.updated")).toHaveLength(1);
+    // Removing it needs the version last seen, and is recorded too
+    expect((await call("DELETE", `${base()}/events/${monthly.json.id}?version=1`)).status).toBe(409);
+    expect((await call("DELETE", `${base()}/events/${monthly.json.id}?version=3`)).status).toBe(204);
+    expect((await call("GET", `${base()}/activity`)).json.some((a: { action: string; target: string }) => a.action === "calendar.deleted" && a.target === monthly.json.id)).toBe(true);
+  });
+
+  it("refuses dates that don't make sense", async () => {
+    expect((await call("POST", `${base()}/events`, { title: "Backwards", kind: "office", date: "2026-11-10", endDate: "2026-11-09", repeat: "none" })).status).toBe(400);
+    expect((await call("POST", `${base()}/events`, { title: "Bad month", kind: "office", date: "2026-11-10", repeat: "monthly", until: "2026-10-01" })).status).toBe(400);
+  });
+
+  it("words item edits in the activity record", async () => {
+    const p = await newProject();
+    const i = await call("POST", `${base()}/projects/${p.id}/items`, { kind: "task", title: "Synthetic task" });
+    await call("PATCH", `${base()}/projects/${p.id}/items/${i.json.id}`, { version: i.json.version, status: "done", dueDate: "2026-11-20" });
+    const a = (await call("GET", `${base()}/activity`)).json.find((e: { target: string; action: string }) => e.target === i.json.id && e.action !== "item.created");
+    expect(a.summary).toContain("status To do → Done");
+    expect(a.details).toContain("due none → Nov 20, 2026");
+  });
+});
+
+
 describe("retry-safe creates", () => {
   it("answers a repeated request with the item already made, for that person only (EP-04)", async () => {
     const p = await newProject();

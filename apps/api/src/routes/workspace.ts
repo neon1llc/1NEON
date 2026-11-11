@@ -2,7 +2,7 @@
 // its workflow stages, the workspace landing, Coming up, Insights, and the audit trail.
 
 
-import { Stage, canApprove, dateIn, isClosed, isOwnOrg, metricReached, mondayOf, plusDays, todayIn, type Tenant } from "@1neon/domain";
+import { Stage, canApprove, changeRecord, occurrences, stageChanges, dateIn, isClosed, isOwnOrg, metricReached, mondayOf, plusDays, todayIn, type Tenant } from "@1neon/domain";
 import { z } from "zod";
 import { actorId, body, fail, need, now, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
@@ -14,7 +14,7 @@ const WAITING_ALL = 200;
 
 
 export function workspaceRoutes(app: App, k: Kit) {
-  const { repo, audit, allDocs } = k;
+  const { repo, allDocs } = k;
 
   // The organization and the caller's access, for the web app's frame
   app.get("/t/:tid", (c) => {
@@ -34,7 +34,9 @@ export function workspaceRoutes(app: App, k: Kit) {
     if (orphan) fail(400, "stage_in_use", `Move ${orphan.key} out of that stage before removing it.`);
     const next: Tenant = { ...t, stages: input.stages, version: t.version + 1, updatedAt: now(), updatedBy: actorId(c) };
     await repo.saveTenant(next, input.version);
-    await audit(c, "org.stages", t.id, "Updated workflow stages");
+    // Which stages were added, renamed, hidden, reordered, or removed, in words
+    const record = changeRecord("Updated workflow stages", stageChanges(t.stages, input.stages));
+    if (record) await repo.table.write([repo.auditOp({ tenantId: t.id, actorId: actorId(c), action: "org.stages", target: t.id, ...record })]);
     return c.json(next);
   });
 
@@ -78,6 +80,33 @@ export function workspaceRoutes(app: App, k: Kit) {
     }
     updates.sort((a, b) => b.at.localeCompare(a.at));
     const stageName = new Map(t.stages.map((s) => [s.id, s]));
+    // Projects at a glance: each live project's stage, health, how much of its work is done, what's
+    // overdue or blocked, and its next date, so Home shows where everything stands without a click
+    const today = todayIn(t.timeZone, new Date(now()));
+    const glance = [];
+    for (const p of live) {
+      const work = (await repo.listItems(t.id, p.id)).filter((i) => i.kind !== "update" && i.kind !== "decision" && i.kind !== "metric");
+      const openWork = work.filter((i) => i.status !== "done" && i.status !== "approved" && i.status !== "declined");
+      const next = openWork.filter((i) => i.dueDate && i.dueDate >= today).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!))[0];
+      const st = stageName.get(p.stageId);
+      glance.push({
+        key: p.key, name: p.name, stage: st?.name ?? "", layer: st?.layer ?? "needs", closed: isClosed(t.stages, p.stageId), health: p.health, targetDate: p.targetDate,
+        done: work.length - openWork.length, total: work.length,
+        overdue: openWork.filter((i) => i.dueDate && i.dueDate < today).length,
+        blocked: openWork.filter((i) => i.status === "blocked").length,
+        next: next ? { title: next.title, date: next.dueDate!, itemId: next.id, kind: next.kind } : undefined,
+      });
+    }
+    // Who's away in the next seven days, from leave on the organization's calendar
+    const week = plusDays(today, 6);
+    const away: { personId?: string; name: string; title: string; date: string; endDate?: string }[] = [];
+    for (const ev of (await repo.listCalEvents(t.id)).filter((e) => e.kind === "leave")) {
+      const len = ev.endDate ? Math.round((Date.parse(ev.endDate) - Date.parse(ev.date)) / 864e5) : 0;
+      for (const d of occurrences(ev, plusDays(today, -len), week)) {
+        away.push({ personId: ev.personId, name: ev.personId ? names.get(ev.personId) ?? "Someone" : ev.title, title: ev.title, date: d, endDate: len ? plusDays(d, len) : undefined });
+      }
+    }
+    away.sort((a, b) => a.date.localeCompare(b.date));
     return c.json({
       counts: {
         projects: live.length,
@@ -90,6 +119,8 @@ export function workspaceRoutes(app: App, k: Kit) {
       waiting: waiting.slice(0, limit),
       waitingTotal: waiting.length,
       updates: updates.slice(0, 5),
+      glance,
+      away,
       // What people did: sign-ins aren't doing anything, so the feed leaves them out (the
       // notification for them still goes to whoever asked for it). Each row names who did it
       activity: activity.filter((a) => a.action !== "member.signedin").map((a) => ({ ...a, by: names.get(a.actorId) ?? (a.actorId === "system" ? "" : "neon1") })),

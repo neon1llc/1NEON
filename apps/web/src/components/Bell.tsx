@@ -1,6 +1,8 @@
 // apps/web/src/components/Bell.tsx - Notifications: a bell in the top bar that breathes while
 // something new is waiting, and a list of what others did lately, important ones marked, each one
-// a link to what it's about. Opening the list marks everything seen. Choices for email and text live in the profile.
+// a link to what it's about. Opening the list marks everything seen: what was new when it opened stays
+// under "New" (a filled dot, bold) until the list closes, older ones sit under "Earlier" (a hollow dot),
+// and the header says how many were new. Choices for email and text live in the profile.
 
 
 import { BellIcon } from "lucide-react";
@@ -78,30 +80,40 @@ export function Bell({ tid, slug }: { tid: string; slug: string }) {
       </button>
       {open && (
         <div className="bell-list" role="dialog" aria-label="Notifications">
-          <div className="bell-head"><b>Notifications</b><Link to="/me#notifications" onClick={() => setOpen(false)} className="small">Choose what reaches you</Link></div>
+          <div className="bell-head"><b>Notifications{fresh.size > 0 && <small className="bell-new"> {fresh.size} new</small>}</b><Link to="/me#notifications" onClick={() => setOpen(false)} className="small">Choose what reaches you</Link></div>
           {/* "Nothing yet" only when the list really answered empty; a failure says so instead */}
           <Stale reads={[q]} />
           {wait ?? (!q.data?.events.length && <p className="muted small bell-empty">Nothing yet. Changes others make here will show up in this list.</p>)}
-          <ul>
-            {!wait && q.data?.events.map((e) => {
-              const href = hrefOf(slug, e.link);
-              const body = (
-                <>
-                  <span className="dot" aria-hidden="true" />
-                  <span className="what">
-                    <span>{e.summary}</span>
-                    <span className="muted small">{names.get(e.actorId) ?? "Someone"} · {ago(e.at)}{e.level === "critical" ? " · important" : ""}</span>
-                  </span>
-                </>
-              );
-              // Each one opens what it's about; something since removed stays as plain text
-              return (
-                <li key={e.id} className={`lvl-${e.level}${fresh.has(e.id) ? " new" : ""}`}>
-                  {href ? <Link to={href} className="note" onClick={() => setOpen(false)}>{body}</Link> : <span className="note">{body}</span>}
-                </li>
-              );
-            })}
-          </ul>
+          {/* New since you last looked, then Earlier; opening the list is what marks them seen */}
+          {!wait && (q.data?.events.length ?? 0) > 0 && [
+            ["New", q.data!.events.filter((e) => fresh.has(e.id))],
+            ["Earlier", q.data!.events.filter((e) => !fresh.has(e.id))],
+          ].map(([name, list]) => (list as Note[]).length > 0 && (
+            <section key={name as string} className="bell-group" aria-label={name as string}>
+              <h3 className="bell-sub">{name as string}{name === "New" && <small> · now marked seen</small>}</h3>
+              <ul>
+                {(list as Note[]).map((e) => {
+                  const href = hrefOf(slug, e.link);
+                  const isNew = fresh.has(e.id);
+                  const body = (
+                    <>
+                      <span className={`dot${isNew ? " on" : ""}`} aria-hidden="true" />
+                      <span className="what">
+                        <span className="sum">{isNew && <span className="sr-only">New: </span>}{e.summary}</span>
+                        <span className="muted small">{names.get(e.actorId) ?? "Someone"} · {ago(e.at)}{e.level === "critical" && <span className="tag imp">important</span>}</span>
+                      </span>
+                    </>
+                  );
+                  // Each one opens what it's about; something since removed stays as plain text
+                  return (
+                    <li key={e.id} className={`lvl-${e.level}${isNew ? " new" : ""}`}>
+                      {href ? <Link to={href} className="note" onClick={() => setOpen(false)}>{body}</Link> : <span className="note">{body}</span>}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
         </div>
       )}
     </div>

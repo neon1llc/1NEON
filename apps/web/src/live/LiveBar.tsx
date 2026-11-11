@@ -37,7 +37,8 @@ export function LiveBar({ player }: { player: Player }) {
   useEffect(() => player.subscribe(setV), [player]);
   const prev = player.sections[v.index - 1];
   const next = player.sections[v.index + 1];
-  const short = player.show.id !== PROJECT;
+  // One chapter on its own counts as a short: it offers the full story beside the other demos
+  const short = player.show.id !== PROJECT || player.focused;
 
   // The middle opens the list and pauses, so nothing moves while choosing
   const openList = () => {
@@ -121,7 +122,7 @@ export function LiveBar({ player }: { player: Player }) {
             <button className="live-now" onClick={openList} aria-expanded={list} aria-controls="live-list">
               <span className="live-title">{v.idle ? player.show.title : `${v.index + 1}/${player.sections.length} · ${v.title}`}</span>
               {/* Before starting: how long it takes, so the visitor knows before committing */}
-              <span className="live-cap">{v.idle ? `${player.show.length ?? "A few minutes"}. Start when you're ready.` : v.skipping ? "Catching up…" : v.caption || " "}</span>
+              <span className="live-cap">{v.idle ? `${player.show.length ?? "A few minutes"}. Start when you're ready.` : v.skipping ? v.caption || "Setting the scene…" : v.caption || " "}</span>
               <ChevronDown className="live-caret" size={14} aria-hidden="true" />
             </button>
           </div>
@@ -150,7 +151,7 @@ export function LiveBar({ player }: { player: Player }) {
         </ol>
         {(short || SHORTS.length > 0) && <p className="live-list-h">{short ? "Other demos" : "Short demos"}</p>}
         <ul>
-          {short && <li><a href="/1NEON/live?play=full"><span className="n">▸</span><span>The full story<small>A whole project, from a first sign-in to ongoing care · about 6 minutes</small></span></a></li>}
+          {short && <li><a href="/1NEON/live?play=full"><span className="n">▸</span><span>The full story<small>A whole project, from a first sign-in to ongoing care · about 8 minutes</small></span></a></li>}
           {SHORTS.filter((s) => s.id !== player.show.id).map((s) => (
             <li key={s.id}><a href={`/1NEON/live?play=${s.id}`}><span className="n">▸</span><span>{s.title}<small>{s.blurb}{s.length ? ` · ${s.length}` : ""}</small></span></a></li>
           ))}

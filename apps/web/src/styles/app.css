@@ -1042,3 +1042,137 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
 /* 1NEON's phone tab bar: Neo's launcher and window sit above it, safe area included (AUTH-UI01) */
 /* Only where that bar is on screen: the sign-in page has none, so Neo stays on the rain controls' line */
 @media (max-width: 640px) { :root:has(.tabbar) { --n1chat-bottom: calc(72px + env(safe-area-inset-bottom)); } }
+
+
+/* --- 1NEON's mark leads Home (2026-11-11) ---
+   The top bar is one fixed height, and the menu's mark row is that height too, so the mark and name sit
+   at the same spot in the top bar (Default), on the Mini rail, and in the open menu: opening the menu
+   lays its mark exactly over the top bar's. Both lead to Home */
+:root { --top-h: 60px; }
+.top { height: var(--top-h); padding-top: 0; padding-bottom: 0; }
+.top-brand { flex: none; display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 6px; margin-left: calc(10px - var(--gut)); margin-right: -4px; border-radius: var(--r-sm);
+  color: var(--accent); font: 700 14px var(--mono); letter-spacing: .08em; text-decoration: none; }
+.top-brand:hover { background: var(--accent-soft); }
+.top-brand:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.top-brand .mark-box { flex: none; width: 28px; height: 28px; display: inline-grid; place-items: center; }
+.top-brand svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 5; }
+/* Phones keep the mark alone, so the page's crumbs keep their room */
+@media (max-width: 480px) { .top-brand .lbl { display: none; } .top-brand { margin-right: -8px; } }
+/* The menu's mark row: the top bar's height, from the very top of the menu */
+.side .brand, .shell.mini .side:not(.open) .brand, .side.open .brand { height: var(--top-h) !important; min-height: var(--top-h) !important; margin-top: -8px; flex: none; }
+.side .brand { color: var(--accent); }
+/* The other fourteen rows share what's left of the height (the mark row now has its own) */
+.side { --row: clamp(24px, calc((100dvh - var(--demo-h, 0px) - 70px - var(--top-h) + 48px) / 14), 40px); }
+.side.open { --row: 40px; }
+/* Hovering the menu's mark row lights the same 40px pill the top bar's mark shows, not the whole row */
+.side .brand:hover { background: linear-gradient(var(--accent-soft), var(--accent-soft)) center / 100% 40px no-repeat; }
+
+
+/* --- Notifications, viewed (2026-11-11) ---
+   What was new when the list opened sits under "New": a filled dot, the summary in bold, and a green
+   edge. Everything else is under "Earlier" with a hollow dot. Importance is a word, not a dot color */
+.bell-sub { margin: 0; padding: 10px 14px 4px; font: 600 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.bell-sub small { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.bell-new { margin-left: 6px; font: 600 12px var(--mono); color: var(--accent); }
+.bell-list .dot { background: none; border: 1.5px solid var(--line-strong); box-sizing: border-box; }
+.bell-list .dot.on, .bell-list .lvl-critical .dot.on { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.bell-list .lvl-critical .dot:not(.on) { box-shadow: none; }
+.bell-list li.new { background: none; box-shadow: inset 3px 0 0 var(--accent); }
+.bell-list li.new .sum { font-weight: 600; }
+.bell-list li:not(.new) .what { color: var(--muted); }
+.bell-list li:not(.new) .what .sum { color: var(--text); opacity: .85; }
+.bell-list .tag.imp { margin-left: 6px; font-size: 10px; padding: 0 6px; }
+.bell-group + .bell-group { border-top: 1px solid var(--line); }
+/* Read by screen readers, not drawn */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* An edit's changes under its activity line, when there were more than the line could say */
+.changes { list-style: none; margin: 4px 0 0; padding: 0 0 0 10px; border-left: 2px solid var(--line); display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
+
+
+/* --- Home's calendar (2026-11-11) ---
+   One whole month, named at the top, with arrows, Today, and a jump. Days are buttons; the picked one
+   opens a panel under the month with what's on it and the add form. Below, the folds: Past, Overdue,
+   Upcoming, and Repeated, each a label with an arrow that points left closed and down open */
+.cal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.cal-head .section-h { margin: 0; }
+.cal-nav { display: flex; align-items: center; gap: 6px; }
+.cal-nav .icon-btn { width: 32px; height: 32px; }
+.cal-jump { width: auto; height: 32px; padding: 0 8px; font: 12px var(--mono); border-radius: 99px; }
+.cal-late { margin: 6px 0 0; }
+.strip.month { margin-top: 12px; }
+.strip.month .day { font: inherit; color: inherit; cursor: pointer; min-height: 48px; }
+.strip.month .day:hover { border-color: var(--line-strong); }
+.strip.month .day:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.strip.month .day.blank { background: none; cursor: default; }
+.strip.month .day.picked { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.strip.month .day.past { opacity: .55; }
+.strip.month .day.past.picked, .strip.month .day.past:hover { opacity: 1; }
+/* Someone's away: the day carries a soft amber band along its bottom */
+.strip.month .day.away { background: linear-gradient(to top, color-mix(in srgb, var(--amber) 22%, transparent) 4px, var(--bg) 4px); }
+/* The organization's own events: leave amber, office blue, meetings and care plan dates outlined */
+.mark.k-leave { background: var(--amber); border-radius: 2px; width: 10px; height: 5px; }
+.mark.k-office { background: #3b82c4; border-radius: 2px; }
+.mark.k-meeting { background: transparent; border: 2px solid var(--l2); width: 8px; height: 8px; }
+.mark.k-care { background: transparent; border: 2px solid var(--accent); border-radius: 2px; width: 8px; height: 8px; }
+.mark.k-other { background: var(--muted); }
+.mark.done { opacity: .45; }
+/* The picked day */
+.cal-day { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg); display: grid; gap: 10px; animation: rise .2s ease both; }
+.cal-day-head { display: flex; align-items: center; gap: 10px; }
+.cal-day-head .spacer { flex: 1; }
+.cal-day-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.cal-day-list li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; font-size: 14px; }
+.cal-day-list .t small { display: block; font: 11px var(--mono); color: var(--muted); }
+.cal-day-list a { color: inherit; }
+.cal-form { max-width: none; gap: 10px; }
+.cal-form .row2, .cal-form .row3 { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cal-form .row3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cal-form label { font-size: 13px; }
+.cal-form .form-acts { display: flex; gap: 8px; }
+@media (max-width: 560px) { .cal-form .row2, .cal-form .row3 { grid-template-columns: minmax(0, 1fr); } }
+/* Folds: the label, its count, and an arrow beside it; open, the arrow turns to point down. Where the
+   browser can, the content eases open and shut */
+.ag-group.fold > summary { display: flex; align-items: center; gap: 6px; width: fit-content; list-style: none; cursor: pointer; padding: 4px 0; user-select: none; -webkit-user-select: none; }
+.ag-group.fold > summary::-webkit-details-marker { display: none; }
+.ag-group.fold > summary h3 { margin: 0; }
+.ag-group.fold > summary h3 small { margin-left: 4px; font: 11px var(--mono); color: var(--muted); }
+.ag-group.fold .arr { display: inline-block; font: 13px var(--mono); color: var(--muted); transition: transform .2s ease; }
+.ag-group.fold[open] > summary .arr { transform: rotate(-90deg); }
+.ag-group.fold > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+.ag-group.fold .fold-body { padding-top: 2px; }
+.ag-group li.done a, .ag-group li.done .t { color: var(--muted); }
+.ag-group li .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-group .linkish { text-align: left; text-decoration: none; color: inherit; }
+.ag-group .linkish:hover { color: var(--accent); text-decoration: underline; }
+.agenda { gap: 6px; }
+:root { interpolate-size: allow-keywords; }
+.ag-group.fold::details-content { height: 0; overflow: clip; transition: height .28s ease, content-visibility .28s allow-discrete; }
+.ag-group.fold[open]::details-content { height: auto; }
+@media (prefers-reduced-motion: reduce) { .ag-group.fold::details-content { transition: none; } .ag-group.fold .arr { transition: none; } }
+
+
+/* --- Home: projects at a glance, away this week (2026-11-11) --- */
+.glance ul { list-style: none; margin: 0; padding: 0; }
+.glance li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "name stage health" "bar bar bar" "meta meta meta"; gap: 4px 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+.glance li:first-child { border-top: 0; }
+.glance .g-name { grid-area: name; color: inherit; text-decoration: none; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.glance .g-name:hover { color: var(--accent); }
+.glance .g-name .s { font: 12px var(--mono); color: var(--muted); font-weight: 400; }
+.glance .g-stage { grid-area: stage; display: inline-flex; align-items: center; gap: 6px; font: 12px var(--mono); color: var(--muted); }
+.glance .g-stage .badge { width: 20px; height: 20px; font-size: 10px; border-radius: 5px; display: inline-grid; place-items: center; }
+.glance li > .health, .glance li > [class*="health"] { grid-area: health; }
+.glance .g-bar { grid-area: bar; height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.glance .g-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .4s ease; }
+.glance .g-meta { grid-area: meta; font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.glance .g-meta a { color: var(--text); }
+.glance .section-h small a { font: 12px var(--sans); color: var(--accent); }
+@media (max-width: 520px) { .glance li { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name health" "stage stage" "bar bar" "meta meta"; } }
+.away .updates li { padding: 6px 0; }
+/* A stage section a link arrived at is marked for a moment */
+.stage-sec { scroll-margin-top: calc(var(--top-h) + 16px); border-radius: var(--r-sm); transition: background .6s ease; }
+.stage-sec.is-target { background: var(--accent-soft); }
+.cal-jump { padding-right: 28px; min-width: 112px; }
+.cal .ag-group li { grid-template-columns: 76px minmax(0, 1fr) auto; }
+@media (max-width: 520px) { .cal .ag-group li { grid-template-columns: 64px minmax(0, 1fr); } }
+.cal-day-head { flex-wrap: wrap; }
+.cal-day-head .btn { white-space: nowrap; }
