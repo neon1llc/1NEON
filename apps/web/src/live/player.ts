@@ -6,6 +6,7 @@
 
 import { devUser, liveEngine } from "../lib/api.ts";
 import { clearCache, navigate, refreshAll } from "../lib/nav.ts";
+import { opening } from "./opening.ts";
 import { SHORTS } from "./shorts.ts";
 import { PLAY, PROJECT, remember } from "./where.ts";
 
@@ -15,6 +16,9 @@ export interface Section {
   id: string;
   title: string;
   run: (s: Stage) => Promise<void>;
+  /** Maria's reason for coming, when a walkthrough starts here (a link from the FAQs): she thinks it on
+   * the sign-in screen, signs in for real, and walks to this section's page before it plays */
+  why?: string;
 }
 
 /** A show: the whole project, or a short demo of one thing. Shorts can start signed in, on a page */
@@ -376,8 +380,19 @@ export class Player {
     fn(this.view);
     return () => void this.listeners.delete(fn);
   }
+  // The play clock: wall time minus time spent paused. Every wait, glide, and "can't find it yet" limit
+  // reads it, so a pause in the middle of a step (or a slow change of speed in the menu, which pauses)
+  // doesn't use up the step's time and turn into a false stumble, a restart, and a replay from the start
+  private pausedTotal = 0;
+  private pausedAt?: number;
+  clock() {
+    return performance.now() - this.pausedTotal - (this.pausedAt === undefined ? 0 : performance.now() - this.pausedAt);
+  }
   private emit(patch: Partial<View>) {
+    const was = this.view?.paused;
     this.view = { ...this.view, ...patch };
+    if (!was && this.view.paused) this.pausedAt = performance.now();
+    else if (was && !this.view.paused && this.pausedAt !== undefined) { this.pausedTotal += performance.now() - this.pausedAt; this.pausedAt = undefined; }
     // Moving on its own: the portal underneath goes inert; paused or done, it's live again
     const now = this.started && !this.view.paused && !this.view.done;
     if (now !== playing) { playing = now; isolate(); }
@@ -467,16 +482,28 @@ export class Player {
         this.emit({ skipping: true, paused: false, done: false, index: i, title: this.sections[i]!.title, caption: "Catching up…", progress: 0 });
         for (let k = from; k < i; k++) {
           current = k;
-          this.save(k, engine);
+          await this.save(k, engine);
           await this.sections[k]!.run(this.stage(token));
         }
         this.fast = false;
         this.cursor?.hide(false);
+        // Started partway in (a link from the FAQs): the story so far is in place, but she still comes
+        // in the front door. Signed out, she thinks why she's here, signs in, and walks to the page
+        if (i === this.first && devUser.get()) {
+          const path = location.pathname.replace(/^\/1NEON\/live/, "") || "/";
+          devUser.set("");
+          clearCache();
+          navigate("/");
+          scrollTo({ top: 0 });
+          await sleep(300);
+          this.emit({ skipping: false, caption: "", progress: 0 });
+          await opening(`${this.sections[i]!.id}-in`, "Maria opens 1NEON and signs in", this.sections[i]!.why ?? "Let me sign in to 1NEON.", path).run(this.stage(token));
+        }
       }
       // Then play from i to the end at watching speed
       for (let k = i; k < this.sections.length; k++) {
         current = k;
-        this.save(k, engine);
+        await this.save(k, engine);
         this.steps = 0;
         remember({ show: this.show.id as never, at: this.sections[k]!.id });
         this.emit({ index: k, title: this.sections[k]!.title, caption: "", progress: 0, skipping: false, done: false, paused: false });
@@ -513,9 +540,19 @@ export class Player {
     }
   }
 
-  // Save the data and the page at a section's start, the first time it's reached
-  private save(k: number, engine: Awaited<ReturnType<typeof liveEngine>>) {
+  // Save the data and the page at a section's start, the first time it's reached. The page is read
+  // once the address has stopped changing: a section that ends on a click which navigates after a
+  // save (Create project) would otherwise leave the next section's start on the old page, and going
+  // Back to it would fail, restart, and replay everything from the beginning
+  private async save(k: number, engine: Awaited<ReturnType<typeof liveEngine>>) {
     if (!engine || this.snaps.has(k)) return;
+    const end = performance.now() + 2500;
+    let last = location.pathname, since = performance.now();
+    while (performance.now() < end && performance.now() - since < 400) {
+      await sleep(50);
+      if (location.pathname !== last) { last = location.pathname; since = performance.now(); }
+    }
+    if (this.snaps.has(k)) return;
     this.snaps.set(k, { data: engine.snapshot(), path: location.pathname.replace(/^\/1NEON\/live/, "") || "/", who: devUser.get() });
   }
 
@@ -558,20 +595,20 @@ export class Player {
     };
     const pause = async (ms: number) => {
       if (p.fast) return void (await frame());
-      const end = performance.now() + p.pace(ms);
-      while (performance.now() < end) {
+      const end = p.clock() + p.pace(ms);
+      while (p.clock() < end) {
         await tick();
-        await sleep(Math.min(80, end - performance.now()));
+        await sleep(Math.min(80, end - p.clock()));
       }
     };
     // Wait for a target to appear, up to a few seconds (the page may still be loading)
     const waitFor = async (t: Target, ms = 6000) => {
-      const end = performance.now() + ms;
+      const end = p.clock() + ms;
       for (;;) {
         await tick();
         const el = find(t);
         if (el) return el;
-        if (performance.now() > end) throw new Error(`live: can't find ${typeof t === "function" ? "a target" : JSON.stringify(t)}`);
+        if (p.clock() > end) throw new Error(`live: can't find ${typeof t === "function" ? "a target" : JSON.stringify(t)}`);
         await sleep(60);
       }
     };
@@ -585,10 +622,10 @@ export class Player {
       }
       const sx = c.x, sy = c.y;
       const ms = p.pace(Math.max(280, Math.min(950, Math.hypot(x - sx, y - sy) * 1.1)));
-      const t0 = performance.now();
+      const t0 = p.clock();
       for (;;) {
         await tick();
-        const t = Math.min(1, (performance.now() - t0) / ms);
+        const t = Math.min(1, (p.clock() - t0) / ms);
         const k = ease(t);
         c.x = sx + (x - sx) * k;
         c.y = sy + (y - sy) * k;
@@ -642,10 +679,10 @@ export class Player {
       think: async (text: string) => {
         await tick();
         if (p.fast) return;
-        const left = p.lastThought.at + p.lastThought.read - performance.now();
+        const left = p.lastThought.at + p.lastThought.read - p.clock();
         if (left > 0) await pause(left / p.pace(1));
         p.cursor!.thought.say(text, p.cursor!.x, p.cursor!.y);
-        p.lastThought = { at: performance.now(), read: p.pace(450 + text.length * 22) };
+        p.lastThought = { at: p.clock(), read: p.pace(450 + text.length * 22) };
       },
       /** Wait until something is on screen */
       waitFor,
@@ -745,11 +782,11 @@ export class Player {
           const sx = p.cursor!.x, sy = p.cursor!.y;
           const tx = rb.left + Math.min(rb.width / 2, 70), ty = rb.top + 70;
           const ms = p.fast || calm() ? 0 : p.pace(1200);
-          const t0 = performance.now();
+          const t0 = p.clock();
           // Carry the ghost with the cursor, easing in and out, tilting a little mid-air
           for (;;) {
             await tick();
-            const t = ms ? Math.min(1, (performance.now() - t0) / ms) : 1;
+            const t = ms ? Math.min(1, (p.clock() - t0) / ms) : 1;
             const k = ease(t);
             p.cursor!.x = sx + (tx - sx) * k;
             p.cursor!.y = sy + (ty - sy) * k;

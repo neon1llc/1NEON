@@ -1,10 +1,11 @@
 // apps/web/src/live/preview.ts - The short preview /1NEON/live opens with: one fictional request
-// becoming a handover in about a minute, on the real portal. Request, compare, approve,
+// becoming a handover in about two minutes, signed in for real, on the real portal. Request, compare, approve,
 // see progress, receive the handover. The full story (?play=full) and the short demos stay a pick
 // away in the controls' menu.
 
 
 import { liveEngine } from "../lib/api.ts";
+import { opening } from "./opening.ts";
 import type { Show } from "./player.ts";
 import { MARIA } from "./seed.ts";
 import { base, finishWork, handOver, KEY, moveTo, planWork, proposeOptions, tid } from "./story.ts";
@@ -14,30 +15,32 @@ import { base, finishWork, handOver, KEY, moveTo, planWork, proposeOptions, tid 
 const PROJECT = `${base}/projects/${KEY}`;
 
 
-/** Maria's project, made quietly as the preview starts, so the first thing on screen is the request */
+/** Maria's project, made quietly before she signs in (she set it up earlier), so the walk leads to it */
 async function startProject() {
   const engine = (await liveEngine())!;
   await engine.actAs(MARIA, `/t/${await tid()}/projects`, "POST", { name: "Orders without retyping", template: "workflow_automation", idempotencyKey: "live-preview-project" });
 }
 
 
-/** About 60 to 70 seconds at the default speed (measured end to end in a desktop browser) */
+// The opening: Maria's reason, the sign-in, and the walk to the project's Needs tab
+const IN = opening("p-in", "Maria, who owns a fictional bakery, opens 1NEON", "The nightly orders take us an hour of retyping. Let me sign in and ask Pradeep for help.", `${PROJECT}/needs`);
+
+
+/** About two minutes at the default speed: the sign-in and the walk to the project, then the five steps */
 export const PREVIEW: Show = {
   id: "preview",
   title: "The short preview",
   blurb: "Request, compare, approve, progress, and handover",
-  length: "about a minute and a half",
-  who: MARIA,
-  path: `${base}/workspace`,
+  length: "about two minutes",
   end: "That's the short version. The full story, or the interactive demo, goes further.",
   sections: [
+    // She comes in the front door: why she's here, the emailed code, and the walk to the project's Needs
+    { ...IN, run: async (s) => { await s.others(startProject, 0); await IN.run(s); } },
     {
       id: "p-request",
       title: "Ask for something",
       run: async (s) => {
-        await s.others(startProject, 200);
-        await s.open(`${PROJECT}/needs`, 700);
-        await s.say("Maria, who owns a fictional bakery, asks neon1 for help with nightly orders");
+        await s.say("She asks neon1 for help with the nightly orders");
         await s.think("I'll say what I need in one sentence.");
         await s.click({ sel: "button", text: "+ Add request" }, 500);
         const one = "form.sentence fieldset:nth-of-type(1)";
