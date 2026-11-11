@@ -417,4 +417,73 @@ const texts: Show = {
 
 
 /** Every short demo, in menu order */
-export const SHORTS: Show[] = [PREVIEW, invite, passkey, authenticator, texts];
+/** The calendar: a few days off and a care plan's monthly call, added on Home, where everyone sees them */
+const ISO = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+// The day button for a date, once its month is the one showing
+const dayButton = (iso: string) => () => [...document.querySelectorAll<HTMLElement>(".strip.month .day:not(.blank)")][Number(iso.slice(8)) - 1];
+/** Show a date's month, stepping forward with the arrow when it's next month */
+async function toMonth(s: Stage, iso: string) {
+  const shown = document.querySelector(".cal-head h2")?.textContent ?? "";
+  const want = new Date(iso + "T12:00:00").toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  if (shown !== want) {
+    await s.think("That's next month. One month on.");
+    await s.click({ sel: ".cal-nav .icon-btn", nth: 1 }, 900);
+  }
+}
+const calendar: Show = {
+  id: "calendar",
+  title: "Plan around time off",
+  blurb: "Leave, office days, and a monthly call on Home's calendar",
+  length: "about a minute",
+  end: "On the calendar, where neon1 and the team plan around it.",
+  sections: [
+    opening("calendar-in", "Maria opens 1NEON to add her days off", "I'm away at the flour mill for two days, and Pradeep wants a monthly check-in. Let me put both on the calendar."),
+    {
+      id: "calendar-leave",
+      title: "Days off",
+      run: async (s) => {
+        const off = ISO(3), back = ISO(4);
+        await s.say("Home's calendar shows a whole month, named at the top");
+        await s.hover(".cal-head h2", 900);
+        await s.think("The whole month. My days off are this week.");
+        await toMonth(s, off);
+        await s.click(dayButton(off), 700);
+        await s.say("A day opens with a short form; leave can name who's away");
+        await s.choose("#ce-kind", "leave", 400);
+        await s.think("Leave, for me.");
+        await s.choose("#ce-who", [...document.querySelectorAll<HTMLOptionElement>("#ce-who option")].find((o) => o.text.startsWith("Maria"))?.value ?? "", 400);
+        await s.type("#ce-title", "Maria at the flour mill", 300);
+        await s.choose("#ce-end", back, 500);
+        await s.click({ sel: ".cal-form button", text: "Add" }, 1200);
+        await s.say("Both days carry a band, and Home lists who's away this week");
+        await s.hover({ sel: ".away h2" }, 1100);
+        await s.think("There. Pradeep will see I'm out.");
+      },
+    },
+    {
+      id: "calendar-care",
+      title: "A monthly call",
+      run: async (s) => {
+        const call = ISO(9);
+        await s.say("A care plan's check-in can repeat every month");
+        await s.top();
+        await toMonth(s, call);
+        await s.click(dayButton(call), 700);
+        await s.choose("#ce-kind", "care", 400);
+        await s.type("#ce-title", "Monthly check-in with Pradeep", 300);
+        await s.choose("#ce-time", "16:00", 400);
+        await s.choose("#ce-rep", "monthly", 500);
+        await s.think("Every month, at four.");
+        await s.click({ sel: ".cal-form button", text: "Add" }, 1200);
+        await s.say("Repeated lists what comes back each week or month");
+        await s.click({ sel: ".ag-group summary", text: "Repeated" }, 900);
+        await s.hover({ sel: ".ag-group li", text: "Monthly check-in" }, 1200);
+        await s.say("Each change goes in the activity record, saying exactly what was added");
+        await s.hover({ sel: "[data-tour=activity] li", text: "calendar" }, 1600);
+      },
+    },
+  ],
+};
+
+
+export const SHORTS: Show[] = [PREVIEW, invite, passkey, authenticator, texts, calendar];

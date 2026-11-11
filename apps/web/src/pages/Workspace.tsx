@@ -1,5 +1,6 @@
-// apps/web/src/pages/Workspace.tsx - Home inside an organization: what needs you, a setup checklist
-// until it's done, the headline numbers, and recent activity.
+// apps/web/src/pages/Workspace.tsx - Home inside an organization: what needs you, the calendar, every
+// project at a glance, a setup checklist until it's done, the headline numbers, who's away this week,
+// project updates, and recent activity with what each edit changed.
 
 
 import { KIND_LAYER, type ItemKind } from "@1neon/domain";
@@ -10,7 +11,7 @@ import { ComingUp } from "../components/ComingUp.tsx";
 import { Problem, Stale } from "../components/Reads.tsx";
 import { useHelp } from "../components/Help.tsx";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
-import { ago, Health, layerSlug } from "../components/ui.tsx";
+import { ago, Changes, dateLabel, Health, LayerBadge, layerSlug } from "../components/ui.tsx";
 import type { Project } from "@1neon/domain";
 type HealthT = Project["health"];
 import { qk } from "../lib/hooks.ts";
@@ -89,6 +90,31 @@ export function WorkspacePage() {
         </section>
 
         <ComingUp tid={org.id} base={base} />
+        {/* Every live project at a glance: where it is, how far along, and what's next */}
+        {(ws.data?.glance?.length ?? 0) > 0 && (
+          <section className="card glance" data-tour="glance">
+            <h2 className="section-h">Projects at a glance <small><Link to={`${base}/projects`}>All projects</Link></small></h2>
+            <ul>
+              {ws.data!.glance!.map((g) => {
+                const pct = g.total ? Math.round((g.done / g.total) * 100) : 0;
+                return (
+                  <li key={g.key}>
+                    <Link to={`${base}/projects/${g.key}`} className="g-name"><span className="s">{g.key}</span> {g.name}</Link>
+                    <span className="g-stage"><LayerBadge layer={g.layer} /> {g.stage}</span>
+                    <Health value={g.health} />
+                    <span className="g-bar" role="img" aria-label={g.total ? `${g.done} of ${g.total} done` : "No work yet"}><i style={{ width: `${pct}%` }} /></span>
+                    <span className="g-meta">
+                      {g.total ? `${g.done} of ${g.total} done` : "No work yet"}
+                      {g.overdue > 0 && <span className="tag warn">{g.overdue} overdue</span>}
+                      {g.blocked > 0 && <span className="tag warn">{g.blocked} blocked</span>}
+                      {g.next ? <> · next: <Link to={`${base}/projects/${g.key}/${layerSlug(KIND_LAYER[g.next.kind as ItemKind] ?? "needs")}#item-${g.next.itemId}`}>{g.next.title}</Link> {dateLabel(g.next.date)}</> : g.targetDate && !g.closed ? <> · target {dateLabel(g.targetDate)}</> : null}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
         </div>
         <div className="home-side">
           {/* Setup, until every step is done */}
@@ -109,11 +135,23 @@ export function WorkspacePage() {
           {/* The headline numbers, each a way in */}
           <nav className="stats" aria-label="At a glance">
             <Link to={`${base}/projects`}><b>{c?.projects ?? "–"}</b> projects</Link>
-            <Link to={`${base}/workflow`}><b>{c?.deciding ?? "–"}</b> deciding</Link>
-            <Link to={`${base}/workflow`}><b>{c?.building ?? "–"}</b> building</Link>
+            {/* Deciding opens Needs at its Decide stage; building opens the Execute layer, each listing just those projects */}
+            <Link to={`${base}/layer/needs#stage-decide`} title="Projects waiting on a decision"><b>{c?.deciding ?? "–"}</b> deciding</Link>
+            <Link to={`${base}/layer/execute`} title="Projects in the Execute layer"><b>{c?.building ?? "–"}</b> building</Link>
             <Link to={`${base}/people`}><b>{c?.people ?? "–"}</b> people{c?.invited ? <small>{c.invited} invited</small> : null}</Link>
             <Link to={`${base}/documents`}><b>{c?.documents ?? "–"}</b> files</Link>
           </nav>
+          {/* Who's away in the next seven days, from leave on the calendar */}
+          {(ws.data?.away?.length ?? 0) > 0 && (
+            <section className="card away">
+              <h2 className="section-h">Away this week</h2>
+              <ul className="updates">
+                {ws.data!.away!.map((a, i) => (
+                  <li key={i}><b>{a.name}</b> <span className="muted small">{dateLabel(a.date)}{a.endDate ? ` to ${dateLabel(a.endDate)}` : ""}{a.title && a.title !== a.name ? ` · ${a.title}` : ""}</span></li>
+                ))}
+              </ul>
+            </section>
+          )}
           {/* Each project's latest written update, with its health */}
           {(ws.data?.updates?.length ?? 0) > 0 && (
             <section className="card">
@@ -135,7 +173,7 @@ export function WorkspacePage() {
             {ws.data && ws.data.activity.length === 0 && <p className="muted small">No activity yet.</p>}
             <ul className="feed">
               {ws.data?.activity.slice(0, 8).map((a) => (
-                <li key={a.id}><span>{a.summary}{a.by && !a.summary.includes(a.by) && <small className="by">{a.by}</small>}</span><time dateTime={a.at}>{ago(a.at)}</time></li>
+                <li key={a.id}><span>{a.summary}{a.by && !a.summary.includes(a.by) && <small className="by">{a.by}</small>}<Changes e={a} /></span><time dateTime={a.at}>{ago(a.at)}</time></li>
               ))}
             </ul>
           </section>

@@ -3,7 +3,7 @@
 // hand.
 
 
-import type { AuditEvent, DocumentRecord, Item, Member, Project, Tenant, User } from "@1neon/domain";
+import type { AuditEvent, CalEvent, DocumentRecord, Item, Member, Project, Tenant, User } from "@1neon/domain";
 import { newId, themeOf } from "@1neon/domain";
 import { ConflictError, type Guard, type Row, type TableStore, type WriteOp } from "./types.ts";
 
@@ -50,6 +50,8 @@ export const keys = {
   // Comments on one item, in time order
   comment: (tid: string, pid: string, iid: string, at: string, cid: string) => ({ PK: `T#${tid}#P#${pid}`, SK: `COMMENT#${iid}#${at}#${cid}` }),
   audit: (tid: string) => `T#${tid}#AUDIT`,
+  // The organization's own calendar events, in its partition beside its projects
+  calEvent: (tid: string, eid: string) => ({ PK: `T#${tid}`, SK: `CAL#${eid}` }),
 };
 
 
@@ -475,6 +477,22 @@ export class Repo {
     const k = keys.edit(tid, pid, recordId);
     const current = await this.table.get(k.PK, k.SK);
     if (current?.userId === uid) await this.table.write([{ delete: k }]);
+  }
+
+  // --- Calendar events -----------------------------------------------------
+
+  // Every calendar event of the organization's own
+  async listCalEvents(tid: string) {
+    return (await this.table.query(`T#${tid}`, "CAL#")).map((r) => entity<CalEvent>(r)!);
+  }
+
+  async getCalEvent(tid: string, eid: string) {
+    const k = keys.calEvent(tid, eid);
+    return entity<CalEvent>(await this.table.get(k.PK, k.SK));
+  }
+
+  calEventOp(e: CalEvent, guard: Guard): WriteOp {
+    return { put: { ...keys.calEvent(e.tenantId, e.id), type: "calevent", ...e }, guard };
   }
 
   // --- Audit ---------------------------------------------------------------

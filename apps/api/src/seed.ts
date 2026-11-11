@@ -2,7 +2,7 @@
 // sample clients.
 
 
-import { DEFAULT_STAGES, Item, formatClientId, newId, rankBetween, type Member, type Project, type Tenant, type User } from "@1neon/domain";
+import { CalEvent, DEFAULT_STAGES, Item, formatClientId, newId, rankBetween, type Member, type Project, type Tenant, type User } from "@1neon/domain";
 import type { Repo } from "./store/repo.ts";
 
 
@@ -95,6 +95,15 @@ export async function seed(repo: Repo, operatorEmail = "pradeep@neon1.tech") {
   await item(mig, "check", "Backups restored once as a test", { status: "done" });
   await project(harbor, "NET-1", "Guest Wi-Fi separated from the shop network", "intake", "not_started", "", [], 1);
   await project(neon1, "PRJ-1", "Build 1NEON", "build", "on_track", "The neon1 client portal, built in the open with ourselves as the first client.", [{ userId: pradeep.id, role: "lead_engineer" }], 1);
+
+  // Acme's own calendar: Dana's days off, an office closure, and the care plan's monthly check-in
+  const cal = async (t: Tenant, e: Partial<CalEvent> & Pick<CalEvent, "title" | "kind" | "date">) => {
+    const ev = CalEvent.parse({ tenantId: t.id, id: newId("e"), repeat: "none", notes: "", version: 1, createdAt: t0, updatedAt: t0, updatedBy: pradeep.id, ...e });
+    await repo.table.write([repo.calEventOp(ev, { create: true })]);
+  };
+  await cal(acme, { title: "Dana on vacation", kind: "leave", personId: dana.id, date: day(5).slice(0, 10), endDate: day(8).slice(0, 10) });
+  await cal(acme, { title: "Office closed for staff training", kind: "office", date: day(15).slice(0, 10) });
+  await cal(acme, { title: "Monthly check-in call", kind: "care", date: day(9).slice(0, 10), time: "16:00", repeat: "monthly", projectId: backup.id });
 
   return { pradeep, dana, raj, lee, neon1, acme, harbor };
 }

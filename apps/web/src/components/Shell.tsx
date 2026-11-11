@@ -621,6 +621,8 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
   useEffect(() => { if (org) try { localStorage.setItem(LAST_ORG, org.slug); } catch { /* storage blocked: falls back below */ } }, [org]);
   const navOrg = org ?? (all ? undefined : lastOrg(me.orgs));
   const base = navOrg ? `/o/${navOrg.slug}` : "";
+  // Home: the organization's Home, All clients' board for an operator there, or the app's landing
+  const home = navOrg ? `${base}/workspace` : all ? "/all/workflow" : "/";
   return (
     <div className={`shell${mini ? " mini" : ""}`}>
       {/* First stop for the keyboard: straight to the page, past the menu and top bar. Focus moves in
@@ -630,12 +632,14 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
       {/* Scrim behind the full menu; a tap outside closes it */}
       {open && <div className="scrim" onClick={() => setOpen(false)} aria-hidden="true" />}
       <aside ref={side} className={`side${open ? " open" : ""}`} aria-label="Menu" inert={tucked}>
-        <button className="brand" type="button" onClick={() => setOpen(!open)} aria-expanded={open} title={open ? "Close the menu" : "Open the menu"}>
+        {/* The mark and name lead Home, from the open menu and the Mini rail alike. It sits exactly where
+            the top bar's own mark sits, so opening the menu covers one with the other */}
+        <Link className="brand" to={home} onClick={() => setOpen(false)} title="Home" aria-label="1NEON, Home">
           <span className="ico mark" aria-hidden="true">
             <Rings />
           </span>
           <span className="lbl">1NEON</span>
-        </button>
+        </Link>
         {/* Organization: the full chooser when there's room for labels, its initials otherwise */}
         <div className="org-full"><OrgChooser current={org} all={all} /></div>
         <button className="org-mini" type="button" onClick={() => setOpen(true)} title={all ? "All clients" : navOrg?.name ?? "Choose an organization"}>
@@ -685,6 +689,8 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
         )}
         {/* Top bar: the menu button (always: it costs no room), the page's crumbs, then search and help */}
         <header className="top">
+          {/* The mark and name, Home's way in, before the menu button; in Mini the rail shows the mark instead */}
+          {!mini && <Link className="top-brand" to={home} title="Home" aria-label="1NEON, Home"><span className="mark-box" aria-hidden="true"><Rings /></span><span className="lbl">1NEON</span></Link>}
           <button className="icon-btn menu-btn" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Menu" title="Menu" data-tour="menu"><MenuIcon size={18} /></button>
           <div className="crumb">{top}</div>
           <span className="spacer" />

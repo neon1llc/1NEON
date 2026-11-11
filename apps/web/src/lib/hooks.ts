@@ -41,7 +41,7 @@ export function useMembers(tid: string) {
  * Coming up are computed from the same records, so they go stale with them (AUTH-P04). Files lives
  * under ["project", tid, "docs"] and is covered by the "project" prefix
  */
-export const ORG_QUERY_ROOTS = ["projects", "project", "workspace", "members", "insights", "upcoming"] as const;
+export const ORG_QUERY_ROOTS = ["projects", "project", "workspace", "members", "insights", "upcoming", "calendar"] as const;
 export function useRefresh(tid: string) {
   const qc = useQueryClient();
   return () => {

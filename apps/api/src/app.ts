@@ -30,6 +30,7 @@ import { notificationRoutes } from "./routes/notifications.ts";
 import { orgRoutes } from "./routes/orgs.ts";
 import { projectRoutes } from "./routes/projects.ts";
 import { workspaceRoutes } from "./routes/workspace.ts";
+import { calendarRoutes } from "./routes/calendar.ts";
 import { e164 } from "./sms.ts";
 
 
@@ -150,9 +151,10 @@ export function createApp(d: Deps) {
     await next();
   }
 
-  // Tenant routes, in their original order: overview, notifications, people, projects, items,
+  // Tenant routes, in their original order: overview, calendar, notifications, people, projects, items,
   // comments, edit markers, documents
   workspaceRoutes(app, k);
+  calendarRoutes(app, k);
   notificationRoutes(app, k);
   memberRoutes(app, k);
   projectRoutes(app, k);

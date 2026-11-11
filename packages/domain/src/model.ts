@@ -426,6 +426,9 @@ export const AuditEvent = z.object({
   action: z.string().max(40),
   target: z.string().max(160),
   summary: z.string().max(300),
+  // Each change an edit made, in words ("health At risk → On track"); missing on events from before
+  // changes were recorded, and on events that are one thing (a comment, an approval)
+  details: z.array(z.string().max(200)).max(12).optional(),
 });
 export type AuditEvent = z.infer<typeof AuditEvent>;
 
@@ -498,4 +501,63 @@ export function completionAfter(prev: Pick<Item, "status" | "completedAt"> | und
  */
 export function assessed(health: Health, by: string, at: string): { assessedBy?: string; assessedAt?: string } {
   return health === "not_started" ? { assessedBy: undefined, assessedAt: undefined } : { assessedBy: by, assessedAt: at };
+}
+
+
+/**
+ * A calendar event of the organization's own, beside the dates its projects carry: someone's leave, an
+ * office closure or event, a meeting, a care plan's monthly call or re-check. Anything that can move
+ * when work gets done. A repeat makes it recur weekly or monthly from its first date (until a last one)
+ */
+export const CalEventKind = z.enum(["leave", "office", "meeting", "care", "other"]);
+export type CalEventKind = z.infer<typeof CalEventKind>;
+export const CalRepeat = z.enum(["none", "weekly", "monthly"]);
+export const CalEvent = z.object({
+  tenantId: id,
+  id: id,
+  title: z.string().trim().min(1).max(120),
+  kind: CalEventKind,
+  // First (or only) day; endDate makes it span days (leave, a conference)
+  date: z.string().date(),
+  endDate: z.string().date().optional(),
+  // A time of day (24-hour HH:MM, the organization's time zone); none means all day
+  time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+  repeat: CalRepeat.default("none"),
+  // The last day a repeat runs; none means it keeps going
+  until: z.string().date().optional(),
+  // Who it's about (someone's leave), and the project it touches, both optional
+  personId: id.optional(),
+  projectId: id.optional(),
+  notes: z.string().max(500).default(""),
+  ...versioned,
+});
+export type CalEvent = z.infer<typeof CalEvent>;
+
+
+/** The days in [from, to] an event falls on (its first day for a span); a repeat recurs on the same
+ * weekday (weekly) or day of the month (monthly, the month's last day when it's shorter) */
+export function occurrences(e: Pick<CalEvent, "date" | "repeat" | "until">, from: string, to: string): string[] {
+  const last = e.until && e.until < to ? e.until : to;
+  if (e.repeat === "none" || !e.repeat) return e.date >= from && e.date <= to ? [e.date] : [];
+  const out: string[] = [];
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  if (e.repeat === "weekly") {
+    let d = new Date(e.date + "T00:00:00Z");
+    // Jump close to the range, then step a week at a time
+    const gap = Math.floor((Date.parse(from + "T00:00:00Z") - d.getTime()) / (7 * 864e5));
+    if (gap > 0) d = new Date(d.getTime() + gap * 7 * 864e5);
+    for (; iso(d) <= last; d = new Date(d.getTime() + 7 * 864e5)) if (iso(d) >= from && iso(d) >= e.date) out.push(iso(d));
+    return out;
+  }
+  const day = Number(e.date.slice(8, 10));
+  let y = Number(from.slice(0, 4)), m = Number(from.slice(5, 7)) - 1;
+  for (let k = 0; k < 400; k++) {
+    const len = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    const d = iso(new Date(Date.UTC(y, m, Math.min(day, len))));
+    if (d > last) break;
+    if (d >= from && d >= e.date) out.push(d);
+    m++;
+    if (m > 11) { m = 0; y++; }
+  }
+  return out;
 }

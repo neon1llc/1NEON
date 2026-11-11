@@ -3,7 +3,7 @@
 
 import { NotifyPrefs } from "./notify.ts";
 import { z } from "zod";
-import { AccessLevel, Health, ItemKind, Layer, ProjectRole, Theme, Tour, email, id } from "./model.ts";
+import { AccessLevel, CalEventKind, CalRepeat, Health, ItemKind, Layer, ProjectRole, Theme, Tour, email, id } from "./model.ts";
 
 
 // Organizations (operator only)
@@ -144,4 +144,32 @@ export const CreateDocInput = z.object({
   layer: Layer,
   projectId: id.optional(),
   itemId: id.optional(),
+});
+
+
+// A calendar event of the organization's own (model.ts CalEvent); clearing an optional field sends null
+export const CreateCalEventInput = z.object({
+  title: z.string().trim().min(1).max(120),
+  kind: CalEventKind,
+  date: z.string().date(),
+  endDate: z.string().date().optional(),
+  time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+  repeat: CalRepeat.default("none"),
+  until: z.string().date().optional(),
+  personId: id.optional(),
+  projectId: id.optional(),
+  notes: z.string().max(500).default(""),
+});
+export const UpdateCalEventInput = z.object({
+  version: z.number().int(),
+  title: z.string().trim().min(1).max(120).optional(),
+  kind: CalEventKind.optional(),
+  date: z.string().date().optional(),
+  endDate: z.string().date().nullable().optional(),
+  time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+  repeat: CalRepeat.optional(),
+  until: z.string().date().nullable().optional(),
+  personId: id.nullable().optional(),
+  projectId: id.nullable().optional(),
+  notes: z.string().max(500).optional(),
 });

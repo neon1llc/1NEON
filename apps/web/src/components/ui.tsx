@@ -375,3 +375,12 @@ export function Icon({ name }: { name: IconName }) {
     </span>
   );
 }
+
+
+/** An activity entry's changes, one per line, when its summary couldn't carry them all (a long edit
+ * says "and 3 more"); short edits already read in full in the summary, so nothing repeats */
+export function Changes({ e }: { e: { summary: string; details?: string[] } }) {
+  const all = e.details ?? [];
+  if (!all.length || all.every((d) => e.summary.includes(d))) return null;
+  return <ul className="changes">{all.map((d, i) => <li key={i}>{d}</li>)}</ul>;
+}

@@ -75,7 +75,7 @@ const READABLE = [
   /^\/me$/,
   /^\/all\/projects$/,
   /^\/t\/[A-Za-z0-9_-]{1,64}$/,
-  /^\/t\/[A-Za-z0-9_-]{1,64}\/(workspace|projects|members|upcoming|insights|activity|notifications|docs)$/,
+  /^\/t\/[A-Za-z0-9_-]{1,64}\/(workspace|projects|members|upcoming|calendar|insights|activity|notifications|docs)$/,
   /^\/t\/[A-Za-z0-9_-]{1,64}\/projects\/[A-Za-z0-9_-]{1,64}$/,
   /^\/t\/[A-Za-z0-9_-]{1,64}\/projects\/[A-Za-z0-9_-]{1,64}\/items\/[A-Za-z0-9_-]{1,64}\/comments$/,
 ];
@@ -95,7 +95,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "read",
     description:
-      "GET one 1NEON API address as the signed-in person and return its JSON (cut at 24,000 characters). Allowed: /me (profile, organizations with id, slug, clientId, access); /all/projects (neon1 only); /t/{tid} (organization with its stages); /t/{tid}/workspace (Home: what needs this person, recent activity, setup counts); /t/{tid}/projects (projects: id, key, name, stageId, health, targetDate, people); /t/{tid}/projects/{pid} (one project with its items, files, and who is editing); /t/{tid}/projects/{pid}/items/{iid}/comments; /t/{tid}/members (people with userId, access, status); /t/{tid}/upcoming; /t/{tid}/insights; /t/{tid}/activity; /t/{tid}/notifications; /t/{tid}/docs (files). {tid} is an organization's id (not its slug) and {pid} a project's id (not its key).",
+      "GET one 1NEON API address as the signed-in person and return its JSON (cut at 24,000 characters). Allowed: /me (profile, organizations with id, slug, clientId, access); /all/projects (neon1 only); /t/{tid} (organization with its stages); /t/{tid}/workspace (Home: what needs this person, recent activity, setup counts); /t/{tid}/projects (projects: id, key, name, stageId, health, targetDate, people); /t/{tid}/projects/{pid} (one project with its items, files, and who is editing); /t/{tid}/projects/{pid}/items/{iid}/comments; /t/{tid}/members (people with userId, access, status); /t/{tid}/upcoming; /t/{tid}/calendar (this month: work due, targets, and the organization's own events such as leave and meetings); /t/{tid}/insights; /t/{tid}/activity; /t/{tid}/notifications; /t/{tid}/docs (files). {tid} is an organization's id (not its slug) and {pid} a project's id (not its key).",
     input_schema: { type: "object", properties: { path: { type: "string", description: "The address, starting with /" } }, required: ["path"], additionalProperties: false },
   },
   {

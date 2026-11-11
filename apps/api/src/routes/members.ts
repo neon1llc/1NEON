@@ -2,11 +2,24 @@
 // through the outbox with the membership), resends, and access changes.
 
 
-import { InviteInput, UpdateMemberInput, newId, type Member, type Tenant, type User } from "@1neon/domain";
+import { InviteInput, UpdateMemberInput, changeRecord, newId, type Member, type Tenant, type User } from "@1neon/domain";
 import { actorId, body, defined, fail, need, now, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
 import { outboxOp } from "../outbox.ts";
 import { ConflictError } from "../store/types.ts";
+
+
+// A person's access, title, or status change, in words ("access Member → Admin")
+function memberRecord(m: Member, next: Member) {
+  const who = m.name || m.email;
+  const status: Record<string, string> = { invited: "Invited", joined: "Active", deactivated: "Deactivated" };
+  const changes: string[] = [];
+  if (m.access !== next.access) changes.push(`access ${cap(m.access)} → ${cap(next.access)}`);
+  if ((m.title ?? "") !== (next.title ?? "")) changes.push(next.title ? `title "${m.title || "none"}" → "${next.title}"` : "title cleared");
+  if (m.status !== next.status) changes.push(next.status === "deactivated" ? "deactivated" : m.status === "deactivated" ? "reactivated" : `status ${status[m.status] ?? m.status} → ${status[next.status] ?? next.status}`);
+  return changeRecord(`Updated ${who}`, changes);
+}
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 
 export function memberRoutes(app: App, k: Kit) {
@@ -112,7 +125,7 @@ export function memberRoutes(app: App, k: Kit) {
       if (admins.length <= 1) fail(400, "last_admin", "An organization needs at least one admin.");
     }
     try {
-      await repo.table.write([repo.memberOp(next, { version: input.version }), repo.membershipRevOp(t.id, rev), repo.auditOp({ tenantId: t.id, actorId: actorId(c), action: "member.updated", target: m.userId, summary: `Updated ${m.email}` })]);
+      await repo.table.write([repo.memberOp(next, { version: input.version }), repo.membershipRevOp(t.id, rev), repo.auditOp({ tenantId: t.id, actorId: actorId(c), action: "member.updated", target: m.userId, ...(memberRecord(m, next) ?? { summary: `Updated ${m.email}` }) })]);
     } catch (e) {
       // Someone changed this organization's people at the same moment; nothing was saved
       if (e instanceof ConflictError) fail(409, "conflict", "Someone changed this organization's people at the same time. Reload and try again.");

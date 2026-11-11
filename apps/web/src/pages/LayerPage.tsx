@@ -3,7 +3,8 @@
 
 
 import type { Layer } from "@1neon/domain";
-import { Link, useParams } from "react-router";
+import { useEffect } from "react";
+import { Link, useLocation, useParams } from "react-router";
 import { gate, Stale } from "../components/Reads.tsx";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { daysSince, Empty, Health, LAYERS, layerFromSlug, layerName, layerSlug, Rings } from "../components/ui.tsx";
@@ -34,6 +35,18 @@ export function LayerPage() {
   const ids = new Set(stages.map((s) => s.id));
   const here = all.filter((p) => ids.has(p.stageId));
   const others = all.filter((p) => !ids.has(p.stageId));
+  // Arriving at #stage-... (Home's "deciding" link): that stage's section comes into view, marked briefly
+  const loc = useLocation();
+  const ready = Boolean(projects.data);
+  useEffect(() => {
+    if (!ready || !loc.hash.startsWith("#stage-")) return;
+    const el = document.getElementById(loc.hash.slice(1));
+    if (!el) return;
+    el.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    el.classList.add("is-target");
+    const t = window.setTimeout(() => el.classList.remove("is-target"), 2400);
+    return () => window.clearTimeout(t);
+  }, [ready, loc.hash]);
   return (
     <>
       <h1 className="page-title" style={{ display: "flex", gap: 12, alignItems: "center" }}><Rings active={l} title={layerName(l)} />{layerName(l)}</h1>
@@ -45,12 +58,12 @@ export function LayerPage() {
       {stages.map((s) => {
         const list = here.filter((p) => p.stageId === s.id);
         return (
-          <section key={s.id}>
+          <section key={s.id} id={`stage-${s.id}`} className="stage-sec">
             <h2 className="section-h">{s.name} <small>{list.length}{s.exit ? ` · done when ${s.exit.toLowerCase()}` : ""}</small></h2>
             {list.length === 0 ? <p className="muted small">Nothing in {s.name} right now.</p> : (
               <div className="rows">
                 {list.map((p) => (
-                  <Link key={p.id} className="row" to={`/o/${summary.slug}/projects/${p.key}/${layerSlug(l)}`}>
+                  <Link key={p.id} className="row" to={`/o/${summary.slug}/projects/${p.key}/${layerSlug(l)}${s.id === "decide" ? "#options" : ""}`}>
                     <span><span className="s">{p.key}</span> <span className="t">{p.name}</span></span>
                     <span className="s">{daysSince(p.stageEnteredAt)}d in stage</span>
                     <Health value={p.health} />

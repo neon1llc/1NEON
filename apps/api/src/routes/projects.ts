@@ -2,7 +2,7 @@
 // its starter items, read, edit (including who decides), move between stages, and trash.
 
 
-import { CreateProjectInput, assessed, Item, MoveProjectInput, UpdateProjectInput, newId, rankBetween, templateById, type Project } from "@1neon/domain";
+import { CreateProjectInput, assessed, Item, MoveProjectInput, UpdateProjectInput, newId, rankBetween, templateById, type Project, changeRecord, projectChanges } from "@1neon/domain";
 import { z } from "zod";
 import { MAX_TRANSACTION, actorId, body, byRank, defined, fail, need, now } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
@@ -121,10 +121,13 @@ export function projectRoutes(app: App, k: Kit) {
     if (targetDate !== undefined) next.targetDate = targetDate ?? undefined;
     // Setting health is an assessment: record who made it and when
     if (input.health !== undefined) Object.assign(next, assessed(input.health, actorId(c), next.updatedAt));
+    const names = new Map((await repo.listMembers(p.tenantId)).map((m) => [m.userId, m.name || m.email]));
+    const record = changeRecord(`Updated ${p.key}`, projectChanges(p, next, (id) => names.get(id) ?? "someone"));
     // One transaction: the project, its update event, and (when who decides changed) that event too
     await repo.table.write([
       repo.projectOp(next, { version }),
-      repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: "project.updated", target: p.id, summary: `Updated ${p.key}` }),
+      // What changed, in words; a save that changed nothing records nothing
+      ...(record ? [repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: "project.updated", target: p.id, ...record })] : []),
       ...(named ? [repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: "project.decider_changed", target: p.id, summary: `${p.key} decision maker: ${named}` })] : []),
     ]);
     return c.json(next);

@@ -63,8 +63,8 @@ Under **Projects**, **Timeline** draws each project from the day it started to i
 ### How do I start a project?
 Choose **New project**, answer a few short questions, and the project starts with a checklist that fits. You can change everything later. [Watch it](/1NEON/live?play=start).
 
-### What is Coming up on Home?
-This week and the next two as a strip of days. Each mark is something dated: a task's due date, a milestone, or a project's target. Below it, everything dated in the next six weeks is listed by Overdue, This week, Next week, and Later. [Watch it](/1NEON/live?play=signin).
+### What is the calendar on Home?
+A whole month at a time, named at the top. The arrows step a month back or forward, **Today** comes back, and the month list jumps anywhere from a year back to two years ahead. Each mark is something dated: a task's due date, a milestone, a project's target, or one of your organization's own events. Choose a day to see what's on it. Editors can add leave or time off, an office closure or event, a meeting, or a care plan date (a monthly call, a retro, a re-check), for one day or several, at a time or all day, and set it to repeat every week or month. Below the month, **Past** and **Repeated** start folded, and **Overdue** and **Upcoming** start open. Leave in the next seven days also shows under **Away this week**. [Watch it](/1NEON/live?play=calendar).
 
 ### What is Insights?
 Charts made from your organization's own data: open and overdue work, how often things finish on time, days to a decision, work finished per week, where projects sit across the four layers, and how healthy they are. Work counts as finished on the day it was marked done, so editing it later doesn't move it; if it's reopened and finished again, the latest finish counts. The page explains how each number is counted. [Watch it](/1NEON/live?play=observe).

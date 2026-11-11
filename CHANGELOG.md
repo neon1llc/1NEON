@@ -2,6 +2,23 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.3.0 - 2026-11-11
+
+### Added
+- Home's calendar shows a full month, headed by the month and year, with arrows back and forward, a Today button, and a jump to any month. Click a day to see what falls on it and add leave, an office closure, a meeting, a care plan call, or anything else that affects the work, once or repeating weekly or monthly.
+- The calendar's lists fold the same way as the rest of 1NEON: Past and Repeated start closed, and Upcoming (formerly Later) starts open.
+- Home has a "Projects at a glance" card, with each project's stage, health, progress, and next step, and an "Away this week" card listing who is on leave.
+- A new "What is the calendar on Home?" walkthrough.
+
+### Changed
+- The 1NEON mark sits in the top bar beside the menu button, lined up with the mark inside the menu, in full and Mini mode, and both lead Home.
+- Every change in the activity record says what changed ("status To do → Done; due Nov 3, 2026 → Nov 7, 2026") instead of just "Updated", for projects, work, people, stages, and calendar events. A save that changes nothing records nothing.
+- The bell splits notifications into New and Earlier, so it is clear which ones you hadn't seen before opening it.
+- On Home, Deciding opens the Decide stage on the Needs page and Building opens the Execute page, instead of both opening the board.
+- Each FAQ walkthrough plays on its own, from signing in to the end of that topic, then stops. The bakery's earlier steps are set up out of sight first, so nothing unrelated plays on screen.
+- Maria's thoughts stay up long enough to read, beside the part of the page they're about, and clear before the next step starts.
+- The walkthrough cursor is a clean pointing hand over things you can click and a grabbing hand while dragging, in neon1's colors, with the arrow everywhere else.
+
 ## v0.2.4 - 2026-11-11
 
 ### Fixed

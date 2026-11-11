@@ -8,7 +8,7 @@ import type { App, Kit } from "../lib/kit.ts";
 
 
 /** Where a notification leads, in the organization's own terms; the web turns it into a path */
-export interface NoteLink { page?: "people" | "settings" | "documents"; project?: string; layer?: Layer; item?: string }
+export interface NoteLink { page?: "people" | "settings" | "documents" | "workspace"; project?: string; layer?: Layer; item?: string }
 
 
 export function notificationRoutes(app: App, k: Kit) {
@@ -26,6 +26,8 @@ export function notificationRoutes(app: App, k: Kit) {
       if (kind === "member") return { page: "people" };
       if (kind === "org") return e.action === "org.stages" ? { page: "settings" } : undefined;
       if (kind === "doc") return { page: "documents" };
+      // Calendar events live on Home's calendar
+      if (kind === "calendar") return { page: "workspace" };
       if (kind === "project") {
         const p = byId.get(e.target);
         return p ? { project: p.key } : undefined;

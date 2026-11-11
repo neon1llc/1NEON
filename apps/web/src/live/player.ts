@@ -261,8 +261,10 @@ class Thought {
 // --- The cursor --------------------------------------------------------------------
 
 
-/** The on-screen cursor: the standard arrow everywhere, and an I-beam over text fields. No hand
- * shapes: drawn small, a pointing hand reads badly, and the arrow looks the same on every platform */
+/** The on-screen cursor, the shapes a real browser shows: the arrow, a pointing hand over anything that
+ * acts when clicked, an I-beam over text fields, and a closed hand while dragging. Drawn after the
+ * system's own (white with a dark outline), in neon1's colors: a dark green outline over the light
+ * pages, and a dark fill with a green outline over the dark ones and the sign-in rain */
 class Cursor {
   readonly el: HTMLDivElement;
   readonly thought: Thought;
@@ -274,6 +276,8 @@ class Cursor {
     this.el.setAttribute("aria-hidden", "true");
     this.el.innerHTML = `
       <svg class="c-arrow" viewBox="0 0 24 24"><path d="M4 2 L4 19 L8.5 14.8 L11.6 21.6 L14.4 20.4 L11.3 13.7 L17.5 13.7 Z"/></svg>
+      <svg class="c-hand" viewBox="0 0 24 24"><path d="M8.5 3.5A1.5 1.5 0 0 1 11.5 3.5L11.5 10A1.4 1.4 0 0 1 14.3 10L14.3 10.6A1.35 1.35 0 0 1 17 10.6L17 11.4A1.3 1.3 0 0 1 19.6 11.4L19.6 15.5C19.6 19 17.6 21.5 14.5 21.5L12.3 21.5C10.4 21.5 9.3 20.8 8.2 19.4L4.6 14.6A1.4 1.4 0 0 1 6.8 12.9L8.5 14.6Z"/><path class="c-in" d="M11.5 10V13.4M14.3 10.6V13.5M17 11.4V13.6"/></svg>
+      <svg class="c-grab" viewBox="0 0 24 24"><path d="M8.5 11.8A1.4 1.4 0 0 1 11.3 11.8L11.3 11.4A1.4 1.4 0 0 1 14.1 11.4L14.1 11.7A1.35 1.35 0 0 1 16.8 11.7L16.8 12.2A1.3 1.3 0 0 1 19.4 12.2L19.4 15.6C19.4 19 17.4 21.5 14.3 21.5L12.1 21.5C10.2 21.5 9.1 20.8 8 19.4L4.6 15.4A1.4 1.4 0 0 1 6.8 13.7L8.5 15.2Z"/><path class="c-in" d="M11.3 11.8V13.8M14.1 11.7V13.9M16.8 12.2V14"/></svg>
       <svg class="c-beam" viewBox="0 0 24 24"><path d="M9 3h2.5a1.5 1.5 0 0 1 1.5 1.5V19.5A1.5 1.5 0 0 1 11.5 21H9m6-18h-2.5A1.5 1.5 0 0 0 11 4.5v15a1.5 1.5 0 0 0 1.5 1.5H15"/></svg>
       <span class="c-ring"></span>`;
     document.body.append(this.el);
@@ -285,9 +289,9 @@ class Cursor {
     this.el.style.transform = `translate(${this.x}px, ${this.y}px)`;
     this.thought.place(this.x, this.y);
   }
-  // The cursor's look: an I-beam over text fields, otherwise the arrow (links, buttons, and drags too)
+  // The cursor's look, as a browser would draw it over what's under it
   shape(kind: "arrow" | "hand" | "beam" | "grab") {
-    this.el.dataset.shape = kind === "beam" ? "beam" : "arrow";
+    this.el.dataset.shape = kind;
   }
   // A click: a quick press and a ring
   press() {
@@ -349,6 +353,15 @@ export class Player {
   private hovered: Element[] = [];
   // The last thought and when it appeared, so the next one waits until it can have been read
   private lastThought = { at: 0, read: 0 };
+  // A thought on screen, and how many moves it has ridden along: it goes with the cursor to the one
+  // thing it announces, then, once read, fades before the cursor moves on (see settleThought)
+  private thinking = false;
+  private thoughtMoves = 0;
+  // A link from the FAQs: the story so far, set up out of sight before the show starts (prep), and the
+  // page the walk in leads to once it's set up (prepPath)
+  private prep?: Section[];
+  private prepared = false;
+  private prepPath = "/";
   view: View;
   fast = false;
   // Set once playing begins; before that the portal stays as it loaded
@@ -359,9 +372,28 @@ export class Player {
   constructor(project: Section[]) {
     const short = SHORTS.find((s) => s.id === PLAY.show);
     this.show = short ?? { id: PROJECT, title: "The full story", blurb: "A whole project, from a first sign-in to ongoing care", length: "about 8 minutes", sections: project, end: "That's a whole project, start to finish." };
+    // A link from the FAQs names one chapter: it plays on its own, start to finish. Maria signs in with
+    // her reason for coming, walks to the page, does that one thing, and the walkthrough ends there.
+    // The story before it (what that chapter needs in place) is set up out of sight first, so nothing
+    // unrelated to the question plays
+    const at = !short && PLAY.focus ? project.findIndex((s) => s.id === PLAY.at) : -1;
+    const sec = at > 0 ? project[at] : undefined;
+    if (sec?.why) {
+      this.prep = project.slice(0, at);
+      this.show = {
+        id: PROJECT, title: sec.title, blurb: "One part of the story, on its own", length: "about a minute",
+        sections: [{ id: `${sec.id}-in`, title: "Sign in", run: (st) => opening(`${sec.id}-in`, "Maria opens 1NEON and signs in", sec.why!, this.prepPath).run(st) }, sec],
+        end: `That was "${sec.title}". The full story, in the menu above, plays every step from start to finish.`,
+      };
+    }
     // A section named in the link (or saved by a refresh) starts there, catching up on the way
-    this.first = Math.max(0, this.show.sections.findIndex((s) => s.id === PLAY.at));
+    this.first = this.prep ? 0 : Math.max(0, this.show.sections.findIndex((s) => s.id === PLAY.at));
     this.view = { index: this.first, title: this.sections[this.first]!.title, caption: "", progress: 0, paused: false, skipping: false, done: false, idle: true };
+  }
+
+  /** Playing one chapter of the story on its own (a link from the FAQs) */
+  get focused() {
+    return Boolean(this.prep);
   }
 
   /** The sections of the show playing */
@@ -501,6 +533,34 @@ export class Player {
     let current = i;
     const engine = await liveEngine();
     if (!engine) return;
+    // A single chapter from the FAQs: set the story up to it once, out of sight, then sign Maria out, so
+    // the show's own first section is her coming in the front door. That point is the show's start
+    if (this.prep && !this.prepared) {
+      try {
+        await this.restore(this.snaps.get(0)!);
+        this.fast = true;
+        this.cursor?.hide(true);
+        this.emit({ skipping: true, paused: false, done: false, index: 0, title: this.sections[0]!.title, caption: "Setting up the bakery's project so far…", progress: 0 });
+        for (const sec of this.prep) await sec.run(this.stage(token));
+        await this.settle();
+        this.prepPath = location.pathname.replace(/^\/1NEON\/live/, "") || "/";
+        devUser.set("");
+        clearCache();
+        navigate("/");
+        await sleep(300);
+        this.snaps.set(0, { data: engine.snapshot(), path: "/", who: "" });
+        this.prepared = true;
+      } catch (e) {
+        if (e instanceof Cut || token.cut) return;
+        console.error(e);
+        this.emit({ paused: true, skipping: false, caption: "Something went off script. Reload the page to try again." });
+        return;
+      } finally {
+        this.fast = false;
+        this.cursor?.hide(false);
+      }
+      this.emit({ skipping: false, caption: "" });
+    }
     // The nearest saved start at or before i; section 0's always exists
     let from = i;
     while (from > 0 && !this.snaps.has(from)) from--;
@@ -510,7 +570,7 @@ export class Player {
       if (from < i) {
         this.fast = true;
         this.cursor?.hide(true);
-        this.emit({ skipping: true, paused: false, done: false, index: i, title: this.sections[i]!.title, caption: "Catching up…", progress: 0 });
+        this.emit({ skipping: true, paused: false, done: false, index: i, title: this.sections[i]!.title, caption: "Skipping ahead to this chapter…", progress: 0 });
         for (let k = from; k < i; k++) {
           current = k;
           await this.save(k, engine);
@@ -539,7 +599,9 @@ export class Player {
         current = k;
         await this.save(k, engine);
         this.steps = 0;
-        remember({ show: this.show.id as never, at: this.sections[k]!.id });
+        // A single chapter remembers its chapter, so a refresh plays that chapter again; the full story
+        // remembers where it is in the story
+        remember(this.prep ? { show: PROJECT, at: this.sections[1]!.id, focus: true } : { show: this.show.id as never, at: this.sections[k]!.id });
         this.emit({ index: k, title: this.sections[k]!.title, caption: "", progress: 0, skipping: false, done: false, paused: false });
         await this.sections[k]!.run(this.stage(token));
         this.stumbles.delete(k);
@@ -608,6 +670,9 @@ export class Player {
     clearStep(session());
     dispatchEvent(new Event(REWIND));
     engine?.restore(s.data as never);
+    // A thought from before the jump doesn't carry over
+    this.cursor?.thought.clear();
+    this.thinking = false;
     // Whoever was signed in at that point is signed in again (nobody, at the very start)
     devUser.set(s.who);
     scrollTo({ top: 0 });
@@ -691,8 +756,22 @@ export class Player {
       p.hovered = chain;
       p.cursor!.shape(shapeFor(el));
     };
+    // A thought stays where it's about: it rides along to the one thing it announces ("Add."), and before
+    // the cursor moves on again (or the caption moves to the next part, `now`) it finishes being read
+    // and fades, with a short beat before anything else happens, so no finished thought trails into
+    // the next part of the page
+    const settleThought = async (now = false) => {
+      if (p.fast || !p.thinking) return;
+      if (!now && p.thoughtMoves < 1) { p.thoughtMoves++; return; }
+      const left = p.lastThought.at + p.lastThought.read - p.clock();
+      if (left > 0) await pause(left / p.pace(1));
+      p.cursor!.thought.clear();
+      p.thinking = false;
+      await pause(160);
+    };
     // Bring an element into view, then move onto it (a little off-center, as a hand would)
     const reach = async (el: HTMLElement) => {
+      await settleThought();
       const r0 = el.getBoundingClientRect();
       const top = 70 + (document.querySelector(".live-bar")?.getBoundingClientRect().height ?? 0);
       if (r0.top < top || r0.bottom > innerHeight - 70) {
@@ -718,7 +797,7 @@ export class Player {
       /** Hold for a moment (skipped when catching up) */
       wait: async (ms: number) => { await pause(ms); },
       /** What's happening, shown in the controls */
-      say: async (caption: string) => { await tick(); if (!p.fast) p.emit({ caption }); },
+      say: async (caption: string) => { await tick(); if (!p.fast) { await settleThought(true); p.emit({ caption }); } },
       /**
        * What Maria is thinking, beside the cursor. A new thought waits until the last one has been on
        * screen long enough to read, so quick actions never flash words past
@@ -730,6 +809,8 @@ export class Player {
         if (left > 0) await pause(left / p.pace(1));
         p.cursor!.thought.say(text, p.cursor!.x, p.cursor!.y);
         p.lastThought = { at: p.clock(), read: p.pace(450 + text.length * 22) };
+        p.thinking = true;
+        p.thoughtMoves = 0;
       },
       /** Wait until something is on screen */
       waitFor,
