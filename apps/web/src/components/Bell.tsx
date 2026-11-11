@@ -55,7 +55,8 @@ export function Bell({ tid, slug }: { tid: string; slug: string }) {
   // A click outside or Escape closes the list
   useEffect(() => {
     if (!open) return;
-    const away = (e: Event) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    // The walkthrough's own controls (pause, speed, Back) aren't "outside": pausing leaves the list open
+    const away = (e: Event) => { if (!box.current?.contains(e.target as Node) && !(e.target as Element).closest?.(".live-bar, .live-list")) setOpen(false); };
     // Escape from inside the list gives focus back to the bell; a click outside leaves focus where it went (AP-04)
     const esc = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;

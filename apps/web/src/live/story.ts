@@ -5,7 +5,7 @@
 
 import { liveEngine } from "../lib/api.ts";
 import type { Section, Stage } from "./player.ts";
-import { MailWindow } from "./props.ts";
+import { signInWithCode } from "./opening.ts";
 import { MARIA, PRADEEP } from "./seed.ts";
 
 
@@ -121,10 +121,6 @@ async function dropFile(s: Stage, target: Parameters<Stage["click"]>[0], name: s
 }
 
 
-// Thrown inside the sign-in to skip the mail's show while catching up; caught right there
-class Skip extends Error {}
-
-
 /** The primer card before the story: who's who, what's coming, and how to steer. Removed by the caller */
 function primer() {
   const el = document.createElement("section");
@@ -173,38 +169,7 @@ export const STORY: Section[] = [
       await s.say("Maria, who owns Maple Street Bakery, opens 1NEON for the first time");
       await s.think("Pradeep said our project lives here. Let me sign in.");
       await s.wait(600);
-      await s.type("#email", MARIA, 400);
-      await s.click({ sel: "form button", text: "Continue" }, 1000);
-      // The code field shows once the code email is out, so it's in her inbox from here
-      await s.waitFor("#code");
-      await s.say("No password: 1NEON emails her a sign-in code");
-      await s.think("It sent me a code. Let me check my email.");
-      const mail = new MailWindow(MARIA);
-      let code = "";
-      try {
-        mail.fill((await engine()).outbox());
-        // Catching up to a later section (a link from the FAQs): read the code without the show
-        if (s.fast()) {
-          mail.open([...mail.el.querySelectorAll(".mail-row")].indexOf(mail.row("sign-in code")!));
-          code = mail.code()?.value ?? "";
-          throw new Skip();
-        }
-        await s.wait(700);
-        await s.click(() => mail.row("sign-in code"), 300);
-        mail.open([...mail.el.querySelectorAll(".mail-row")].indexOf(mail.row("sign-in code")!));
-        await s.wait(700);
-        code = mail.code()?.value ?? "";
-        await s.hover(() => mail.code()?.el, 700);
-        await s.think(`There it is: ${code}. Copy.`);
-        await s.wait(500);
-      } catch (e) {
-        if (!(e instanceof Skip)) throw e;
-      } finally {
-        await mail.close();
-      }
-      await s.think("Back to 1NEON. Paste, and Enter.");
-      await s.paste("#code", code, 400);
-      await s.key("Enter", 1400);
+      await signInWithCode(s);
       await s.say("Home shows what needs her, what's coming up, and what's new");
       await s.think("Okay, home. What's waiting on me?");
       await s.hover({ sel: "h2.section-h", text: "Needs you" }, 900);
@@ -217,6 +182,7 @@ export const STORY: Section[] = [
   {
     id: "profile",
     title: "Profile and alerts",
+    why: "I keep getting more email than I want. Let me sign in and choose what reaches me.",
     run: async (s) => {
       await s.say("She opens her profile to choose what reaches her by email");
       await s.think("Before anything, I want to choose what emails me.");
@@ -256,6 +222,7 @@ export const STORY: Section[] = [
   {
     id: "team",
     title: "Invite the team",
+    why: "Sam runs the counter. Let me sign in and get Sam onto 1NEON too.",
     run: async (s) => {
       await s.say("She invites Sam, who runs the counter, as an editor");
       await s.think("Sam should see this too. He handles the orders.");
@@ -273,6 +240,7 @@ export const STORY: Section[] = [
   {
     id: "start",
     title: "Start a project",
+    why: "Time to start the orders project. Let me sign in and set it up.",
     run: async (s) => {
       await s.say("She starts a project from a template");
       await s.think("Now the real reason I'm here: the nightly order typing.");
@@ -310,6 +278,7 @@ export const STORY: Section[] = [
   {
     id: "needs",
     title: "Tell neon1 what's needed",
+    why: "I need to tell Pradeep exactly what we need. Let me sign in and write it down.",
     run: async (s) => {
       await s.say("In Needs, she builds her request from a few taps");
       await s.think("Needs is where I tell Pradeep what I want.");
@@ -358,6 +327,7 @@ export const STORY: Section[] = [
   {
     id: "listen",
     title: "neon1 listens",
+    why: "Pradeep asked me for a few things. Let me sign in and see what's new.",
     run: async (s) => {
       await s.say("Pradeep reads it all, moves the project to Listen, and asks for a file");
       await s.others(async () => {
@@ -382,6 +352,7 @@ export const STORY: Section[] = [
   {
     id: "propose",
     title: "Options arrive",
+    why: "Pradeep said the options are ready. Let me sign in and see where it's at.",
     run: async (s) => {
       await s.say("Pradeep writes three options, each with its cost, quality, and effort");
       await s.others(async () => {
@@ -400,6 +371,7 @@ export const STORY: Section[] = [
   {
     id: "decide",
     title: "Choose an option",
+    why: "I've thought about Pradeep's options. Let me sign in and approve one.",
     run: async (s) => {
       await s.say("She compares the three side by side");
       await s.think("I want to see them side by side.");
@@ -424,6 +396,7 @@ export const STORY: Section[] = [
   {
     id: "build",
     title: "The work",
+    why: "The work's started. Let me sign in and see how it's going.",
     run: async (s) => {
       await s.say("On the board, she drags the project into Build");
       await s.think("Let me check the board.");
@@ -450,6 +423,7 @@ export const STORY: Section[] = [
   {
     id: "observe",
     title: "Measure it",
+    why: "Is any of this actually saving us time? Let me sign in and check the numbers.",
     run: async (s) => {
       await s.say("Two weeks side by side; Pradeep records the numbers");
       await s.others(async () => {
@@ -482,6 +456,7 @@ export const STORY: Section[] = [
   {
     id: "handover",
     title: "Hand over",
+    why: "Pradeep says it's ready to hand over. Let me sign in and go through it.",
     run: async (s) => {
       await s.say("Pradeep hands over: a runbook, a walkthrough, and the accounts in her name");
       await s.others(handOver, 900, "Pradeep uploaded the runbook");
@@ -513,6 +488,7 @@ export const STORY: Section[] = [
   {
     id: "care",
     title: "Ongoing care",
+    why: "It's been running a while. Let me sign in and see how things look across everything.",
     run: async (s) => {
       await s.others(async () => { await moveTo("care"); }, 700, "Pradeep moved the project to Care");
       await s.say("The whole project, on a timeline");

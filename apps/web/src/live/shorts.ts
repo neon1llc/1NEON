@@ -5,14 +5,14 @@
 
 import { liveEngine } from "../lib/api.ts";
 import type { Show, Stage, Target } from "./player.ts";
+import { opening } from "./opening.ts";
 import { fakePasskeys, MailWindow, Phone } from "./props.ts";
 import { PREVIEW } from "./preview.ts";
 import { MARIA, SAM } from "./seed.ts";
 
 
-// The bakery's pages, and where the short demos that start signed in begin
+// The bakery's pages
 const base = "/o/maple-street";
-const HOME = `${base}/workspace`;
 // The number 1NEON texts come from
 const TEXTS_FROM = "1NEON · (844) 701-1281";
 // Maria's mobile, made up
@@ -180,17 +180,16 @@ const passkey: Show = {
   id: "passkey",
   title: "Add a passkey",
   blurb: "Your fingerprint or face, for confirming and signing in",
-  who: MARIA,
-  path: HOME,
   end: "A passkey: no codes to wait for, and nothing to phish.",
   sections: [
+    opening("passkey-in", "Maria opens 1NEON to add a passkey", "Pradeep said a passkey makes signing in and confirming things quicker. Let me sign in and add one."),
     {
       id: "passkey-add",
       title: "Make a passkey",
       run: async (s) => {
         pretendPasskeys();
         await s.say("Maria adds a passkey from her profile");
-        await s.think("Pradeep said a passkey makes confirming things quicker. Let me add one.");
+        await s.think("Passkeys are on my profile, in the menu.");
         await profile(s, "#security");
         await s.think("A passkey uses my fingerprint. Add.");
         await s.click({ sel: "#security li button", text: "Add" }, 900);
@@ -254,16 +253,15 @@ const authenticator: Show = {
   id: "authenticator",
   title: "Add an authenticator app",
   blurb: "A 6-digit code from an app on your phone",
-  who: MARIA,
-  path: HOME,
   end: "An authenticator app: a fresh code every 30 seconds, even offline.",
   sections: [
+    opening("totp-in", "Maria opens 1NEON to add her authenticator app", "I already use an authenticator app on my phone. Let me sign in and add 1NEON to it."),
     {
       id: "totp-scan",
       title: "Scan the code",
       run: async (s) => {
         await s.say("Maria sets up an authenticator app from her profile");
-        await s.think("I already use an authenticator app on my phone. Let me add 1NEON to it.");
+        await s.think("Two-step verification is on my profile.");
         await profile(s, "#security");
         await s.click({ sel: "#security li button", text: "Set up" }, 1000);
         await s.waitFor({ sel: "dialog[open] img" }, 6000);
@@ -335,16 +333,15 @@ const texts: Show = {
   id: "texts",
   title: "Texts and text codes",
   blurb: "Notices by text, and a texted code to confirm it's you",
-  who: MARIA,
-  path: HOME,
   end: "Texts for what matters to her, and a texted code whenever 1NEON asks.",
   sections: [
+    opening("texts-in", "Maria opens 1NEON to get notices by text", "I'm on my feet all day. Texts would reach me faster than email. Let me sign in and set them up."),
     {
       id: "texts-number",
       title: "Add your number",
       run: async (s) => {
         await s.say("Maria adds her mobile number and agrees to texts");
-        await s.think("I'm on my feet all day. Texts would reach me faster than email.");
+        await s.think("My number goes on my profile.");
         await profile(s);
         await s.type("#ph", MOBILE, 300);
         await s.hover("#notifications .sms-consent", 900);

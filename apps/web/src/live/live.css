@@ -99,7 +99,6 @@
 body:has(.live-bar) { padding-top: var(--demo-h); }
 body:has(.live-bar) .side { top: var(--demo-h); }
 body:has(.live-bar) .top { top: var(--demo-h); }
-body:has(.live-bar) .signin { padding-top: var(--demo-h); }
 body:has(.live-bar) #root { cursor: default; }
 /* While playing, the portal takes no clicks; no hint follows the mouse around */
 .live-shield { position: fixed; inset: var(--demo-h) 0 0 0; z-index: 2147483639; cursor: default; }
