@@ -2,6 +2,11 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.3.1 - 2026-11-11
+
+### Changed
+- The tab icon is neon1's mark on a transparent background, matching the app's theme: brand green on awake, matrix green on Matrix. It replaces the rings.
+
 ## v0.3.0 - 2026-11-11
 
 ### Added
