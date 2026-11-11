@@ -2,6 +2,11 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.3.2 - 2026-11-11
+
+### Changed
+- Text is set in Figtree, the typeface neon1.tech now uses, and emails ask for it too. JetBrains Mono stays for labels and codes.
+
 ## v0.3.1 - 2026-11-11
 
 ### Changed

@@ -9,7 +9,7 @@ export const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCode
 // Brand colors and type, as on neon1.tech
 const BRAND = "#035704", PAPER = "#F2F4F2", INK = "#12241A", MUTED = "#56665c";
 const MONO = "'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace";
-const SANS = "Inter,-apple-system,'Segoe UI',Roboto,sans-serif";
+const SANS = "Figtree,-apple-system,'Segoe UI',Roboto,sans-serif";
 
 // The mark the site serves for mail: 96px dark green on transparent, shown at 32px for sharp screens
 const MARK = "https://neon1.tech/shared/mail/neon1-mark.png";
