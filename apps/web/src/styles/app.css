@@ -494,6 +494,9 @@ fieldset legend { font: 12px var(--mono); color: var(--muted); }
   .shell.mini .tabbar { left: calc(var(--rail) + env(safe-area-inset-left)); }
   .content { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
   .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; inset: auto 0 0 0; z-index: 30; background: color-mix(in srgb, var(--frame) 94%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--line); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
+  /* Some phone browsers (DuckDuckGo on iPhone) pin bottom:0 above their own toolbar and still draw the
+     page beneath it, so the bar's background runs on past the screen's edge to cover that strip */
+  .tabbar::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 50vh; background: var(--frame); pointer-events: none; }
   .tabbar a, .tabbar button { display: grid; justify-items: center; gap: 2px; padding: 6px 0; border: 0; background: none; color: var(--muted); font: 11px var(--mono); text-decoration: none; border-radius: var(--r-sm); cursor: pointer; }
   .tabbar a.active { color: var(--accent); background: var(--accent-soft); }
   .page-title { font-size: 22px; }
