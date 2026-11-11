@@ -2,6 +2,12 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.2.4 - 2026-11-11
+
+### Fixed
+- Going Back from the invite demo's first look no longer leaves the welcome tour's shade and popover over the sign-in, and the replayed sign-in keeps the email the invite link filled in.
+- The FAQ link into the full story's Needs chapter no longer goes off script on phones: catching up waits for the new project's page to open before Maria signs in and walks there.
+
 ## v0.2.3 - 2026-11-11
 
 ### Fixed

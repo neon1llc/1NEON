@@ -113,7 +113,7 @@ const invite: Show = {
           await mail.close();
         }
         // The invite link opens 1NEON with her email filled in
-        s.open(`/?email=${encodeURIComponent(MARIA)}`);
+        await s.open(`/?email=${encodeURIComponent(MARIA)}`);
         await s.wait(900);
       },
     },

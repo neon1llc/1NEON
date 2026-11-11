@@ -169,6 +169,16 @@ function visible(steps: Step[]): DriveStep[] {
 }
 
 
+// The tour on screen, if any; `quiet` ends it without counting it as finished
+let current: { d: ReturnType<typeof driver>; quiet: boolean } | undefined;
+
+/** End a tour that's showing without marking it done (the walkthrough rewinding past it) */
+export function endTour() {
+  if (!current) return;
+  current.quiet = true;
+  current.d.destroy();
+}
+
 /** Run a spotlight tour: everything else is shaded, one short popover at a time */
 export function runTour(steps: Step[], onDone?: () => void) {
   const list = visible(steps);
@@ -190,8 +200,13 @@ export function runTour(steps: Step[], onDone?: () => void) {
     // With reduced motion the spotlight jumps instead of gliding, and the page doesn't smooth-scroll (AP-07)
     animate: !matchMedia("(prefers-reduced-motion: reduce)").matches,
     smoothScroll: !matchMedia("(prefers-reduced-motion: reduce)").matches,
-    onDestroyed: () => onDone?.(),
+    onDestroyed: () => {
+      const was = current;
+      current = undefined;
+      if (!was?.quiet) onDone?.();
+    },
   });
+  current = { d, quiet: false };
   d.drive();
 }
 
