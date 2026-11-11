@@ -21,7 +21,7 @@ const STORE = "state";
 const KEY = "v1";
 export interface Saved { rows: Row[]; files: [string, { type: string; bytes: Uint8Array }][] }
 // The live playback's snapshots also hold the pretend inbox, texts, and who holds a session
-interface LiveSaved extends Saved { mail: Mail[]; texts: Text[]; session?: LiveSession }
+interface LiveSaved extends Saved { mail: Mail[]; texts: Text[]; session?: LiveSession; passkeys: number }
 /** One email or text the in-browser API sent, with when */
 export type Mail = { to: string; subject: string; text: string; html: string; at: number };
 export type Text = { to: string; body: string; at: number };
@@ -89,6 +89,9 @@ const storage = new MemoryStorage();
 // Mail and texts are kept (with their send time) so the short demos can show Maria's inbox and phone
 const mailer = new MemoryMailer();
 const texter = new MemoryTexter();
+// The stand-in for Cognito's passkey list; the playback saves and restores its count with the rest,
+// so rewinding to before a passkey was added really has none (otherwise adding it again asks to confirm)
+const directory = new MemoryDirectory();
 const stamp = <T extends object>(list: T[]) => { const push = list.push.bind(list); list.push = (...xs: T[]) => push(...xs.map((x) => ({ at: Date.now(), ...x }))); };
 stamp(mailer.sent);
 stamp(texter.sent);
@@ -108,7 +111,7 @@ const ready = (async () => {
   return createApp({
     cfg: { env: "local", publicUrl: location.origin, operatorEmails: ["pradeep@neon1.tech"], devAuth: true },
     repo: new Repo(table),
-    directory: new MemoryDirectory(),
+    directory,
     mailer,
     texter,
     storage,
@@ -167,7 +170,7 @@ export const whenReady = () => ready.then(() => undefined);
 
 /** Everything right now, so the playback can come back to the start of a section */
 export function snapshot(): LiveSaved {
-  return { rows: table.snapshot(), files: [...storage.files], mail: [...mailer.sent] as Mail[], texts: [...texter.sent] as Text[], session };
+  return { rows: table.snapshot(), files: [...storage.files], mail: [...mailer.sent] as Mail[], texts: [...texter.sent] as Text[], session, passkeys: directory.passkeys };
 }
 
 /** Put everything back as it was in a snapshot */
@@ -180,6 +183,7 @@ export function restore(s: LiveSaved) {
   texter.sent.length = 0;
   texter.sent.push(...s.texts);
   session = s.session;
+  directory.passkeys = s.passkeys;
 }
 
 /** Every email the in-browser API sent, oldest first */

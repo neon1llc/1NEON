@@ -5,7 +5,8 @@
 
 
 import { devUser, liveEngine } from "../lib/api.ts";
-import { clearCache, navigate, refreshAll } from "../lib/nav.ts";
+import { clearCache, navigate, refreshAll, REWIND } from "../lib/nav.ts";
+import { clearStep, session } from "../lib/signin.ts";
 import { opening } from "./opening.ts";
 import { SHORTS } from "./shorts.ts";
 import { PLAY, PROJECT, remember } from "./where.ts";
@@ -259,7 +260,8 @@ class Thought {
 // --- The cursor --------------------------------------------------------------------
 
 
-/** The on-screen cursor: an arrow, a pointing hand, an I-beam, or a closed hand while dragging */
+/** The on-screen cursor: the standard arrow everywhere, and an I-beam over text fields. No hand
+ * shapes: drawn small, a pointing hand reads badly, and the arrow looks the same on every platform */
 class Cursor {
   readonly el: HTMLDivElement;
   readonly thought: Thought;
@@ -271,9 +273,7 @@ class Cursor {
     this.el.setAttribute("aria-hidden", "true");
     this.el.innerHTML = `
       <svg class="c-arrow" viewBox="0 0 24 24"><path d="M4 2 L4 19 L8.5 14.8 L11.6 21.6 L14.4 20.4 L11.3 13.7 L17.5 13.7 Z"/></svg>
-      <svg class="c-hand" viewBox="0 0 24 24"><path d="M9 11V4.5a1.5 1.5 0 0 1 3 0V10m0-1.5a1.5 1.5 0 0 1 3 0V11m0-1a1.5 1.5 0 0 1 3 0v4.5c0 3.6-2.4 6.5-6 6.5h-1.2c-1.9 0-3.3-.8-4.4-2.3L3.6 14.6a1.5 1.5 0 0 1 2.4-1.8L8 15.2V11"/></svg>
       <svg class="c-beam" viewBox="0 0 24 24"><path d="M9 3h2.5a1.5 1.5 0 0 1 1.5 1.5V19.5A1.5 1.5 0 0 1 11.5 21H9m6-18h-2.5A1.5 1.5 0 0 0 11 4.5v15a1.5 1.5 0 0 0 1.5 1.5H15"/></svg>
-      <svg class="c-grab" viewBox="0 0 24 24"><path d="M8 12V9.5a1.5 1.5 0 0 1 3 0V11m0-1.5a1.5 1.5 0 0 1 3 0V11m0-.5a1.5 1.5 0 0 1 3 0v4c0 3.6-2.4 6.5-6 6.5h-1c-2 0-3.5-1-4.5-2.6L5 16a1.5 1.5 0 0 1 2.6-1.5L8 15"/></svg>
       <span class="c-ring"></span>`;
     document.body.append(this.el);
     this.thought = new Thought("Maria");
@@ -284,9 +284,9 @@ class Cursor {
     this.el.style.transform = `translate(${this.x}px, ${this.y}px)`;
     this.thought.place(this.x, this.y);
   }
-  // The cursor's look, matched to what's under it, as a browser would
+  // The cursor's look: an I-beam over text fields, otherwise the arrow (links, buttons, and drags too)
   shape(kind: "arrow" | "hand" | "beam" | "grab") {
-    this.el.dataset.shape = kind;
+    this.el.dataset.shape = kind === "beam" ? "beam" : "arrow";
   }
   // A click: a quick press and a ring
   press() {
@@ -385,9 +385,18 @@ export class Player {
   // doesn't use up the step's time and turn into a false stumble, a restart, and a replay from the start
   private pausedTotal = 0;
   private pausedAt?: number;
+  // The last time the clock was read. Every wait reads it at least every 120ms, so a longer gap means
+  // the browser froze the page (a phone app switch that sent no visibilitychange, a locked screen);
+  // that gap counts as paused, so a step's "can't find it yet" limit doesn't expire while nobody watched
+  private seen = performance.now();
   clock() {
-    return performance.now() - this.pausedTotal - (this.pausedAt === undefined ? 0 : performance.now() - this.pausedAt);
+    const now = performance.now();
+    if (now - this.seen > 1500 && this.pausedAt === undefined) this.pausedTotal += now - this.seen - 100;
+    this.seen = now;
+    return now - this.pausedTotal - (this.pausedAt === undefined ? 0 : now - this.pausedAt);
   }
+  // Paused because the tab went to the background, not by a person; coming back plays on by itself
+  private autoPaused = false;
   private emit(patch: Partial<View>) {
     const was = this.view?.paused;
     this.view = { ...this.view, ...patch };
@@ -405,13 +414,30 @@ export class Player {
     this.started = true;
     this.emit({ idle: false });
     this.cursor ??= new Cursor();
-    // A tab sent to the background pauses, so nothing plays unseen; Play picks it up again
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden && !this.view.paused && !this.view.done) this.emit({ paused: true, caption: "Paused while this tab was in the background" });
-    });
+    // A tab sent to the background pauses, so nothing plays unseen. Coming back plays on by itself after
+    // a moment for the screen to settle (a phone's toolbars slide back), unless someone paused by hand
+    // or touched the portal meanwhile; a page restored from the back-forward cache does the same
+    let back: number | undefined;
+    const away = () => {
+      clearTimeout(back);
+      if (this.view.paused || this.view.done || this.view.idle) return;
+      this.autoPaused = true;
+      this.emit({ paused: true, caption: "Paused while this tab was in the background" });
+    };
+    const returned = () => {
+      clearTimeout(back);
+      if (!this.autoPaused) return;
+      back = window.setTimeout(() => {
+        if (document.hidden || !this.autoPaused || !this.view.paused) return;
+        this.resume();
+      }, 900);
+    };
+    document.addEventListener("visibilitychange", () => (document.hidden ? away() : returned()));
+    addEventListener("pagehide", away);
+    addEventListener("pageshow", (e) => { if (e.persisted) returned(); });
     // Clicks in the portal while paused mean someone explored; note it for resuming
     document.addEventListener("pointerdown", (e) => {
-      if (this.view.paused && (e.target as Element).closest("#root")) this.touched = true;
+      if (this.view.paused && (e.target as Element).closest("#root")) { this.touched = true; this.autoPaused = false; }
     }, true);
     const engine = await liveEngine();
     if (!engine) return;
@@ -422,9 +448,12 @@ export class Player {
     void this.goTo(this.first, true);
   }
   pause() {
+    this.autoPaused = false;
     this.emit({ paused: true });
   }
   resume() {
+    this.autoPaused = false;
+    this.seen = performance.now();
     // Finished, or the page was changed by hand while paused: play this section again from its start
     if (this.view.done) return void this.goTo(0);
     if (this.touched) { this.touched = false; return void this.goTo(this.view.index); }
@@ -560,6 +589,10 @@ export class Player {
   private async restore(s: { data: unknown; path: string; who: string }) {
     const engine = await liveEngine();
     tidy();
+    // A sign-in left partway (a code step, a typed email) or a dialog closed under React would
+    // otherwise greet the replay: forget the step and remount the app
+    clearStep(session());
+    dispatchEvent(new Event(REWIND));
     engine?.restore(s.data as never);
     // Whoever was signed in at that point is signed in again (nobody, at the very start)
     devUser.set(s.who);

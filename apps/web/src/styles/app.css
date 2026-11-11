@@ -305,20 +305,28 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
 /* The panel is glass like the site's hero: the shared lens shows the rain through it, lightly
    tinted so the form stays readable */
 .signin .panel { position: relative; z-index: 2; width: min(420px, calc(100% - 32px)); text-align: center; padding: 36px 28px; background: rgba(13, 2, 8, .6); border: 1px solid rgba(0, 255, 65, .16); }
-/* Phones: equal room above and below the panel, so the rain controls at the bottom right never sit
-   over the form and the panel reads as centered */
+/* Phones: the panel sits between the top bar and the bottom row (Neo at the left, the rain controls at
+   the right, 48px tall at 16px or the home indicator's inset), so neither covers the form or its border */
 @media (max-width: 640px) {
-  .signin { padding: 64px 0; }
+  .signin { padding: calc(64px + env(safe-area-inset-top)) 0 calc(80px + env(safe-area-inset-bottom)); }
+}
+/* Under a walkthrough's bar: the sign-in fills only the screen below it, so the panel centers in what
+   shows instead of running off the bottom, and the site's top bar (hidden behind it) takes no room */
+body:has(.live-bar) .signin { min-height: calc(100dvh - var(--demo-h)); }
+body:has(.live-bar) .signin .n1-bar { display: none; }
+@media (max-width: 640px) {
+  body:has(.live-bar) .signin { padding-top: 16px; }
 }
 /* Short or zoomed screens: the rain controls drop below the panel instead of floating over the form */
 @media (max-height: 560px), (max-width: 360px) {
-  .signin { padding-bottom: 64px; }
+  .signin { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
   .signin .rainctl { position: absolute; }
 }
-/* Wordmark: 1NEON folds out to 1portalNeedsExecuteObserveNormalize. The box keeps the short
+/* Wordmark: 1NEON folds out to "1portal Needs Execute Observe Normalize". The box keeps the short
    form's height so nothing below moves, and reaches 12px into the panel's padding on each side.
-   Open, the type shrinks until all 35 mono characters (.62em each with the spacing) fit on one line */
-.signin .word { --big: clamp(40px, 8vw, 60px); --fit: min(var(--big), calc((min(420px, 100vw - 32px) - 32px) / 23.4));
+   Open, the type shrinks until the rings, all 35 mono characters (.62em each with the spacing), and
+   the four .3em word gaps fit on one line */
+.signin .word { --big: clamp(40px, 8vw, 60px); --fit: min(var(--big), calc((min(420px, 100vw - 32px) - 32px) / 24.6));
   height: calc(var(--big) * 1.3); margin: 0 -12px 26px; display: flex; align-items: center; justify-content: center;
   font: 600 var(--big) var(--mono); white-space: nowrap; cursor: default; border-radius: 6px; }
 .signin .word .wm { display: inline-flex; align-items: flex-start; line-height: 1.2; font-size: var(--big); letter-spacing: .02em; transition: font-size .6s ease; }
@@ -331,6 +339,9 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
 .signin .word .rest { display: inline-block; overflow: hidden; max-width: 0; opacity: 0; color: #A3C2AA; font-weight: 500;
   transition: max-width .6s ease, opacity .45s ease; }
 .signin .word.open .rest { max-width: calc(var(--n) * (1ch + .02em) + 1px); opacity: 1; }
+/* Open, a small gap between the words, so it reads as words and not one long run */
+.signin .word .seg + .seg { transition: margin-left .6s ease; }
+.signin .word.open .seg + .seg { margin-left: .3em; }
 .signin input { background: rgba(255, 255, 255, .04); color: #D6F5DC; border-color: rgba(0, 255, 65, .3); text-align: center; }
 .signin .btn-primary { background: var(--neon); border-color: var(--neon); color: var(--void); width: 100%; box-shadow: 0 0 18px rgba(108, 255, 168, .3); }
 .signin .fine { font-size: 12px; color: #84A98C; margin: 18px 0 0; }
@@ -373,6 +384,9 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
 /* Arrival from neon1.tech: the page stays black until the sign-in shows, then the rain is already
    falling while the logo and panel ease in. Reduced motion turns the animation off below */
 html.from-site, html.from-site body { background: var(--void); }
+/* While the sign-in shows, the whole page is the void and dark, so browsers that tint their toolbars
+   from the page (Safari and DuckDuckGo on iOS) draw the bottom bar dark like the top, not white */
+html:has(.signin), html:has(.signin) body { background: var(--void); color-scheme: dark; }
 .signin.arrive .panel { animation: arrive .6s ease-out .05s backwards; }
 .signin.arrive .n1-bar { animation: arrive-fade .6s ease-out backwards; }
 @keyframes arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -886,6 +900,8 @@ body:has(.demo-bar) .top { top: var(--demo-h); }
 .example-list .tag { margin-left: 8px; }
 .example-end { margin: 48px 0 24px; }
 @media (max-width: 640px) { .example-body { padding-top: 24px; } .example .top-acts a[href="/"] { display: none; } }
+/* The narrowest phones (320px): the two buttons tighten so they fit beside the title without a sideways scroll */
+@media (max-width: 360px) { .example .top-acts { gap: 6px; } .example .top-acts .btn { padding-left: 8px; padding-right: 8px; } }
 
 /* --- Notifications: the bell breathes softly while something's new; its list drops below it --- */
 .bell { position: relative; }
@@ -1024,4 +1040,5 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
 /* A template card shows where keyboard focus is, apart from the selected border (AP-01) */
 .option:has(input[type="radio"]:focus-visible) { outline: 2px solid var(--focus); outline-offset: 3px; }
 /* 1NEON's phone tab bar: Neo's launcher and window sit above it, safe area included (AUTH-UI01) */
-@media (max-width: 640px) { :root { --n1chat-bottom: calc(72px + env(safe-area-inset-bottom)); } }
+/* Only where that bar is on screen: the sign-in page has none, so Neo stays on the rain controls' line */
+@media (max-width: 640px) { :root:has(.tabbar) { --n1chat-bottom: calc(72px + env(safe-area-inset-bottom)); } }

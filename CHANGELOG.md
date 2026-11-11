@@ -2,6 +2,22 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.2.3 - 2026-11-11
+
+### Fixed
+- On iPhone (Safari, DuckDuckGo, and Chrome), the sign-in box sits between the top bar and a bottom row that holds Neo's button and the rain controls, so neither covers the form or its border, and the browser's bottom toolbar stays dark like the top one instead of turning white.
+- The 1NEON wordmark spells out as "1portal Needs Execute Observe Normalize", with a small gap between the words, and a tap on a phone opens it for a few seconds instead of leaving it open.
+- In a walkthrough, the sign-in box centers in the screen below the walkthrough's bar instead of running off the bottom.
+- Coming back to a walkthrough after switching apps or tabs plays on by itself, and time while the phone had the page frozen no longer counts against a step, so it doesn't go off script.
+- Going Back a chapter in a walkthrough replays it from a clean start: a half-finished sign-in, a passkey added later, or a welcome tour already offered no longer send the invite and passkey demos off script.
+- The browser's Back button inside a walkthrough returns to the page that linked to it (an FAQ, say) instead of stepping back through the pages the story visited.
+- The passkey demo plays in browsers with no passkey support of their own.
+- The sample project fits a 320px-wide phone without a sideways scroll.
+- No more "blocked eval" errors logged on every page in Firefox and Safari.
+
+### Changed
+- The walkthrough's cursor is the plain arrow everywhere (an I-beam over text fields), with no pointing or grabbing hand.
+
 ## v0.2.2 - 2026-11-11
 
 ### Changed

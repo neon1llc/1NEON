@@ -145,6 +145,8 @@ const invite: Show = {
       id: "invite-tour",
       title: "First look",
       run: async (s) => {
+        // Offered again when this section replays (Back, or a retry), not only after the first section
+        try { sessionStorage.removeItem("1neon.tour-offered"); } catch { /* storage blocked */ }
         await s.say("The first time in, 1NEON asks her name and offers a one-minute tour");
         await s.waitFor({ sel: "dialog[open] h2", text: "New here?" }, 8000);
         await s.think("It wants my name, so the team knows who I am.");
