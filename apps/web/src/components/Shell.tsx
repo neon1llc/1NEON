@@ -58,7 +58,11 @@ export function isDark() {
   return t === "matrix" || (t === "device" && darkDevice.matches);
 }
 function syncDark() {
-  document.documentElement.classList.toggle("n1-dark", isDark());
+  const dark = isDark();
+  document.documentElement.classList.toggle("n1-dark", dark);
+  // The tab icon follows the app's theme, not just the device's: matrix green on dark, brand green on awake
+  const icon = document.getElementById("favicon") as HTMLLinkElement | null;
+  if (icon) icon.href = dark ? "/favicon-matrix.svg" : "/favicon-awake.svg";
 }
 darkDevice.addEventListener?.("change", syncDark);
 
