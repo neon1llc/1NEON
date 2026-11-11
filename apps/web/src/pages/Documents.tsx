@@ -2,9 +2,9 @@
 // and project, with one place to upload from a phone or a browser.
 
 
-import type { DocumentRecord, Layer } from "@1neon/domain";
+import { fileState, type DocumentRecord, type Layer } from "@1neon/domain";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { DropZone, FileList } from "../components/Files.tsx";
 import { gate, Stale } from "../components/Reads.tsx";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
@@ -15,7 +15,7 @@ import { read } from "../lib/reads.ts";
 // What the hub reads: the finished uploads, and project names to show beside them
 interface DocsResponse {
   docs: DocumentRecord[];
-  projects: { id: string; key: string; name: string }[];
+  projects: { id: string; key: string; name: string; archived?: boolean }[];
 }
 
 
@@ -23,7 +23,21 @@ interface DocsResponse {
 export function Documents() {
   const { org } = useOrg();
   useTopBar(<span>{org.name} · Files</span>, [org.name]);
-  const q = useQuery({ queryKey: ["project", org.id, "docs"], queryFn: () => read<DocsResponse>(`/t/${org.id}/docs`, { docs: "array", projects: "array" }) });
+  // While any file is still being received or checked, ask again on a backoff (3s, growing to 30s) so a
+  // file turns ready without a reload; it stops once every file has settled (AUTH-P02). The download
+  // gate stays on the server: polling only shows the state it already decided
+  const polls = useRef(0);
+  const q = useQuery({
+    queryKey: ["project", org.id, "docs"],
+    queryFn: () => read<DocsResponse>(`/t/${org.id}/docs`, { docs: "array", projects: "array" }),
+    refetchInterval: (query) => {
+      const pending = (query.state.data?.docs ?? []).some((d) => fileState(d) === "checking" || fileState(d) === "receiving");
+      if (!pending) { polls.current = 0; return false; }
+      return Math.min(30_000, 3_000 * 1.5 ** polls.current++);
+    },
+    refetchIntervalInBackground: false,
+  });
+  const checking = (q.data?.docs ?? []).filter((d) => fileState(d) === "checking").length;
   // Where the next upload is filed, and which layer the list shows
   const [projectId, setProjectId] = useState("");
   const [layer, setLayer] = useState<Layer>("needs");
@@ -41,7 +55,9 @@ export function Documents() {
         <span>File new uploads under</span>
         <select aria-label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
           <option value="">the whole organization</option>
-          {q.data?.projects.map((p) => <option key={p.id} value={p.id}>{p.key} · {p.name}</option>)}
+          {/* Archived projects keep their files for browsing but take no new uploads (the API refuses
+              them too), so they're shown and disabled rather than offered (AUTH-P05) */}
+          {q.data?.projects.map((p) => <option key={p.id} value={p.id} disabled={p.archived}>{p.key} · {p.name}{p.archived ? " (archived)" : ""}</option>)}
         </select>
         <span>in</span>
         <select aria-label="Layer" value={layer} onChange={(e) => setLayer(e.target.value as Layer)}>
@@ -61,6 +77,13 @@ export function Documents() {
         ))}
       </div>
       <Stale reads={[q]} />
+      {/* Files still being checked say so, with a way to look again now */}
+      {checking > 0 && (
+        <p className="small muted" role="status">
+          {checking} {checking === 1 ? "file is" : "files are"} still being checked for viruses; {checking === 1 ? "it opens" : "they open"} when the check finishes.{" "}
+          <button type="button" className="linkish" onClick={() => { polls.current = 0; void q.refetch(); }}>Check again</button>
+        </p>
+      )}
       {gate([q]) ?? <FileList docs={show === "all" ? docs : docs.filter((d) => d.layer === show)} projectName={projectName} empty="No files here yet." />}
     </>
   );

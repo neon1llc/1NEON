@@ -933,7 +933,9 @@ body:has(.demo-bar) .top { top: var(--demo-h); }
    screen's height (15 rows after the paddings, section rules, and profile line), between 40px and
    18px, so the whole menu fits without scrolling on every screen, a phone sideways included.
    Section rules and their labels take the same 14px either way: a thin line closed, the word open */
-.side { --row: clamp(18px, calc((100dvh - var(--demo-h, 0px) - 70px) / 15), 40px); --sep: 14px; gap: 0; padding-top: 8px; padding-bottom: 8px; }
+/* Rows never go under 24px (WCAG 2.2 target size) on the mini rail, and the open menu keeps full 40px
+ * rows and scrolls instead of squeezing them (AP-02) */
+.side { --row: clamp(24px, calc((100dvh - var(--demo-h, 0px) - 70px) / 15), 40px); --sep: 14px; gap: 0; padding-top: 8px; padding-bottom: 8px; }
 /* Short screens: the chooser keeps only the organization's name, so it fits the row */
 @media (max-height: 500px) { .side .org-full .org small { display: none; } }
 .side :is(.brand, .org-mini, .nav a, .site-link, .who-link),
@@ -1011,3 +1013,10 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
 .neo-warn, .neo-note { margin: 0; font-size: 12px; color: var(--muted); }
 .neo-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; }
 .neo-acts .n1chat-send, .neo-acts .n1chat-tool { padding: 6px 12px; cursor: pointer; }
+
+/* The open menu keeps full 40px rows and scrolls rather than squeezing them on a short screen (AP-02) */
+.side.open { --row: 40px; }
+/* A template card shows where keyboard focus is, apart from the selected border (AP-01) */
+.option:has(input[type="radio"]:focus-visible) { outline: 2px solid var(--focus); outline-offset: 3px; }
+/* 1NEON's phone tab bar: Neo's launcher and window sit above it, safe area included (AUTH-UI01) */
+@media (max-width: 640px) { :root { --n1chat-bottom: calc(72px + env(safe-area-inset-bottom)); } }

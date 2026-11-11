@@ -2,7 +2,7 @@
 // its workflow stages, the workspace landing, Coming up, Insights, and the audit trail.
 
 
-import { Stage, canApprove, isClosed, isOwnOrg, type Tenant } from "@1neon/domain";
+import { Stage, canApprove, dateIn, isClosed, isOwnOrg, metricReached, mondayOf, plusDays, todayIn, type Tenant } from "@1neon/domain";
 import { z } from "zod";
 import { actorId, body, fail, need, now, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
@@ -103,9 +103,10 @@ export function workspaceRoutes(app: App, k: Kit) {
     need(c, "read");
     const t = c.get("tenant");
     const live = (await repo.listProjects(t.id)).filter((p) => !p.archived);
-    const today = now().slice(0, 10);
-    const from = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
-    const to = new Date(Date.now() + 42 * 864e5).toISOString().slice(0, 10);
+    // Dates are the organization's calendar days, so an evening in New York is still that day (AUTH-P01)
+    const today = todayIn(t.timeZone, new Date(now()));
+    const from = plusDays(today, -14);
+    const to = plusDays(today, 42);
     // requestedTiming: the person's own words for a request's timing ("this month"), beside its date
     const events: { date: string; title: string; projectKey: string; kind: string; itemId?: string; overdue: boolean; mine: boolean; requestedTiming?: string }[] = [];
     const me = actorId(c);
@@ -136,9 +137,11 @@ export function workspaceRoutes(app: App, k: Kit) {
     // week and in neither on-time nor late, because their real finish date isn't known
     let open = 0, overdue = 0, onTime = 0, late = 0, doneUnknown = 0, measures = 0, reached = 0;
     const decisionDays: number[] = [];
-    const today = now().slice(0, 10);
-    // Monday of the week a date falls in, so weeks line up
-    const week = (iso: string) => { const d = new Date(iso.slice(0, 10) + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
+    // Today, weeks, and on time all read the organization's calendar (AUTH-P01): a completion instant
+    // becomes its local date before it's compared with a due date or put in a week
+    const tz = t.timeZone;
+    const today = todayIn(tz, new Date(now()));
+    const week = (date: string) => mondayOf(date);
     for (const p of projects) {
       byLayer[layerOf.get(p.stageId) ?? "needs"]!++;
       byHealth[p.health] = (byHealth[p.health] ?? 0) + 1;
@@ -147,9 +150,8 @@ export function workspaceRoutes(app: App, k: Kit) {
       for (const i of items) {
         if (i.kind === "metric") {
           measures++;
-          const f = i.fields as { baseline?: number; target?: number; readings?: { value: number }[] };
-          const last = f.readings?.at(-1)?.value;
-          if (last !== undefined && f.target !== undefined && f.baseline !== undefined && (f.target < f.baseline ? last <= f.target : last >= f.target)) reached++;
+          // The same rule the project's measure cards use (AUTH-P03)
+          if (metricReached(i.fields)) reached++;
           continue;
         }
         if (i.kind === "decision") {
@@ -163,9 +165,10 @@ export function workspaceRoutes(app: App, k: Kit) {
             doneUnknown++;
             continue;
           }
-          const wk = week(i.completedAt);
+          const doneOn = dateIn(i.completedAt, tz);
+          const wk = week(doneOn);
           doneByWeek.set(wk, (doneByWeek.get(wk) ?? 0) + 1);
-          if (i.dueDate) (i.completedAt.slice(0, 10) <= i.dueDate ? onTime++ : late++);
+          if (i.dueDate) (doneOn <= i.dueDate ? onTime++ : late++);
         } else if (i.kind !== "update" && i.status !== "approved") {
           open++;
           if (i.dueDate && i.dueDate < today) overdue++;
@@ -175,7 +178,7 @@ export function workspaceRoutes(app: App, k: Kit) {
     // The last eight weeks of finished work, oldest first, zero-filled
     const weeks: { week: string; done: number }[] = [];
     for (let k = 7; k >= 0; k--) {
-      const wk = week(new Date(Date.now() - k * 7 * 864e5).toISOString());
+      const wk = week(plusDays(today, -7 * k));
       weeks.push({ week: wk, done: doneByWeek.get(wk) ?? 0 });
     }
     return c.json({

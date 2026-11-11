@@ -89,6 +89,10 @@ export const CreateItemInput = z.object({
   assigneeId: id.optional(),
   dueDate: z.string().date().optional(),
   fields: z.record(z.string(), z.unknown()).default({}),
+  // The client's name for this one logical create, kept while its draft exists. Sending it again (a retry
+  // after a lost reply, or after part of a batch failed) returns the item already made instead of a
+  // second one (EP-04). Scoped to the person and project on the server
+  requestId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
 });
 
 

@@ -36,11 +36,16 @@ export function useMembers(tid: string) {
 }
 
 
-/** After a write, refetch every query for the organization */
+/**
+ * After a write, refetch every query for the organization, the aggregate views included: Insights and
+ * Coming up are computed from the same records, so they go stale with them (AUTH-P04). Files lives
+ * under ["project", tid, "docs"] and is covered by the "project" prefix
+ */
+export const ORG_QUERY_ROOTS = ["projects", "project", "workspace", "members", "insights", "upcoming"] as const;
 export function useRefresh(tid: string) {
   const qc = useQueryClient();
   return () => {
-    for (const key of [["projects", tid], ["project", tid], ["workspace", tid], ["members", tid]]) qc.invalidateQueries({ queryKey: key });
+    for (const root of ORG_QUERY_ROOTS) qc.invalidateQueries({ queryKey: [root, tid] });
   };
 }
 

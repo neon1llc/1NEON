@@ -4,9 +4,10 @@
 
 
 import { MetricFields, OptionFields, STATUSES, WORK_STATUSES, type AuditEvent, type Item, type ItemKind } from "@1neon/domain";
+import { numberProblem, optionalNumber } from "../lib/measures.ts";
 import { useQuery } from "@tanstack/react-query";
 import { Trash2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, HttpError } from "../lib/api.ts";
 import { problem, useMembers, useRefresh, useSubmit } from "../lib/hooks.ts";
 import { read } from "../lib/reads.ts";
@@ -64,7 +65,8 @@ function kindFields(i: Item): Record<string, string> {
 function typed(key: string, v: string): unknown {
   if (key.endsWith("Score")) return Number(v);
   if (key === "recommended") return v === "yes";
-  if (key === "baseline" || key === "target") return v.trim() === "" || Number.isNaN(Number(v)) ? undefined : Number(v);
+  // Only called once the panel has checked the text (numberProblem); blank leaves the value unset
+  if (key === "baseline" || key === "target") { const n = optionalNumber(v); return n.ok ? n.value : undefined; }
   return v;
 }
 
@@ -157,6 +159,8 @@ export function ItemPanel({ item, label, path, open, onClose }: { item: Item; la
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   const dirty = Object.keys(changesFrom(draft, base)).length > 0;
+  const draftNow = useRef(draft);
+  draftNow.current = draft;
   // A newer record while open: a clean draft moves to it; a dirty draft stays and the notice shows
   useEffect(() => {
     if (open && !dirty && item.version !== base.version) {
@@ -193,12 +197,20 @@ export function ItemPanel({ item, label, path, open, onClose }: { item: Item; la
 
   // Save only what the person changed since the base, guarded by `version`: the base on a first save,
   // the newer record after "Keep mine", so only the fields they edited overwrite the other person's
+  // A slow save that finishes after the person kept editing doesn't close the panel or clear their newer
+  // text: the saved version becomes the base, and what they typed since stays as the draft (EP-06)
   const save = (version: number) => runSave(async () => {
+    const sent = draft;
     try {
-      await api(`${path}/items/${item.id}`, { method: "PATCH", body: { version, ...changesFrom(draft, base) } });
-      toast("Saved");
+      const saved = await api<Item>(`${path}/items/${item.id}`, { method: "PATCH", body: { version, ...changesFrom(draft, base) } });
       setConflict(undefined);
-      onClose();
+      if (draftNow.current !== sent && saved && typeof saved === "object" && "version" in saved) {
+        setBase(saved);
+        toast("Saved. Your newer edits are still here.");
+      } else {
+        toast("Saved");
+        onClose();
+      }
     } catch (e) {
       // A 409 carries the newer record for items; without it, keep the draft and say what happened
       const theirs = e instanceof HttpError && e.status === 409 ? (e.body.current as Item | undefined) : undefined;
@@ -213,9 +225,11 @@ export function ItemPanel({ item, label, path, open, onClose }: { item: Item; la
   };
   // Add a comment, then reload the thread; one at a time, so a double click posts once
   const comment = () => runPost(async () => {
+    const sent = note;
     try {
       await api(`${path}/items/${item.id}/comments`, { method: "POST", body: { body: note } });
-      setNote("");
+      // Cleared only if the box still holds what was posted (EP-06)
+      setNote((now) => (now === sent ? "" : now));
       void thread.refetch();
     } catch (e) {
       toast(problem(e));
@@ -275,7 +289,7 @@ export function ItemPanel({ item, label, path, open, onClose }: { item: Item; la
       {item.status === "approved" && <p className="small muted">Approved, so its terms are part of the decision's record and can't change. A different plan is a new option.</p>}
       {(canWrite || mayDelete) && (
         <div className="actions">
-          {canWrite && <button className="btn btn-primary" disabled={!dirty || !draft.title.trim() || saving} onClick={() => void save(base.version)}>{saving ? "Saving…" : "Save"}</button>}
+          {canWrite && <button className="btn btn-primary" disabled={!dirty || !draft.title.trim() || saving || (base.kind === "metric" && Boolean(numberProblem(draft.f.baseline ?? "") || numberProblem(draft.f.target ?? "")))} onClick={() => void save(base.version)}>{saving ? "Saving…" : "Save"}</button>}
           <button className="btn btn-ghost" onClick={onClose}>Close</button>
           {mayDelete && <button className="btn btn-danger" style={{ marginLeft: "auto" }} onClick={() => void remove()}><Trash2 size={15} aria-hidden="true" /> Delete</button>}
         </div>
@@ -370,8 +384,16 @@ function KindFields({ kind, f, onChange }: { kind: ItemKind; f: Record<string, s
   if (kind === "metric") return (
     <div className="props">
       <label>Unit<input value={f.unit ?? ""} onChange={(e) => set("unit", e.target.value)} placeholder="e.g. hours" maxLength={24} /></label>
-      <label>Starts at<input inputMode="decimal" value={f.baseline ?? ""} onChange={(e) => set("baseline", e.target.value.replace(/[^\d.-]/g, ""))} /></label>
-      <label>Target<input inputMode="decimal" value={f.target ?? ""} onChange={(e) => set("target", e.target.value.replace(/[^\d.-]/g, ""))} /></label>
+      {/* Typed text stays as typed; a problem shows under the field and holds Save (EP-08) */}
+      {(["baseline", "target"] as const).map((k) => {
+        const bad = numberProblem(f[k] ?? "");
+        return (
+          <label key={k}>{k === "baseline" ? "Starts at" : "Target"}
+            <input inputMode="decimal" value={f[k] ?? ""} onChange={(e) => set(k, e.target.value)} aria-invalid={bad ? true : undefined} aria-describedby={bad ? `num-${k}` : undefined} />
+            {bad && <span id={`num-${k}`} className="small late">{bad}</span>}
+          </label>
+        );
+      })}
     </div>
   );
   return null;

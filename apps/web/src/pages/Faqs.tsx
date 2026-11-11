@@ -50,12 +50,21 @@ export function Faqs() {
     if (!q.trim()) return FAQ.topics;
     return FAQ.topics.map((x) => ({ ...x, items: x.items.filter((i) => matches(i, q)) })).filter((x) => x.items.length);
   }, [q]);
+  const [said, setSaid] = useState("");
+  useEffect(() => {
+    if (!q.trim()) { setSaid(""); return; }
+    const n = topics.reduce((a, t) => a + t.items.length, 0);
+    const t = window.setTimeout(() => setSaid(n ? `${n} ${n === 1 ? "answer" : "answers"} match` : "No answers match"), 500);
+    return () => window.clearTimeout(t);
+  }, [q, topics]);
   return (
     <main className="content legal faqs" style={{ maxWidth: 760, margin: "0 auto" }}>
       <p className="small"><Link to="/">← 1NEON</Link></p>
       <h1 className="page-title">FAQs</h1>
       <Markdown source={FAQ.intro} />
       <input type="search" aria-label="Search the FAQs" placeholder="Search the FAQs" value={q} onChange={(e) => setQ(e.target.value)} className="faq-search" />
+      {/* One quiet count after typing settles; focus stays in the box (AP-08) */}
+      <p className="sr" role="status">{said}</p>
       {topics.length === 0 && <p className="muted">No answers match. Email <a href="mailto:hello@neon1.tech">hello@neon1.tech</a> and I'll help.</p>}
       {topics.map((t) => (
         <section key={t.name}>

@@ -94,7 +94,6 @@ export function Board({
                 data-tour="board-card"
                 className={`pcard${dragging === p.id ? " dragging" : ""}`}
                 draggable={Boolean(onMove)}
-                aria-disabled={!onMove}
                 onDragStart={(e) => {
                   e.dataTransfer.effectAllowed = "move";
                   e.dataTransfer.setData("text/plain", p.key);
@@ -120,7 +119,8 @@ export function Board({
                   <Health value={p.health} />
                   <span title="Days in this stage">{daysSince(p.stageEnteredAt)}d</span>
                 </div>
-                {/* Keyboard and screen-reader path: the same move as dragging, to the end of the chosen column */}
+                {/* Keyboard, tap, and screen-reader path: the same moves as dragging. Up and down reorder within
+                    the column (AP-06); another stage moves the card to the end of that column */}
                 {onMove && (
                   <label className="move">
                     <span className="sr">Move {p.key} to</span>
@@ -129,11 +129,21 @@ export function Board({
                       onChange={(e) => {
                         const to = e.target.value;
                         if (!to) return;
+                        const at = cards.findIndex((x) => x.id === p.id);
+                        if (to === "__up" || to === "__down") {
+                          // Up: between the two cards above; down: between the two below
+                          const rest = cards.filter((x) => x.id !== p.id);
+                          const idx = to === "__up" ? at - 1 : at + 1;
+                          onMove({ project: p, stageId: s.id, after: rest[idx - 1]?.rank, before: rest[idx]?.rank });
+                          return;
+                        }
                         const list = byStage(to).filter((x) => x.id !== p.id);
                         onMove({ project: p, stageId: to, after: list.at(-1)?.rank });
                       }}
                     >
                       <option value="">Move to…</option>
+                      {cards.findIndex((x) => x.id === p.id) > 0 && <option value="__up">Up one in {s.name}</option>}
+                      {cards.findIndex((x) => x.id === p.id) < cards.length - 1 && <option value="__down">Down one in {s.name}</option>}
                       {stages.filter((x) => !x.hidden && x.id !== s.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                     </select>
                   </label>

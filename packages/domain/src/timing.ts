@@ -22,6 +22,23 @@ export function todayIn(timeZone: string = DEFAULT_TIME_ZONE, now = new Date()):
 }
 
 
+/**
+ * The organization's calendar (AUTH-P01). Business dates (Today, due, overdue, on time, a reading's day)
+ * are calendar dates in the organization's time zone; audit times stay instants. dateIn gives the local
+ * date of an instant, plusDays steps a calendar date, and mondayOf finds the week it belongs to
+ */
+export function dateIn(instant: string, timeZone: string = DEFAULT_TIME_ZONE): string {
+  const at = new Date(instant);
+  return Number.isNaN(at.getTime()) ? instant.slice(0, 10) : todayIn(timeZone, at);
+}
+export function plusDays(date: string, n: number): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+}
+export function mondayOf(date: string): string {
+  return plusDays(date, -((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7));
+}
+
+
 /** The last day of the month or quarter that contains today in `timeZone` */
 export function periodEnd(period: "month" | "quarter", now = new Date(), timeZone: string = DEFAULT_TIME_ZONE): string {
   const [y, m] = todayIn(timeZone, now).split("-").map(Number) as [number, number];

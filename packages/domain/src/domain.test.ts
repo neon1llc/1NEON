@@ -212,3 +212,53 @@ describe("notification groups", () => {
     expect(wants(inverse, "comment.created", "sms")).toBe(false);
   });
 });
+
+
+// --- Review 2026-11-11: current decision (AUTH-P06), measure rule (AUTH-P03), calendar (AUTH-P01) ---
+import { currentDecision as _cd, dateIn as _dateIn, metricReached as _reached, mondayOf as _monday } from "./index.ts";
+
+describe("current decision", () => {
+  const opt = (id: string, status = "approved", updatedAt = "2026-11-01") => ({ id, kind: "option", status, fields: {}, updatedAt });
+  const dec = (id: string, optionId: string, approvedAt: string, supersedes?: string[]) => ({ id, kind: "decision", status: "approved", fields: { optionId, approvedAt, supersedes } });
+  it("names B once B's decision replaces A's, whatever the order of items", () => {
+    const items = [opt("A"), opt("B"), dec("dA", "A", "2026-11-02"), dec("dB", "B", "2026-11-05", ["dA"])];
+    expect(_cd(items).option?.id).toBe("B");
+    expect(_cd([...items].reverse()).option?.id).toBe("B");
+    expect(_cd(items).ambiguous).toBe(false);
+  });
+  it("flags more than one unreplaced decision and legacy approvals without a decision", () => {
+    expect(_cd([opt("A"), opt("B"), dec("dA", "A", "2026-11-02"), dec("dB", "B", "2026-11-05")]).ambiguous).toBe(true);
+    const legacy = _cd([opt("A", "approved", "2026-11-01")]);
+    expect(legacy.legacy).toBe(true);
+    expect(legacy.option?.id).toBe("A");
+    expect(_cd([opt("A", "proposed")]).option).toBeUndefined();
+  });
+});
+
+describe("measure at target", () => {
+  const m = (baseline: number, target: number, latest: number | undefined, direction: "up" | "down" = "up") => ({ baseline, target, direction, readings: latest === undefined ? [] : [{ at: "2026-11-01", value: latest }] });
+  it("treats an equal baseline and target by direction", () => {
+    expect(_reached(m(10, 10, 10))).toBe(true);
+    expect(_reached(m(10, 10, 11))).toBe(true);
+    expect(_reached(m(10, 10, 11, "down"))).toBe(false);
+    expect(_reached(m(10, 10, 9, "down"))).toBe(true);
+  });
+  it("keeps the usual slopes and says when it can't judge", () => {
+    expect(_reached(m(0, 10, 12))).toBe(true);
+    expect(_reached(m(10, 2, 3))).toBe(false);
+    expect(_reached(m(10, 2, 1))).toBe(true);
+    expect(_reached(m(0, 10, undefined))).toBeUndefined();
+  });
+});
+
+describe("organization calendar", () => {
+  it("dates an instant in the organization's zone, ahead of and behind UTC", () => {
+    expect(_dateIn("2026-11-11T01:30:00Z", "America/New_York")).toBe("2026-11-10");
+    expect(_dateIn("2026-11-10T20:00:00Z", "Asia/Kolkata")).toBe("2026-11-11");
+    expect(_dateIn("2026-11-11T01:30:00Z", "Not/AZone")).toBe("2026-11-10");
+    // Across the daylight-saving change (November 1, 2026 in New York)
+    expect(_dateIn("2026-11-02T04:30:00Z", "America/New_York")).toBe("2026-11-01");
+    expect(_monday("2026-11-15")).toBe("2026-11-09");
+    expect(_monday("2026-11-09")).toBe("2026-11-09");
+  });
+});

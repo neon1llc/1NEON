@@ -2,6 +2,32 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.2.0 - 2026-11-11
+
+### Changed
+- Next step and the Overview name the same current agreement: the decision no later approval replaced. Earlier approvals stay in Needs, marked replaced.
+- Today, overdue, on time, the weekly counts, and a new reading's date follow the organization's calendar (Eastern time by default), so an evening in New York is still that day.
+- A measure whose starting point already equals its target counts as reached by the same rule on its card and in Insights, using which direction is better.
+- Every measure number (new project, Add measure, the item panel, and a reading) follows one rule: blank is unset, 0 is 0, and anything else must be a plain number. "1,5" or "1..2" shows a message under the field instead of being changed or dropped.
+- Uploads run file by file. If some files don't make it, the rest still finish, the message says which, and Retry sends only those. An upload can be cancelled, and a stalled transfer stops with a message.
+- Files that are still being checked for viruses update on their own, with Check again; archived projects show as unavailable for new uploads.
+- Search opens with Ctrl+K (Cmd+K on a Mac) only; a bare "/" no longer does.
+- Board cards can move up or down within their column from the same Move menu, without dragging.
+- The help sheet has a Close button, the onboarding tour holds still with reduced motion, and toasts are read once and stay longer when they say more.
+
+### Fixed
+- Posting a status update starts from the project's current health, and says so when the chosen health differs.
+- A slow save, comment, add, or workflow save no longer clears or closes over text typed while it was pending.
+- Retrying a request with several needs after part of it failed, or after a lost reply, doesn't create the sent ones twice.
+- A failed reading keeps the number in the box.
+- A target date conflict shows both dates before Keep mine.
+- Setting up an authenticator app ignores replies from a setup that was cancelled, and keeps errors in the dialog beside the code.
+- The Enter that confirms an input method's candidate no longer adds an item or an action.
+- Focus: arriving on a page puts it on the page title, each New project step announces itself, and Escape from the bell or the walkthrough lists returns to their button.
+- On phones, Neo's launcher and window sit above the bottom tab bar, and the open menu keeps full-size rows and scrolls.
+- Read-only board cards no longer mark their project links as disabled, and template cards show keyboard focus.
+- Coming up and Insights refresh after changes like the rest of the organization's pages.
+
 ## v0.1.1 - 2026-11-10
 
 ### Fixed

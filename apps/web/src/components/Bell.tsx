@@ -56,7 +56,13 @@ export function Bell({ tid, slug }: { tid: string; slug: string }) {
   useEffect(() => {
     if (!open) return;
     const away = (e: Event) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    // Escape from inside the list gives focus back to the bell; a click outside leaves focus where it went (AP-04)
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const inside = box.current?.contains(document.activeElement);
+      setOpen(false);
+      if (inside) box.current?.querySelector<HTMLButtonElement>(".bell-btn")?.focus();
+    };
     addEventListener("pointerdown", away);
     addEventListener("keydown", esc);
     return () => { removeEventListener("pointerdown", away); removeEventListener("keydown", esc); };
