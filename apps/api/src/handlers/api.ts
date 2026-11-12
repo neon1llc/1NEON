@@ -39,8 +39,8 @@ async function stripe() {
   const r = await new SSMClient({}).send(new GetParametersCommand({ Names: [cfg.stripeKeyParam, cfg.stripeWebhookParam], WithDecryption: true }));
   const value = (name: string) => r.Parameters?.find((x) => x.Name === name)?.Value;
   const key = value(cfg.stripeKeyParam), hook = value(cfg.stripeWebhookParam);
-  // A placeholder value (set by Terraform before the real key is put in) leaves online payment off
-  return key?.startsWith("sk_") && hook?.startsWith("whsec_") ? new StripePayments(key, hook) : undefined;
+  // A placeholder value (set by Terraform before the real key is put in) leaves online payment off. A restricted key (rk_) with Checkout Sessions write is all it needs
+  return key && /^(sk|rk)_/.test(key) && hook?.startsWith("whsec_") ? new StripePayments(key, hook) : undefined;
 }
 const payments = await stripe();
 

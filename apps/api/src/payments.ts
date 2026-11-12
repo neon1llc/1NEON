@@ -89,11 +89,21 @@ export function readEvent(body: string): PaymentEvent {
 export class StripePayments implements Payments {
   constructor(private secretKey: string, private webhookSecret: string) {}
 
+  // Bank first, then card; if the account can't take ACH yet, Stripe refuses the pair, so card alone still works
   async checkout(r: CheckoutRequest) {
+    try {
+      return await this.session(r, ["us_bank_account", "card"]);
+    } catch (e) {
+      if (!/us_bank_account|payment method type/i.test(String(e))) throw e;
+      console.warn("ACH unavailable on the Stripe account; offering card only");
+      return this.session(r, ["card"]);
+    }
+  }
+
+  private async session(r: CheckoutRequest, methods: string[]) {
     const f = new URLSearchParams();
     f.set("mode", "payment");
-    f.append("payment_method_types[]", "us_bank_account");
-    f.append("payment_method_types[]", "card");
+    for (const m of methods) f.append("payment_method_types[]", m);
     f.set("line_items[0][quantity]", "1");
     f.set("line_items[0][price_data][currency]", "usd");
     f.set("line_items[0][price_data][unit_amount]", String(r.amountCents));
@@ -104,6 +114,8 @@ export class StripePayments implements Payments {
     f.set("client_reference_id", r.metadata.invoiceId);
     if (r.email) f.set("customer_email", r.email);
     f.set("payment_intent_data[description]", `neon1 ${r.invoiceNumber}`);
+    // Card statements read "NEON1* INV003901", so a charge names the invoice it paid (banks ignore it for ACH)
+    f.set("payment_intent_data[statement_descriptor_suffix]", r.invoiceNumber.replace(/[^A-Za-z0-9]/g, "").slice(0, 12));
     for (const [k, v] of Object.entries(r.metadata)) {
       f.set(`metadata[${k}]`, v);
       f.set(`payment_intent_data[metadata][${k}]`, v);
@@ -111,7 +123,7 @@ export class StripePayments implements Payments {
     // One session per invoice and amount: a double click reuses the first session instead of opening two
     const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
       method: "POST",
-      headers: { authorization: `Bearer ${this.secretKey}`, "content-type": "application/x-www-form-urlencoded", "idempotency-key": `${r.metadata.invoiceId}-${r.amountCents}-${new Date().toISOString().slice(0, 13)}` },
+      headers: { authorization: `Bearer ${this.secretKey}`, "content-type": "application/x-www-form-urlencoded", "idempotency-key": `${r.metadata.invoiceId}-${r.amountCents}-${methods.length}-${new Date().toISOString().slice(0, 13)}` },
       body: f,
     });
     const j = (await res.json()) as { id?: string; url?: string; error?: { message?: string } };
