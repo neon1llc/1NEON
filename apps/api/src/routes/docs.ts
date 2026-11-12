@@ -2,7 +2,7 @@
 // scanned before download, and the in-memory file links local dev uses instead of S3.
 
 
-import { CreateDocInput, DocumentRecord, fileState, newId, VIEWABLE, type FileProblem } from "@1neon/domain";
+import { CreateDocInput, DocumentRecord, fileState, newId, revisions, VIEWABLE, type FileProblem } from "@1neon/domain";
 import type { Context } from "hono";
 import { settleFile, unwatchOp, watchOp } from "../files.ts";
 import { actorId, body, fail, need, now, type Env } from "../lib/http.ts";
@@ -58,7 +58,16 @@ export function docRoutes(app: App, k: Kit) {
     need(c, "read");
     const t = c.get("tenant");
     const projects = (await repo.listProjects(t.id)).filter((p) => !p.deletedAt);
-    return c.json({ docs: await allDocs(t.id, projects.map((p) => p.id)), projects: projects.map((p) => ({ id: p.id, key: p.key, name: p.name, archived: Boolean(p.archived) })) });
+    // Files → Proposals: every issued revision, with the option decided on it (the frozen copy stays
+    // with the project; this is the index)
+    const proposals = (await Promise.all(projects.map(async (p) => {
+      const items = await repo.listItems(t.id, p.id);
+      return revisions(items).map((r) => ({
+        id: r.id, projectId: p.id, key: p.key, title: r.title, number: r.p.number, rev: r.p.rev, status: r.status, issuedAt: r.p.issuedAt, issuerName: r.p.issuerName, note: r.p.note, checkBy: r.p.checkBy,
+        decided: items.filter((i) => i.kind === "decision" && i.fields.proposalId === r.id).map((i) => String(i.fields.code ?? "")),
+      }));
+    }))).flat().sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
+    return c.json({ docs: await allDocs(t.id, projects.map((p) => p.id)), projects: projects.map((p) => ({ id: p.id, key: p.key, name: p.name, archived: Boolean(p.archived) })), proposals });
   });
 
   // Start an upload. Anyone who can comment may upload, so clients can send the files that are needed

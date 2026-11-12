@@ -143,7 +143,7 @@ export const priceCheckDue = (p: Pick<ProposalFields, "checkBy">, today: string)
  * (a newer version), shared since, or taken back. Approval waits for the next revision when any of the
  * option being approved changed
  */
-export function changedSince(p: Pick<ProposalFields, "snapshot">, items: Pick<Item, "id" | "kind" | "status" | "version" | "title">[]) {
+export function changedSince<T extends Pick<Item, "id" | "kind" | "status" | "version" | "title">>(p: Pick<ProposalFields, "snapshot">, items: T[]) {
   const now = items.filter((i) => i.kind === "option" && (i.status === "proposed" || i.status === "approved"));
   const was = new Map(p.snapshot.options.map((o) => [o.id, o]));
   const edited = now.filter((o) => was.has(o.id) && was.get(o.id)!.version !== o.version && !(o.status === "approved" && was.get(o.id)!.status !== "approved"));

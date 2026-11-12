@@ -1,26 +1,23 @@
-// apps/web/src/pages/Proposal.tsx - /o/:slug/projects/:key/proposal: the project's options as one
-// complete proposal, laid out like neon1's letters and proposals (a letterhead, green section bars,
-// arrow bullets, a cost table, and an agreement block), ready to read, print, or save as a PDF.
-// Everything on it comes from the project's own records; nothing here is typed twice.
+// apps/web/src/pages/Proposal.tsx - /o/:slug/projects/:key/proposal: the project's proposal as one
+// document, laid out like neon1's letters and proposals (a letterhead, green section bars, arrow
+// bullets, a cost table, and an agreement block), ready to read, print, save as a PDF, or download as
+// Word. It shows an issued revision exactly as it was frozen (?r=2 for an earlier one), or the live
+// draft (?draft=1) built from the project's records the same way Issue freezes them.
 
 
-import { currentDecision, DecisionFields, MetricFields, OptionFields, RequirementFields, type Item, type Project } from "@1neon/domain";
-import { Printer } from "lucide-react";
-import type { ReactNode } from "react";
-import { Link, useParams } from "react-router";
+import { buildSnapshot, currentDecision, DecisionFields, priceCheckDue, proposalRef, revisions, todayIn, type Item, type ProposalFields, type ProposalSnapshot } from "@1neon/domain";
+import { FileText, Printer } from "lucide-react";
+import { useEffect, type ReactNode } from "react";
+import { Link, useParams, useSearchParams } from "react-router";
 import { gate } from "../components/Reads.tsx";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
-import { Empty } from "../components/ui.tsx";
+import { Empty, useToast } from "../components/ui.tsx";
 import { DEMO } from "../lib/api.ts";
-import { useMembers, useProject, useProjects } from "../lib/hooks.ts";
-
-
-// How long a proposal's price and dates hold, as in neon1's earlier proposals
-const VALID_DAYS = 30;
+import { downloadDocx, FICTIONAL, type Acceptance } from "../lib/docx.ts";
+import { problem, useMembers, useProject, useProjects } from "../lib/hooks.ts";
 
 // A long date, the way a letter writes it
 const longDate = (iso: string) => new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: iso.length === 10 ? "UTC" : undefined });
-const plusDays = (iso: string, n: number) => new Date(new Date(iso).getTime() + n * 864e5).toISOString();
 
 
 /** An option's details as written: paragraphs, "- " lists, and short "Label:" lines as subheads */
@@ -53,10 +50,11 @@ const Section = ({ title, children }: { title: string; children: ReactNode }) =>
 );
 
 
-/** The proposal for one project, from its key */
+/** The proposal for one project, from its key: an issued revision, or the draft */
 export function ProposalPage() {
   const { org, summary } = useOrg();
   const { key } = useParams();
+  const [params] = useSearchParams();
   const projects = useProjects(org.id);
   const pid = projects.data?.find((p) => p.key === key)?.id;
   const detail = useProject(org.id, pid);
@@ -69,51 +67,78 @@ export function ProposalPage() {
   if (!pid) return <Empty text={`There's no project ${key} in ${org.name}.`} action={<Link className="btn btn-ghost" to={`/o/${summary.slug}/projects`}>All projects</Link>} />;
   const wait = gate([detail], { out });
   if (wait || !detail.data) return wait;
-  const names = new Map(members.data?.map((m) => [m.userId, { name: m.name || m.email, title: m.title, email: m.email }]) ?? []);
-  // With no decision maker named, the proposal is addressed to the client's own admins
-  const admins = (members.data ?? []).filter((m) => m.access === "admin" && !m.neon1 && m.status === "joined").map((m) => names.get(m.userId)!);
-  return <Proposal project={detail.data.project} items={detail.data.items} orgName={org.name} names={names} admins={admins} base={base} />;
+  const { project: p, items } = detail.data;
+  const revs = revisions(items);
+  const asked = Number(params.get("r")) || undefined;
+  const shown = params.get("draft") === "1" ? undefined : asked ? revs.find((r) => r.p.rev === asked) : revs.at(-1);
+  if (asked && !shown) return <Empty text={`${p.key} has no revision ${asked}.`} action={<Link className="btn btn-ghost" to={`${base}/proposal`}>Latest revision</Link>} />;
+  // The draft: what Issue would freeze now. Its option IDs say "draft" until it's issued
+  let snapshot: ProposalSnapshot;
+  if (shown) snapshot = shown.p.snapshot;
+  else {
+    const latest = revs.at(-1);
+    const people = (members.data ?? []).filter((m) => m.status !== "deactivated").map((m) => ({ userId: m.userId, name: m.name || m.email, title: m.title, email: m.email, admin: m.access === "admin" && !m.neon1 && m.status === "joined" }));
+    snapshot = buildSnapshot({ project: p, items, orgName: org.name, people, number: latest?.p.number ?? 0, rev: (latest?.p.rev ?? 0) + 1 });
+    for (const o of snapshot.options) o.code = latest ? o.code : `Draft ${o.letter}`;
+  }
+  if (!snapshot.options.length) {
+    return <Empty text="There's no proposal yet. It's ready once neon1 shares options for this project." action={<Link className="btn btn-ghost" to={`${base}/needs#options`}>Options</Link>} />;
+  }
+  // Decisions made on the revision shown, newest last; the one in force is marked
+  const inForce = currentDecision(items).decision?.id;
+  const decided = shown ? items.filter((i) => i.kind === "decision" && i.fields.proposalId === shown.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt)) : [];
+  return <Proposal snapshot={snapshot} rev={shown?.p} latestRev={revs.at(-1)?.p.rev} decided={decided} inForce={inForce} timeZone={org.timeZone} slug={summary.slug} base={base} />;
 }
 
 
-type Person = { name: string; title?: string; email: string };
+/** One acceptance as printed: who approved which option ID, when, and on what conditions */
+function acceptanceOf(d: Item): Acceptance | undefined {
+  const r = DecisionFields.safeParse(d.fields);
+  if (!r.success) return undefined;
+  const f = r.data;
+  return { name: f.approverName || f.approverEmail || "A member", email: f.approverEmail, code: f.code ?? "", title: f.terms?.title ?? d.title.replace(/^Approved: /, ""), at: f.approvedAt, conditions: f.conditions || undefined, initials: f.initials };
+}
 
-/** The document itself; kept apart from loading so it reads top to bottom like the page */
-function Proposal({ project: p, items, orgName, names, admins, base }: { project: Project; items: Item[]; orgName: string; names: Map<string, Person>; admins: Person[]; base: string }) {
-  const of = (kind: string) => items.filter((i) => i.kind === kind);
-  const decision = currentDecision(items);
-  // The options a client sees: shared or approved ones (drafts and declined ones stay off the page)
-  const options = of("option").filter((o) => o.status === "proposed" || o.status === "approved");
-  if (!options.length) {
-    return <Empty text="There's no proposal yet. It's ready once neon1 shares options for this project." action={<Link className="btn btn-ghost" to={`${base}/needs#options`}>Options</Link>} />;
-  }
-  // The proposal is dated when its newest option was last shared or changed, and versioned with it
-  const dated = options.map((o) => o.updatedAt).sort().at(-1)!;
-  const version = Math.max(...options.map((o) => o.version));
-  const letters = options.map((o) => /^([A-Z])\.\s/.exec(o.title)?.[1]);
-  // Who decides for the client: the named decision makers, or the client's people on the project
-  const deciders = p.people.filter((x) => x.role === "decision_maker").map((x) => names.get(x.userId)).filter((x): x is Person => Boolean(x));
-  const lead = deciders[0] ?? admins[0];
-  // What the client asked for, what neon1 asked, and the answers
-  const requests = of("request");
-  const answered = of("discovery").filter((q) => q.body.trim());
-  const requirements = of("requirement");
-  const measures = of("metric");
-  const files = of("file_request");
-  const assets = of("asset");
-  // The agreed decision, if there is one
-  const agreed = decision.option ? decision : undefined;
-  const df = agreed?.decision ? DecisionFields.safeParse(agreed.decision.fields) : undefined;
-  const d = df?.success ? df.data : undefined;
+
+/** The document itself, from a frozen snapshot (or the draft's); it reads top to bottom like the page */
+function Proposal({ snapshot: s, rev, latestRev, decided, inForce, timeZone, slug, base }: { snapshot: ProposalSnapshot; rev?: ProposalFields; latestRev?: number; decided: Item[]; inForce?: string; timeZone?: string; slug: string; base: string }) {
+  const toast = useToast();
+  const ref = rev ? proposalRef(rev.number, rev.rev) : undefined;
+  const title = ref ? `Proposal ${ref}` : "Proposal draft";
+  // The browser tab and a saved PDF are named for the proposal
+  useEffect(() => {
+    const was = document.title;
+    document.title = `${title} · ${s.orgName} · 1NEON`;
+    return () => { document.title = was; };
+  }, [title, s.orgName]);
+  const stale = rev && !decided.length && priceCheckDue(rev, todayIn(timeZone));
+  const older = rev && latestRev && rev.rev < latestRev;
+  const accepted = decided.find((d) => d.id === inForce) ?? decided.at(-1);
+  const docx = async () => {
+    if (!rev) return;
+    try {
+      await downloadDocx(rev, s, slug, { accepted: accepted && acceptanceOf(accepted), fictional: DEMO ? FICTIONAL : undefined });
+    } catch (e) {
+      toast(problem(e));
+    }
+  };
   return (
     <>
-      {/* Only on screen: print or save, and the way back */}
+      {/* Only on screen: the way back, print or save, and Word */}
       <div className="pp-tools">
         <Link className="btn btn-ghost btn-sm" to={`${base}/needs#options`}>Back to options</Link>
-        <button type="button" className="btn btn-primary btn-sm" onClick={() => window.print()}><Printer size={15} aria-hidden="true" /> Print or save as PDF</button>
+        <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {rev && <button type="button" className="btn btn-ghost btn-sm" onClick={() => void docx()}><FileText size={15} aria-hidden="true" /> Download Word</button>}
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => window.print()}><Printer size={15} aria-hidden="true" /> Print or save as PDF</button>
+        </span>
       </div>
-      {DEMO && <p className="pp-note">A fictional bakery and illustrative figures, to show what a real proposal looks like.</p>}
-    <article className="proposal" aria-label="Proposal">
+      {/* Where this copy stands: a draft, an earlier revision, or one past its price check */}
+      {!rev && <p className="pp-state" role="status">Draft, not issued. It shows the project as it is now; neon1 issues it as a numbered revision before an option can be approved.</p>}
+      {older && <p className="pp-state" role="status">This is an earlier revision. <Link to={`${base}/proposal`}>Read the latest, r{latestRev}</Link>.</p>}
+      {stale && <p className="pp-state warn" role="status">Prices may have changed since {longDate(rev!.issuedAt)}. Ask neon1 to refresh this proposal before choosing an option.</p>}
+    <article className={`proposal${stale || older ? " pp-faded" : ""}`} aria-labelledby="pp-h1">
+      {/* The fictional label, on screen and fixed to every printed page */}
+      {DEMO && <p className="pp-note">{FICTIONAL}</p>}
 
       {/* Letterhead: the mark and wordmark left, the title block right in green */}
       <header className="pp-head">
@@ -129,73 +154,82 @@ function Proposal({ project: p, items, orgName, names, admins, base }: { project
           </div>
         </div>
         <div className="pp-title">
-          <b>{orgName}</b>
-          <span>{p.name}</span>
+          <b>{s.orgName}</b>
+          <h1 id="pp-h1">{s.project.name}</h1>
           <span>Business Modernization Design (Proposal)</span>
-          <span>{longDate(dated)}</span>
-          <span>ID: {p.key}-p{version}</span>
+          <span>{rev ? `Issued ${longDate(rev.issuedAt)}` : "Draft, not issued"}</span>
+          <span>ID: {ref ?? "assigned when issued"}</span>
         </div>
       </header>
 
-      {/* The facts, in one table */}
+      {/* The facts, in one table; stacks on a phone */}
       <table className="pp-facts">
         <tbody>
-          <tr><th>Prepared for</th><td>{lead ? `${lead.name}${lead.title ? `, ${lead.title}` : ""}` : orgName}</td><th>Prepared by</th><td>Pradeep Tathineni, neon1</td></tr>
-          <tr><th>Organization</th><td>{orgName}</td><th>Valid until</th><td>{longDate(plusDays(dated, VALID_DAYS))}</td></tr>
-          <tr><th>Contact</th><td>{lead?.email ?? "—"}</td><th>Wanted by</th><td>{p.targetDate ? longDate(p.targetDate) : "—"}</td></tr>
+          <tr><th>Prepared for</th><td>{s.preparedFor ? `${s.preparedFor.name}${s.preparedFor.title ? `, ${s.preparedFor.title}` : ""}` : s.orgName}</td><th>Prepared by</th><td>Pradeep Tathineni, neon1</td></tr>
+          <tr><th>Organization</th><td>{s.orgName}</td><th>Estimates checked</th><td>{rev ? `${longDate(rev.issuedAt)}; recheck after ${longDate(rev.checkBy)}` : "when issued"}</td></tr>
+          <tr><th>Contact</th><td>{s.preparedFor?.email ?? "—"}</td><th>Wanted by</th><td>{s.project.targetDate ? longDate(s.project.targetDate) : "—"}</td></tr>
         </tbody>
       </table>
+      {rev?.note && <p className="pp-small"><b>What changed in r{rev.rev}:</b> {rev.note}</p>}
 
       <Section title="Discovery">
-        {p.summary && <><p className="pp-sub">How it works today</p><p>{p.summary}</p></>}
-        {requests.length > 0 && (
+        {s.project.summary && <><p className="pp-sub">How it works today</p><p>{s.project.summary}</p></>}
+        {s.requests.length > 0 && (
           <>
             <p className="pp-sub">What you asked for</p>
-            <ul className="pp-list">{requests.map((r) => <li key={r.id}>{r.title}{r.body ? `. ${r.body}` : ""}</li>)}</ul>
+            <ul className="pp-list">{s.requests.map((r, i) => <li key={i}>{r.title}{r.body ? `. ${r.body}` : ""}</li>)}</ul>
           </>
         )}
-        {answered.length > 0 && (
+        {s.learned.length > 0 && (
           <>
             <p className="pp-sub">What we learned</p>
-            <ul className="pp-list">{answered.map((q) => <li key={q.id}><b>{q.title}</b> {q.body}</li>)}</ul>
+            <ul className="pp-list">{s.learned.map((q, i) => <li key={i}><b>{q.title}</b> {q.body}</li>)}</ul>
           </>
         )}
       </Section>
 
       <Section title="Objectives">
-        {p.outcome && <><p className="pp-sub">The result</p><p>{p.outcome}</p></>}
-        {measures.length > 0 && (
+        {s.project.outcome && <><p className="pp-sub">The result</p><p>{s.project.outcome}</p></>}
+        {s.measures.length > 0 && (
           <>
             <p className="pp-sub">How we'll know it worked</p>
-            <ul className="pp-list">{measures.map((m) => {
-              const f = MetricFields.parse(m.fields);
-              const range = f.baseline !== undefined && f.target !== undefined ? `: from ${f.baseline} to ${f.target}${f.unit ? ` ${f.unit}` : ""}` : "";
-              return <li key={m.id}>{m.title}{range}</li>;
-            })}</ul>
+            <ul className="pp-list">{s.measures.map((m, i) => <li key={i}>{m}</li>)}</ul>
           </>
         )}
-        {requirements.length > 0 && (
+        {s.requirements.length > 0 && (
           <>
             <p className="pp-sub">Requirements</p>
-            <ul className="pp-list">{requirements.map((r) => <li key={r.id}>{r.title} <span className="pp-muted">({RequirementFields.parse(r.fields).priority === "must" ? "must have" : RequirementFields.parse(r.fields).priority === "could" ? "nice to have" : "should have"})</span></li>)}</ul>
+            <ul className="pp-list">{s.requirements.map((r, i) => <li key={i}>{r.title} <span className="pp-muted">({r.priority === "must" ? "must have" : r.priority === "could" ? "nice to have" : "should have"})</span></li>)}</ul>
           </>
         )}
       </Section>
 
+      {s.constraints.length > 0 && (
+        <Section title="Constraints and assumptions">
+          <ul className="pp-list">{s.constraints.map((c, i) => <li key={i}>{c.title}{c.body ? `. ${c.body}` : ""}</li>)}</ul>
+        </Section>
+      )}
+
       <Section title="Options">
-        {options.map((o) => {
-          const f = OptionFields.parse(o.fields);
+        {s.options.map((o) => {
+          const f = o.fields;
           return (
             <div key={o.id} className="pp-option">
-              <h3>{o.title}{f.recommended && <span className="pp-tag">recommended</span>}{o.status === "approved" && <span className="pp-tag">approved</span>}</h3>
+              <h3><span className="pp-code">{o.code}</span> {o.title}{f.recommended && <span className="pp-tag">recommended</span>}</h3>
               <Body text={o.body} />
               {f.result && <p><b>Target result:</b> {f.result}</p>}
               <p className="pp-terms">
                 {f.hours && <span><b>neon1's time:</b> {f.hours}</span>}
                 {f.timeline && <span><b>Timeline:</b> {f.timeline}</span>}
-                {f.cost && <span><b>Price:</b> {f.cost}</span>}
+                {f.cost && <span><b>Estimate:</b> {f.cost}</span>}
                 {f.outsideCosts && <span><b>Paid directly by you:</b> {f.outsideCosts}</span>}
               </p>
+              {f.purchases.length > 0 && (
+                <>
+                  <p className="pp-sub">Expected purchases</p>
+                  <ul className="pp-list">{f.purchases.map((x, i) => <li key={i}>{x.name}{x.estimate ? `, ${x.estimate}` : ""}{x.example ? ` (${x.example})` : ""}. {x.buyer === "neon1" ? "neon1 buys it, paid back at cost with the receipt." : "You buy it."}{x.why ? ` ${x.why}.` : ""}</li>)}</ul>
+                </>
+              )}
             </div>
           );
         })}
@@ -203,15 +237,12 @@ function Proposal({ project: p, items, orgName, names, admins, base }: { project
 
       <Section title="Cost estimates">
         <table className="pp-costs">
-          <thead><tr><th>Option</th><th>neon1's time</th><th>Timeline</th><th>Price</th><th>Paid directly by you</th></tr></thead>
+          <thead><tr><th>Option</th><th>neon1's time</th><th>Timeline</th><th>Estimate</th><th>Paid directly by you</th></tr></thead>
           <tbody>
-            {options.map((o) => {
-              const f = OptionFields.parse(o.fields);
-              return <tr key={o.id}><td>{o.title}</td><td>{f.hours || "—"}</td><td>{f.timeline || "—"}</td><td>{f.cost || "—"}</td><td>{f.outsideCosts || "None"}</td></tr>;
-            })}
+            {s.options.map((o) => <tr key={o.id}><td><span className="pp-code">{o.code}</span> {o.title}</td><td>{o.fields.hours || "—"}</td><td>{o.fields.timeline || "—"}</td><td>{o.fields.cost || "—"}</td><td>{o.fields.outsideCosts || "None"}</td></tr>)}
           </tbody>
         </table>
-        <p className="pp-small">Prices are fixed for the work described. Accounts and subscriptions are in your name and billed to you directly, so nothing is marked up and nothing is lost if we stop working together.</p>
+        <p className="pp-small">Estimates are for the work described. Accounts and subscriptions are in your name and billed to you directly, so nothing is marked up and nothing is lost if we stop working together. Items to buy are bought by you, unless you agree with your initials that neon1 buys them; those are paid back at cost, with the receipt.</p>
       </Section>
 
       {/* Shared and individual responsibilities, in the "You will / I will" pairs of neon1's proposals */}
@@ -219,33 +250,38 @@ function Proposal({ project: p, items, orgName, names, admins, base }: { project
         <table className="pp-duties">
           <thead><tr><th>You will</th><th>I will</th></tr></thead>
           <tbody>
-            <tr><td>Name one person who decides{deciders.length ? ` (${deciders.map((x) => x.name).join(" or ")})` : ""}, and answer questions within two business days.</td><td>Say when I'm working, what I'll do, and answer your questions within one business day.</td></tr>
-            <tr><td>Give the access listed below, in your own accounts{assets.length ? `: ${assets.map((a) => a.title).join(", ")}` : ""}.</td><td>Use only the access the work needs, keep your information confidential, and hand back or remove it at handover.</td></tr>
-            {files.length > 0 && <tr><td>Send what I asked for: {files.map((x) => x.title).join("; ")}.</td><td>Keep what you send in this project only, and use it only for this work.</td></tr>}
+            <tr><td>Name one person who decides{s.deciders.length ? ` (${s.deciders.join(" or ")})` : ""}, and answer questions within two business days.</td><td>Say when I'm working, what I'll do, and answer your questions within one business day.</td></tr>
+            <tr><td>Give the access listed below, in your own accounts{s.assets.length ? `: ${s.assets.join(", ")}` : ""}.</td><td>Use only the access the work needs, keep your information confidential, and hand back or remove it at handover.</td></tr>
+            {s.files.length > 0 && <tr><td>Send what I asked for: {s.files.join("; ")}.</td><td>Keep what you send in this project only, and use it only for this work.</td></tr>}
             <tr><td>Make time for testing and a short training for the people who'll use it.</td><td>Test against the measures above, show you the result, and train your team.</td></tr>
-            <tr><td>Pay for any accounts or subscriptions directly, in your name.</td><td>Leave a runbook and every login in your name, and fix defects found in the first 30 days at no charge.</td></tr>
+            <tr><td>Buy what the chosen option lists, in your name, and keep the receipts with the project.</td><td>Leave a runbook and every login in your name, and fix defects found in the first 30 days at no charge.</td></tr>
           </tbody>
         </table>
-        <p className="pp-small">If something outside either of our control holds the work up, such as a vendor or a delivery, I'll pause the timeline, tell you the same day, and give you a new date.</p>
+        <p className="pp-small">If something outside either of our control holds the work up, such as a vendor, a delivery, or an approval from a landlord, I'll pause the timeline, tell you the same day, and give you a new date.</p>
       </Section>
 
       <Section title="Comments and agreement">
         <ul className="pp-list">
-          <li>This proposal is valid for {VALID_DAYS} days from the date at the top.</li>
-          <li>It works under our services agreement, signed once before any paid work. That agreement covers payment, ownership, confidentiality, and how either of us can end the work.</li>
-          <li>Choosing an option, by signing below or approving it in 1NEON, means we both agree to that option's work, price, and timeline, and to what each of us will do. Neither of us adds work or cost without a written change request the other approves.</li>
-          <li>For questions or adjustments, reply in 1NEON, write to hello@neon1.tech, or call +1 424-326-3661.</li>
+          <li>{rev ? <>Estimates were checked on {longDate(rev.issuedAt)}. After {longDate(rev.checkBy)}, ask neon1 to refresh them before choosing; refreshing issues the next revision.</> : "Estimates are checked when this proposal is issued, and rechecked after 30 days."}</li>
+          <li>Choosing an option, by signing below or approving it in 1NEON, accepts that option's scope and estimate, and what each of us will do. It isn't a bill. Work begins under our service agreement, signed once before any paid work, which covers payment, ownership, confidentiality, and how either of us can end the work.</li>
+          <li>Neither of us adds work or cost without a written change, which becomes the next revision of this proposal.</li>
+          <li>For questions or changes, reply in 1NEON, upload a marked-up copy of this document, write to hello@neon1.tech, or call +1 424-326-3661.</li>
         </ul>
-        {agreed?.option && d ? (
-          <div className="pp-accepted">
-            <p className="pp-sub">Accepted in 1NEON</p>
-            <p><b>{d.approverName || names.get(d.approvedBy)?.name || "A member"}</b>{d.approverEmail ? ` (${d.approverEmail})` : ""} approved <b>{d.terms?.title ?? agreed.option.title}</b>, version {d.optionVersion}, on {longDate(d.approvedAt)}.</p>
-            {d.conditions && <p><b>Conditions:</b> {d.conditions}</p>}
-            <p className="pp-small">1NEON keeps a copy of the approved option exactly as shown, with who approved it and when. Neither can be edited afterwards.</p>
-          </div>
-        ) : (
+        {decided.length ? decided.map((d) => {
+          const a = acceptanceOf(d);
+          if (!a) return null;
+          return (
+            <div className="pp-accepted" key={d.id}>
+              <p className="pp-sub">Accepted in 1NEON{d.id !== inForce ? " (later replaced)" : ""}</p>
+              <p><b>{a.name}</b>{a.email ? ` (${a.email})` : ""} approved <b>{a.code} {a.title}</b> on {longDate(a.at)}.</p>
+              {a.initials && <p>Initialed <b>{a.initials}</b>: neon1 buys the items marked for it, paid back at cost with the receipt.</p>}
+              {a.conditions && <p><b>Conditions:</b> {a.conditions}</p>}
+              <p className="pp-small">1NEON keeps this revision and the approved terms exactly as shown, with who approved and when. Neither can be edited afterwards.</p>
+            </div>
+          );
+        }) : (
           <div className="pp-sign">
-            <p>I, ____________________________ (print name), choose option {letters.filter(Boolean).length ? letters.filter(Boolean).join(" / ") : "______"} for {orgName}.</p>
+            <p>I, ____________________________ (print name), choose option {s.options.map((o) => o.code).join(" / ")} for {s.orgName}.</p>
             <p>Signature ____________________________ Date ______________</p>
             <p>For neon1 LLC: Pradeep Tathineni &nbsp; Signature ____________________________ Date ______________</p>
           </div>
@@ -257,6 +293,8 @@ function Proposal({ project: p, items, orgName, names, admins, base }: { project
         <span>1 is glad to be of service.</span>
         <span>Prepared by neon1 LLC · Your tech: Pradeep Tathineni, pradeep@neon1.tech</span>
       </footer>
+      {/* On paper: the ID (and the fictional label in the Demo) on every page */}
+      <div className="pp-pagefoot" aria-hidden="true">{ref ? `Proposal ${ref}` : "Proposal draft, not issued"}{DEMO ? " · Fictional sample, not an offer" : ""}</div>
     </article>
     </>
   );

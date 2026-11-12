@@ -2,7 +2,8 @@
 // and project, with one place to upload from a phone or a browser.
 
 
-import { fileState, type DocumentRecord, type Layer } from "@1neon/domain";
+import { fileState, priceCheckDue, todayIn, type DocumentRecord, type Layer } from "@1neon/domain";
+import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { DropZone, FileList } from "../components/Files.tsx";
@@ -16,6 +17,8 @@ import { read } from "../lib/reads.ts";
 interface DocsResponse {
   docs: DocumentRecord[];
   projects: { id: string; key: string; name: string; archived?: boolean }[];
+  // Every issued proposal revision, newest first (older APIs don't send it)
+  proposals?: { id: string; projectId: string; key: string; title: string; rev: number; status: string; issuedAt: string; issuerName?: string; note: string; checkBy: string; decided: string[] }[];
 }
 
 
@@ -83,6 +86,31 @@ export function Documents() {
           {checking} {checking === 1 ? "file is" : "files are"} still being checked for viruses; {checking === 1 ? "it opens" : "they open"} when the check finishes.{" "}
           <button type="button" className="linkish" onClick={() => { polls.current = 0; void q.refetch(); }}>Check again</button>
         </p>
+      )}
+      {/* Proposals: each issued revision, what was decided on it, and the markups filed with it */}
+      {(q.data?.proposals?.length ?? 0) > 0 && (show === "all" || show === "needs") && (
+        <section className="kind-group" aria-labelledby="files-proposals">
+          <h2 className="section-h" id="files-proposals">Proposals <small>{q.data!.proposals!.length}</small></h2>
+          <div className="rows">
+            {q.data!.proposals!.map((r) => {
+              const stale = !r.decided.length && r.status === "issued" && priceCheckDue(r, todayIn(org.timeZone));
+              const markups = docs.filter((d) => d.itemId === r.id);
+              return (
+                <div className={`revision${r.status !== "issued" || stale ? " faded" : ""}`} key={r.id}>
+                  <div>
+                    <Link to={`/o/${org.slug}/projects/${r.key}/proposal?r=${r.rev}`}><b>{r.title}</b></Link>
+                    <span className="small muted"> · {r.key} · issued {new Date(r.issuedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}{r.issuerName ? ` by ${r.issuerName}` : ""}</span>
+                    <div className="small">
+                      {r.decided.length ? <span className="tag client">approved {r.decided.join(", ")}</span> : r.status === "superseded" ? <span className="tag">replaced by a later revision</span> : stale ? <span className="tag warn">prices may have changed</span> : <span className="tag">waiting on a decision</span>}
+                      {r.note && <span className="muted"> {r.note}</span>}
+                    </div>
+                    {markups.length > 0 && <FileList docs={markups} empty="" />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
       {gate([q]) ?? <FileList docs={show === "all" ? docs : docs.filter((d) => d.layer === show)} projectName={projectName} empty="No files here yet." />}
     </>

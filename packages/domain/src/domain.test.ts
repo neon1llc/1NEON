@@ -280,9 +280,9 @@ describe("proposal references", () => {
   it("says which options changed since a revision, ignoring an approval of an issued one", () => {
     const snap = { options: [{ id: "a", version: 2, status: "proposed" }, { id: "b", version: 1, status: "proposed" }] } as never;
     const now = [
-      { id: "a", kind: "option", status: "approved", version: 3, title: "A" },
-      { id: "b", kind: "option", status: "proposed", version: 2, title: "B" },
-      { id: "c", kind: "option", status: "proposed", version: 1, title: "C" },
+      { id: "a", kind: "option" as const, status: "approved", version: 3, title: "A" },
+      { id: "b", kind: "option" as const, status: "proposed", version: 2, title: "B" },
+      { id: "c", kind: "option" as const, status: "proposed", version: 1, title: "C" },
     ];
     const r = changedSince({ snapshot: snap }, now);
     expect(r.edited.map((o) => o.id)).toEqual(["b"]);

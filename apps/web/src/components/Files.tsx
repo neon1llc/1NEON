@@ -2,7 +2,8 @@
 // camera or files, a browser's file picker, or a drop onto the page.
 
 
-import { fileState, VIEWABLE, type DocumentRecord, type FileState, type Layer } from "@1neon/domain";
+import { fileState, proposalRef, revisions, VIEWABLE, type DocumentRecord, type FileState, type Item, type Layer } from "@1neon/domain";
+import { proposalRefOf } from "../lib/docx.ts";
 import { useRef, useState, type ReactNode } from "react";
 import { api, HttpError, openable, send } from "../lib/api.ts";
 import { problem, useRefresh } from "../lib/hooks.ts";
@@ -118,7 +119,29 @@ export function useUpload(target: FileTarget, onDone?: () => void) {
     running.current = false;
     setBusy(false);
   };
-  const run = (files: File[]) => go(files.map((file) => ({ file })));
+  const ask = useAsk();
+  // A project upload that carries a proposal's ID (file name, Word property, or header) is asked about:
+  // filed as a markup of that revision, it lands under Files → Proposals and neon1 is told
+  const markupOf = async (file: File): Promise<string | undefined> => {
+    if (!target.projectId || target.itemId) return undefined;
+    const ref = await proposalRefOf(file);
+    if (!ref) return undefined;
+    const detail = await api<{ items: Item[] }>(`/t/${org.id}/projects/${target.projectId}`).catch(() => undefined);
+    const rev = detail && revisions(detail.items).find((r) => r.p.number === ref.number && r.p.rev === ref.rev);
+    if (!rev) return undefined;
+    const yes = await ask({ title: `Is this a revision of Proposal ${proposalRef(ref.number, ref.rev)}?`, body: `${file.name} looks like a marked-up copy. Filed as a markup, it's kept with that revision and neon1 answers with the next one.`, yes: "Yes, it's a markup", no: "No, an ordinary file" });
+    return yes ? rev.id : undefined;
+  };
+  const run = async (files: File[]) => {
+    const plain: File[] = [];
+    for (const file of files) {
+      const rev = await markupOf(file);
+      if (rev) await uploadFiles(org.id, [{ file }], { ...target, layer: "needs", itemId: rev }).then((r) => toast(r[0]?.error ? `${file.name} didn't upload: ${r[0].error}` : `Filed ${file.name} as a markup`));
+      else plain.push(file);
+    }
+    if (plain.length) await go(plain.map((file) => ({ file })));
+    else refresh();
+  };
   const retry = () => go(left);
   const cancel = () => stop.current?.abort();
   return { busy, run, retry, cancel, left };
