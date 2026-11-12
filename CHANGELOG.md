@@ -2,6 +2,11 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## Unreleased
+
+### Changed
+- The demo's sign-in screen is laid out like the real one: an "Interactive demo" heading with its line under it at the same size as the client portal's, the FAQs and policy links under the people, then a divider and the guided walkthrough link, where the real sign-in has the sample and the demo. The people's names and roles read a size larger.
+
 ## v0.4.0 - 2026-11-11
 
 ### Added
