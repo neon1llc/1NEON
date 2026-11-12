@@ -111,6 +111,21 @@ function Proposal({ snapshot: s, rev, latestRev, decided, inForce, timeZone, slu
     document.title = `${title} · ${s.orgName} · 1NEON`;
     return () => { document.title = was; };
   }, [title, s.orgName]);
+  // On paper, the ID (and the Demo's fictional label) prints in every page's bottom margin, with the
+  // page number. A constructed sheet, since the portal's policy allows no inline style elements
+  const foot = `${ref ? `Proposal ${ref}` : "Proposal draft, not issued"}${DEMO ? " · Fictional sample, not an offer" : ""}`;
+  useEffect(() => {
+    if (typeof CSSStyleSheet === "undefined" || !("adoptedStyleSheets" in document)) return;
+    const sheet = new CSSStyleSheet();
+    const text = JSON.stringify(foot);
+    try {
+      sheet.replaceSync(`@page { @bottom-left { content: ${text}; font: 9px sans-serif; color: #55655b; } @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 9px sans-serif; color: #55655b; } }`);
+    } catch {
+      return;
+    }
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    return () => { document.adoptedStyleSheets = document.adoptedStyleSheets.filter((x) => x !== sheet); };
+  }, [foot]);
   const stale = rev && !decided.length && priceCheckDue(rev, todayIn(timeZone));
   const older = rev && latestRev && rev.rev < latestRev;
   const accepted = decided.find((d) => d.id === inForce) ?? decided.at(-1);
@@ -273,7 +288,7 @@ function Proposal({ snapshot: s, rev, latestRev, decided, inForce, timeZone, slu
           return (
             <div className="pp-accepted" key={d.id}>
               <p className="pp-sub">Accepted in 1NEON{d.id !== inForce ? " (later replaced)" : ""}</p>
-              <p><b>{a.name}</b>{a.email ? ` (${a.email})` : ""} approved <b>{a.code} {a.title}</b> on {longDate(a.at)}.</p>
+              <p><b>{a.name}</b>{a.email ? ` (${a.email})` : ""} approved <b>{a.code}</b> ({a.title}) on {longDate(a.at)}.</p>
               {a.initials && <p>Initialed <b>{a.initials}</b>: neon1 buys the items marked for it, paid back at cost with the receipt.</p>}
               {a.conditions && <p><b>Conditions:</b> {a.conditions}</p>}
               <p className="pp-small">1NEON keeps this revision and the approved terms exactly as shown, with who approved and when. Neither can be edited afterwards.</p>
@@ -293,9 +308,8 @@ function Proposal({ snapshot: s, rev, latestRev, decided, inForce, timeZone, slu
         <span>1 is glad to be of service.</span>
         <span>Prepared by neon1 LLC · Your tech: Pradeep Tathineni, pradeep@neon1.tech</span>
       </footer>
-      {/* On paper: the ID (and the fictional label in the Demo) on every page */}
-      <div className="pp-pagefoot" aria-hidden="true">{ref ? `Proposal ${ref}` : "Proposal draft, not issued"}{DEMO ? " · Fictional sample, not an offer" : ""}</div>
     </article>
+
     </>
   );
 }

@@ -100,7 +100,8 @@ type Who = { userId: string; name: string; title?: string; email: string; admin?
  */
 export function buildSnapshot(input: { project: Project; items: Item[]; orgName: string; people: Who[]; number: number; rev: number }): ProposalSnapshot {
   const { project: p, items, number, rev } = input;
-  const of = (kind: string) => items.filter((i) => i.kind === kind);
+  // In the order the project shows them (by rank), never storage order
+  const of = (kind: string) => items.filter((i) => i.kind === kind).sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0));
   const byId = new Map(input.people.map((x) => [x.userId, x]));
   const deciders = p.people.filter((x) => x.role === "decision_maker").map((x) => byId.get(x.userId)).filter((x): x is Who => Boolean(x));
   const lead = deciders[0] ?? input.people.find((x) => x.admin);
