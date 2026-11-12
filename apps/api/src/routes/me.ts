@@ -2,7 +2,7 @@
 // profile edits, and proving the mobile number that text notices go to.
 
 
-import { UpdateMeInput, type Member, type Tenant, type User } from "@1neon/domain";
+import { UpdateMeInput, isActiveMember, type Member, type Tenant, type User } from "@1neon/domain";
 import { z } from "zod";
 import { assurance } from "../lib/assurance.ts";
 import { body, defined, fail, now, who } from "../lib/http.ts";
@@ -21,7 +21,7 @@ export function meRoutes(app: App, k: Kit) {
     // First visit after an invite: mark joined. Every visit: last seen
     const t = now();
     for (const m of memberships) {
-      if (m.status === "deactivated") continue;
+      if (!isActiveMember(m)) continue;
       const joined = m.status === "invited";
       const stale = !m.lastSeenAt || Date.parse(t) - Date.parse(m.lastSeenAt) > 5 * 60 * 1000;
       if (joined || stale) {
@@ -32,7 +32,7 @@ export function meRoutes(app: App, k: Kit) {
         else if (!m.lastSeenAt || Date.parse(t) - Date.parse(m.lastSeenAt) > 2 * 60 * 60 * 1000) await repo.table.write([repo.auditOp({ tenantId: m.tenantId, actorId: user.id, action: "member.signedin", target: user.id, summary: `${user.name || user.email} signed in` })]);
       }
     }
-    const active = memberships.filter((m) => m.status !== "deactivated");
+    const active = memberships.filter(isActiveMember);
     // The operator sees every active organization; everyone else sees their own
     const tenants = actor.operator ? await repo.listTenants() : (await Promise.all(active.map((m) => repo.getTenant(m.tenantId)))).filter(Boolean) as Tenant[];
     const accessBy = new Map(active.map((m) => [m.tenantId, m.access] as const));
@@ -51,7 +51,7 @@ export function meRoutes(app: App, k: Kit) {
       neo: Boolean(d.neo),
       orgs: tenants
         .filter((t) => t.status === "active")
-        .map((t) => ({ id: t.id, slug: t.slug, name: t.name, clientId: t.clientId, access: actor.operator ? "admin" : accessBy.get(t.id) }))
+        .map((t) => ({ id: t.id, slug: t.slug, name: t.name, clientId: t.clientId, access: actor.operator ? "admin" : accessBy.get(t.id), provenance: t.provenance }))
         .sort((a, b) => a.clientId.localeCompare(b.clientId)),
     });
   });

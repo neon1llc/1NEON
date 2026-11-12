@@ -2,7 +2,7 @@
 // its workflow stages, the workspace landing, Coming up, Insights, and the audit trail.
 
 
-import { Stage, canApprove, changeRecord, occurrences, stageChanges, dateIn, isClosed, isOwnOrg, metricReached, mondayOf, plusDays, todayIn, type Tenant } from "@1neon/domain";
+import { Stage, canApprove, changeRecord, isActiveMember, occurrences, stageChanges, dateIn, isClosed, isOwnOrg, metricReached, mondayOf, plusDays, todayIn, type Tenant } from "@1neon/domain";
 import { z } from "zod";
 import { actorId, body, fail, need, now, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
@@ -112,7 +112,7 @@ export function workspaceRoutes(app: App, k: Kit) {
         projects: live.length,
         deciding: live.filter((p) => stageName.get(p.stageId)?.id === "decide").length,
         building: live.filter((p) => stageName.get(p.stageId)?.layer === "execution").length,
-        people: members.filter((m) => m.status !== "deactivated").length,
+        people: members.filter(isActiveMember).length,
         invited: members.filter((m) => m.status === "invited").length,
         documents: (await allDocs(t.id, live.map((p) => p.id))).length,
       },

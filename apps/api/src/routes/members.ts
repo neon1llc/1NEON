@@ -2,7 +2,7 @@
 // through the outbox with the membership), resends, and access changes.
 
 
-import { InviteInput, UpdateMemberInput, changeRecord, newId, type Member, type Tenant, type User } from "@1neon/domain";
+import { InviteInput, UpdateMemberInput, changeRecord, isActiveMember, newId, type Member, type Tenant, type User } from "@1neon/domain";
 import { actorId, body, defined, fail, need, now, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
 import { outboxOp } from "../outbox.ts";
@@ -12,7 +12,7 @@ import { ConflictError } from "../store/types.ts";
 // A person's access, title, or status change, in words ("access Member → Admin")
 function memberRecord(m: Member, next: Member) {
   const who = m.name || m.email;
-  const status: Record<string, string> = { invited: "Invited", joined: "Active", deactivated: "Deactivated" };
+  const status: Record<string, string> = { invited: "Invited", joined: "Active", deactivated: "Deactivated", on_file: "On file" };
   const changes: string[] = [];
   if (m.access !== next.access) changes.push(`access ${cap(m.access)} → ${cap(next.access)}`);
   if ((m.title ?? "") !== (next.title ?? "")) changes.push(next.title ? `title "${m.title || "none"}" → "${next.title}"` : "title cleared");
@@ -48,10 +48,14 @@ export function memberRoutes(app: App, k: Kit) {
       if (!uid) {
         uid = newId("u");
         await repo.createUser({ id: uid, email: p.email, name: p.name, title: p.title, phone: "", operator: false, strongAuth: false, theme: "awake", menu: "default", version: 1, createdAt: ts, updatedAt: ts, updatedBy: inviter.id });
+      } else {
+        // Someone kept on file only is being invited on purpose: they may now make an account
+        const u = await repo.getUser(uid);
+        if (u?.recordOnly) await repo.saveUser({ ...u, recordOnly: undefined, version: u.version + 1, updatedAt: ts, updatedBy: inviter.id }, u.version);
       }
       const existing = await repo.getMember(t.id, uid);
-      // Already a member: nothing to do. A deactivated member is re-invited
-      if (existing && existing.status !== "deactivated") {
+      // Already a member: nothing to do. A deactivated or on-file member is invited
+      if (existing && isActiveMember(existing)) {
         out.push(existing);
         continue;
       }
@@ -118,8 +122,10 @@ export function memberRoutes(app: App, k: Kit) {
     // Client admins manage their own people; neon1's access stays neon1's to change (Pradeep, 2026-11-09)
     if (cfg.operatorEmails.includes(m.email.toLowerCase()) && !who(c).actor.operator) fail(403, "neon1_only", "neon1's access is managed by neon1. Write to hello@neon1.tech to change it.");
     const input = await body(c, UpdateMemberInput);
+    // A record on file changes only by inviting the person, never by switching them on here
+    if (m.status === "on_file" && input.status) fail(400, "on_file", "This person is on file only. Invite them to give them access.");
     const next: Member = { ...m, ...defined({ access: input.access, title: input.title, status: input.status }), version: m.version + 1, updatedAt: now(), updatedBy: actorId(c) };
-    const isAdmin = (x: Member) => x.access === "admin" && x.status !== "deactivated";
+    const isAdmin = (x: Member) => x.access === "admin" && isActiveMember(x);
     if (isAdmin(m) && !isAdmin(next)) {
       const admins = (await repo.listMembers(t.id)).filter(isAdmin);
       if (admins.length <= 1) fail(400, "last_admin", "An organization needs at least one admin.");

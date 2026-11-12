@@ -11,6 +11,8 @@ export interface OrgSummary {
   name: string;
   clientId: string;
   access?: AccessLevel;
+  // Set when the organization was rebuilt from notes rather than recorded as the work happened
+  provenance?: Tenant["provenance"];
 }
 
 

@@ -73,23 +73,23 @@ export function People() {
               // Admins change others' access; nobody changes their own here, and neon1's access is neon1's to change
               const editable = canAdmin && m.userId !== me.user.id && (!m.neon1 || me.operator);
               return (
-              <tr key={m.userId} style={m.status === "deactivated" ? { opacity: 0.55 } : undefined}>
+              <tr key={m.userId} style={m.status === "deactivated" || m.status === "on_file" ? { opacity: 0.55 } : undefined}>
                 <td><span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}><Avatar id={m.userId} name={m.name || m.email} /><span>{m.name || <span className="muted">{m.status === "invited" ? "Name comes when they join" : "No name yet"}</span>}<br /><span className="muted small">{m.title}</span></span></span></td>
                 <td className="mono small">{m.email}{m.neon1 && <span className="tag client" style={{ marginLeft: 8 }} title="neon1's access is managed by neon1">neon1</span>}</td>
                 <td>
-                  {editable && m.status !== "deactivated" ? (
+                  {editable && m.status !== "deactivated" && m.status !== "on_file" ? (
                     <select aria-label={`Access for ${m.email}`} value={m.access} onChange={(e) => void change(m, { access: e.target.value })} style={{ minHeight: 32, paddingTop: 2, paddingBottom: 2, paddingLeft: 8, maxWidth: 140 }}>
                       <option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option>
                     </select>
                   ) : <span className="tag">{m.access}</span>}
                 </td>
                 <td className="small">
-                  {m.status === "invited" ? <span className="tag warn">invited {ago(m.invitedAt)}</span> : m.status === "deactivated" ? "deactivated" : <span className="muted">seen {ago(m.lastSeenAt)}</span>}
+                  {m.status === "invited" ? <span className="tag warn">invited {ago(m.invitedAt)}</span> : m.status === "deactivated" ? "deactivated" : m.status === "on_file" ? <span className="muted" title="Kept as a record only: no sign-in, and nothing is sent to them">on file, no sign-in</span> : <span className="muted">seen {ago(m.lastSeenAt)}</span>}
                   {/* Whether the invitation email actually went out, and a way to send it again */}
                   {m.status === "invited" && m.invite && <span className={`muted small invite-${m.invite.state}`} style={{ marginLeft: 8 }}>{INVITE_STATE[m.invite.state]}</span>}
                   {canAdmin && m.status === "invited" && <button className="linkish small" style={{ marginLeft: 10 }} onClick={() => void resend(m)}>Resend</button>}
                   {/* Deactivate keeps the person's history; reactivate restores their access */}
-                  {editable && (
+                  {editable && m.status !== "on_file" && (
                     <button className="linkish small" style={{ marginLeft: 10 }} onClick={() => void change(m, { status: m.status === "deactivated" ? "joined" : "deactivated" })}>
                       {m.status === "deactivated" ? "Reactivate" : "Deactivate"}
                     </button>

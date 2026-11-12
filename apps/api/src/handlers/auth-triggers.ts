@@ -59,11 +59,13 @@ export function message(event: CustomMessageTriggerEvent, at = new Date()) {
 
 
 /** Pre sign-up: refuse any first sign-in whose email has no invite */
-async function preSignUp(event: PreSignUpTriggerEvent) {
+export async function preSignUp(event: PreSignUpTriggerEvent, r: Repo = repo) {
   if (event.triggerSource === "PreSignUp_AdminCreateUser") return event; // our own invite path
   // Self sign-up and federated sign-in are admitted only for an invited email
   const email = String(event.request.userAttributes.email ?? "").toLowerCase();
-  if (!email || !(await repo.userIdForEmail(email))) {
+  const uid = email ? await r.userIdForEmail(email) : undefined;
+  // People kept on file only (a rebuilt organization's contacts) count as not invited
+  if (!uid || (await r.getUser(uid))?.recordOnly) {
     throw new Error("This email hasn't been invited to 1NEON. Ask your organization's admin for an invite.");
   }
   return event;

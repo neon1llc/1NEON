@@ -2,6 +2,13 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## Unreleased
+
+### Added
+- People on file: an organization can keep a record of someone who never signs in. They show as "on file, no sign-in" under People, no account can be made for their email, nothing is ever sent to them, and they get no access. Inviting them on purpose is the only way to switch them on.
+- Rebuilt organizations: an organization rebuilt from notes, after its original records were lost, says so on every page.
+- An operator script to rebuild organizations from a private records file, with a dry run by default.
+
 ## v0.4.2 - 2026-11-12
 
 ### Changed

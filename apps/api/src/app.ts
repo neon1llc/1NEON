@@ -6,6 +6,7 @@
 import {
   DocumentRecord,
   Item,
+  isActiveMember,
   Member as MemberSchema,
   Project as ProjectSchema,
   Tenant as TenantSchema,
@@ -144,7 +145,7 @@ export function createApp(d: Deps) {
     const tid = c.req.param("tid")!;
     const { actor, user } = who(c);
     const [tenant, member] = await Promise.all([repo.getTenant(tid), repo.getMember(tid, user.id)]);
-    const access = member && member.status !== "deactivated" ? member.access : undefined;
+    const access = member && isActiveMember(member) ? member.access : undefined;
     if (!tenant || (!access && !actor.operator)) fail(REASONS.not_member[0], REASONS.not_member[1], REASONS.not_member[2]);
     c.set("tenant", tenant);
     c.set("access", access);

@@ -63,6 +63,14 @@ export const Tenant = z.object({
   stages: z.array(Stage).min(1).max(20),
   // IANA time zone for calendar wording such as "this month"; missing means America/New_York
   timeZone: z.string().max(64).optional(),
+  // Where the organization's records came from, when not entered as the work happened. A rebuilt
+  // organization says so on every page: its source, the day it was rebuilt, and a note in words
+  provenance: z.object({
+    kind: z.literal("reconstructed"),
+    source: z.string().max(200),
+    at: z.string().date(),
+    note: z.string().max(400),
+  }).optional(),
   ...versioned,
 });
 export type Tenant = z.infer<typeof Tenant>;
@@ -123,13 +131,18 @@ export const User = z.object({
   // When text-message codes were turned on as a way to confirm it's you. They count only while the
   // verified number above is ready for texts (sms.ts smsFactorOn), so a new number switches them off
   smsFactorAt: isoDate.optional(),
+  // A person kept on file only (a past client's contact in a rebuilt organization). No account can be
+  // made for this email, so they can't sign in, and nothing is ever sent to them
+  recordOnly: z.boolean().optional(),
   ...versioned,
 });
 export type User = z.infer<typeof User>;
 
 
-/** A person's membership in one organization; access lives here, not on the user */
-export const MemberStatus = z.enum(["invited", "joined", "deactivated"]);
+/** A person's membership in one organization; access lives here, not on the user. "on_file" is a
+ * record of someone who never signs in (a rebuilt organization's people): never invited, never sent
+ * anything, and never granted access, whatever access level the record names */
+export const MemberStatus = z.enum(["invited", "joined", "deactivated", "on_file"]);
 // Where an invitation email stands: waiting in the outbox, handed to the mail service, or given up on
 export const InviteDelivery = z.enum(["queued", "sent", "failed"]);
 export const Member = z.object({
@@ -151,6 +164,13 @@ export const Member = z.object({
   ...versioned,
 });
 export type Member = z.infer<typeof Member>;
+
+
+/** Does this membership grant access and count as one of the organization's people? Invited and
+ * joined do; deactivated and on file don't */
+export function isActiveMember(m: Pick<Member, "status">) {
+  return m.status === "invited" || m.status === "joined";
+}
 
 
 /** What someone does on a project. Roles describe; they never grant access */

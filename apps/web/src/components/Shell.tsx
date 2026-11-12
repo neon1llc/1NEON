@@ -718,6 +718,8 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
         <Crumbs.Provider value={setTop}>
           <main className="content" id="main" tabIndex={-1}>
             <Stale reads={[meRead, ...reads]} />
+            {/* A rebuilt organization says so on every page, so nobody reads it as the original record */}
+            {org?.provenance && <p className="notice" role="note">{org.provenance.note}</p>}
             <div className="page-in" key={section}>{children}</div>
           </main>
         </Crumbs.Provider>
