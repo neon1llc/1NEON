@@ -1,7 +1,7 @@
 // apps/api/src/scripts/reconstruct-org.ts - Rebuild past organizations from notes, when the original
 // records are gone. Each organization carries a provenance note shown on every page; its people are
 // kept on file only (no account can be made for them, and nothing is ever sent to them); its projects
-// sit in the closing stage with their layers filled from the notes.
+// sit in the closing stage (or where an ongoing one stands) with their layers filled from the notes.
 //
 // Usage: TABLE_NAME=1neon-prod npx tsx src/scripts/reconstruct-org.ts <records.json> [--write]
 // Without --write it only prints what it would create. The JSON stays private: never commit one.
@@ -49,6 +49,8 @@ const InProject = z.object({
   name: z.string().min(1).max(120),
   summary: z.string().max(500).default(""),
   outcome: z.string().max(500).default(""),
+  // Where the project stands; past work sits in Closed, an engagement still going sits where it is
+  stage: z.enum(DEFAULT_STAGES.map((s) => s.id) as [string, ...string[]]).default("closed"),
   people: z.array(z.object({ email, role: ProjectRole })).default([]),
   items: z.array(InItem).default([]),
 });
@@ -81,7 +83,6 @@ const repo = new Repo(new DynamoTable(process.env.TABLE_NAME));
 const now = new Date().toISOString();
 const today = now.slice(0, 10);
 const actor = "script";
-const closed = DEFAULT_STAGES.find((s) => s.id === "closed")!;
 const say = (s: string) => console.log(`${write ? "" : "[dry run] "}${s}`);
 
 
@@ -126,7 +127,7 @@ for (const o of input.orgs) {
     if (write) await repo.saveMember(m, { create: true });
   }
 
-  // Projects in the closing stage, ranked in the order given, with their items
+  // Projects in their stage, ranked in the order given, with their items
   let rank = "";
   for (const [n, ip] of o.projects.entries()) {
     rank = rankBetween(rank, "");
@@ -139,10 +140,10 @@ for (const o of input.orgs) {
     const num = write ? await repo.nextProjectNumber(t.id, ip.prefix) : n + 1;
     const p: Project = ProjectSchema.parse({
       tenantId: t.id, id: newId("p"), key: `${ip.prefix}-${num}`, name: ip.name, summary: ip.summary, outcome: ip.outcome, template: "blank",
-      stageId: closed.id, stageEnteredAt: now, health: "not_started", rank, people, flags: [], archived: false,
+      stageId: ip.stage, stageEnteredAt: now, health: "not_started", rank, people, flags: [], archived: false,
       version: 1, createdAt: now, updatedAt: now, updatedBy: actor,
     });
-    say(`  project ${p.key} ${p.name}: ${people.length} people, ${ip.items.length} items`);
+    say(`  project ${p.key} ${p.name} [${ip.stage}]: ${people.length} people, ${ip.items.length} items`);
     if (write) await repo.saveProject(p, { create: true });
     let irank = "";
     for (const ii of ip.items) {
