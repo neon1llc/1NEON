@@ -6,6 +6,7 @@
 
 ### Fixed
 - In DuckDuckGo on iPhone, the strip below the bottom tab bar shows the theme's background instead of the page scrolling underneath it (the v0.3.3 fix didn't take there). The tab bar is now solid rather than see-through.
+
 ### Changed
 - The demo's sign-in screen is laid out like the real one: an "Interactive demo" heading with its line under it at the same size as the client portal's, the FAQs and policy links under the people, then a divider and the guided walkthrough link, where the real sign-in has the sample and the demo. The people's names and roles read a size larger.
 
