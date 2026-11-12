@@ -2,6 +2,14 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.4.5 - 2026-11-12
+
+### Added
+- A closed project leads with the short version of its handover: what changed (the agreement as approved and the finished changes), the measured result before and now, who owns each system or account, and how much of the handoff checklist is done. Only the parts the project has are shown.
+
+### Changed
+- The Terms of use open with a short version, matching the Privacy policy. Nothing else in them changes.
+
 ## v0.4.4 - 2026-11-12
 
 ### Fixed
