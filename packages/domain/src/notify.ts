@@ -24,7 +24,7 @@ export interface NotifyGroup {
 export const NOTIFY_GROUPS: NotifyGroup[] = [
   { id: "files", label: "Files", hint: "A file is uploaded or removed", level: "critical", email: true, match: (a) => a.startsWith("doc.") },
   { id: "access", label: "People and access", hint: "Someone is invited, joins, or gets a different access level", level: "critical", email: true, match: (a) => a === "member.invited" || a === "member.joined" || a === "member.updated" },
-  { id: "decisions", label: "Decisions and options", hint: "An option is proposed or approved, a proposal is issued, or a refresh is asked for", level: "critical", email: true, match: (a) => a === "decision.approved" || a.startsWith("option.") || a.startsWith("proposal.") || a === "purchase.agreed" || a === "handoff.accepted" },
+  { id: "decisions", label: "Decisions and options", hint: "An option is proposed or approved, a proposal is issued, or a refresh is asked for", level: "critical", email: true, match: (a) => a === "decision.approved" || a.startsWith("option.") || a === "proposal.issued" || a === "proposal.refresh_asked" || a === "purchase.agreed" || a === "handoff.accepted" },
   { id: "workflow", label: "Workflow and stages", hint: "A project moves stage, or the board's stages change", level: "critical", email: true, match: (a) => a === "project.moved" || a === "org.stages" || a === "project.created" || a === "project.trashed" },
   // Comments come before the item catch-all below, whose pattern would otherwise claim comment.created
   { id: "comments", label: "Comments", hint: "Someone comments on an item", level: "normal", email: false, match: (a) => a === "comment.created" },
