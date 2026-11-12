@@ -374,7 +374,7 @@ const texts: Show = {
       title: "Choose what texts you",
       run: async (s) => {
         await s.say("She picks which notices also come by text");
-        await profile(s, "#notifications .notify-table");
+        await profile(s, "#notifications .notify-texts");
         await s.think("Decisions and files matter most. Text me those.");
         await s.click('input[aria-label="Text me: Decisions and options"]', 500);
         await s.click('input[aria-label="Text me: Files"]', 500);

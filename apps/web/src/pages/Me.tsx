@@ -182,37 +182,10 @@ export function MePage() {
         <div className="card small notify" id="notifications">
           <b>Notifications</b>
           <span className="muted">Everything shows under the bell. Choose what also reaches you by email or text. Important ones email you to start.</span>
-          {/* Texts need a mobile number and a clear yes, worded the way carriers require */}
-          {draft.phone.trim() ? (
-            <label className="sms-consent">
-              <input type="checkbox" checked={draft.smsConsent} onChange={(e) => setDraft({ ...draft, smsConsent: e.target.checked })} />
-              <span>
-                <b>Text me at {draft.phone.trim()}</b> with 1NEON project notices from neon1 LLC, for the kinds I choose below.
-                <span className="muted"> Texts are optional and not required to use 1NEON. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. See the <Link to="/privacy">Privacy policy</Link> and <Link to="/terms">Terms</Link>.</span>
-              </span>
-            </label>
-          ) : (
-            <span className="muted">To get texts, add a phone number above.</span>
-          )}
-          {/* Where texts stand once saved, and the code check that turns them on */}
-          {!smsDirty && SMS_NOTE[sms] && <span className={`muted sms-${sms}`} role="status">{SMS_NOTE[sms]}</span>}
-          {!smsDirty && sms === "unverified" && (code === undefined
-            ? <button className="btn btn-ghost btn-sm" type="button" onClick={() => void sendCode()}>Text me a code</button>
-            : (
-              <span className="sms-code">
-                <label htmlFor="smscode">Code from the text</label>
-                <input id="smscode" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (code.length === 6) void checkCode(); } }} />
-                <button className="btn btn-primary btn-sm" type="button" disabled={code.length !== 6} onClick={() => void checkCode()}>Confirm</button>
-                <button className="linkish small" type="button" onClick={() => void sendCode()}>Send another</button>
-              </span>
-            ))}
-          {smsDirty && (draft.smsConsent || draft.phone !== me.user.phone) && draft.phone.trim() && <span className="muted">Save first, then confirm the number with a texted code.</span>}
           <table className="notify-table">
-            <thead><tr><th scope="col">When</th><th scope="col">Email</th><th scope="col">Text</th></tr></thead>
+            <thead><tr><th scope="col">When</th><th scope="col">Email</th></tr></thead>
             <tbody>
               {NOTIFY_GROUPS.map((g) => {
-                // Text switches open once there's a number and a yes to texts
-                const texts = draft.smsConsent && Boolean(draft.phone.trim());
                 // The saved choice, or the group's default
                 const cur = draft.notify[g.id] ?? { email: g.email, sms: false };
                 const set = (patch: Partial<typeof cur>) => setDraft({ ...draft, notify: { ...draft.notify, [g.id]: { ...cur, ...patch } } });
@@ -220,12 +193,56 @@ export function MePage() {
                   <tr key={g.id}>
                     <th scope="row"><span>{g.label}{g.level === "critical" && <span className="tag rec">important</span>}</span><span className="muted">{g.hint}</span></th>
                     <td><input type="checkbox" aria-label={`Email me: ${g.label}`} checked={cur.email} onChange={(e) => set({ email: e.target.checked })} /></td>
-                    <td><input type="checkbox" aria-label={`Text me: ${g.label}`} checked={texts && cur.sms} disabled={!texts} onChange={(e) => set({ sms: e.target.checked })} /></td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+          {/* Texts sit apart from email: every box here starts unticked, as carriers require */}
+          <fieldset className="notify-texts" id="texts">
+            <legend>Text messages</legend>
+            {/* Texts need a mobile number and a clear yes, worded the way carriers require */}
+            {draft.phone.trim() ? (
+              <label className="sms-consent">
+                <input type="checkbox" checked={draft.smsConsent} onChange={(e) => setDraft({ ...draft, smsConsent: e.target.checked })} />
+                <span>
+                  <b>Text me at {draft.phone.trim()}</b> with 1NEON project notices from neon1 LLC, for the kinds I choose below.
+                  <span className="muted"> Texts are optional and not required to use 1NEON. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. See the <Link to="/privacy">Privacy policy</Link> and <Link to="/terms">Terms</Link>.</span>
+                </span>
+              </label>
+            ) : (
+              <span className="muted">To get texts, add a phone number above.</span>
+            )}
+            {/* Where texts stand once saved, and the code check that turns them on */}
+            {!smsDirty && SMS_NOTE[sms] && <span className={`muted sms-${sms}`} role="status">{SMS_NOTE[sms]}</span>}
+            {!smsDirty && sms === "unverified" && (code === undefined
+              ? <button className="btn btn-ghost btn-sm" type="button" onClick={() => void sendCode()}>Text me a code</button>
+              : (
+                <span className="sms-code">
+                  <label htmlFor="smscode">Code from the text</label>
+                  <input id="smscode" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (code.length === 6) void checkCode(); } }} />
+                  <button className="btn btn-primary btn-sm" type="button" disabled={code.length !== 6} onClick={() => void checkCode()}>Confirm</button>
+                  <button className="linkish small" type="button" onClick={() => void sendCode()}>Send another</button>
+                </span>
+              ))}
+            {smsDirty && (draft.smsConsent || draft.phone !== me.user.phone) && draft.phone.trim() && <span className="muted">Save first, then confirm the number with a texted code.</span>}
+            {/* Which kinds also come by text: none until ticked, and only after the yes above */}
+            <ul className="notify-text-kinds" aria-label="Text me about">
+              {NOTIFY_GROUPS.map((g) => {
+                const texts = draft.smsConsent && Boolean(draft.phone.trim());
+                const cur = draft.notify[g.id] ?? { email: g.email, sms: false };
+                const set = (patch: Partial<typeof cur>) => setDraft({ ...draft, notify: { ...draft.notify, [g.id]: { ...cur, ...patch } } });
+                return (
+                  <li key={g.id}>
+                    <label className={texts ? "notify-kind" : "notify-kind off"}>
+                      <input type="checkbox" aria-label={`Text me: ${g.label}`} checked={texts && cur.sms} disabled={!texts} onChange={(e) => set({ sms: e.target.checked })} />
+                      {g.label}
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </fieldset>
         </div>
         {/* Save covers everything above; it opens only when something changed */}
         <div className="actions">
