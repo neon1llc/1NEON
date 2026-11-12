@@ -442,8 +442,12 @@ export class Player {
     for (const fn of this.listeners) fn(this.view);
   }
 
-  /** Start: the seed as the first section's start, on the show's own first page, then play */
-  async start() {
+  // A chapter chosen before the seed was ready (Next, Back, or the menu while idle); start plays it
+  private want?: number;
+
+  /** Start: the seed as the first section's start, on the show's own first page, then play `at` */
+  async start(at?: number) {
+    if (at !== undefined) this.want = at;
     if (this.started) return;
     this.started = true;
     this.emit({ idle: false });
@@ -479,7 +483,9 @@ export class Player {
     // from the seed, as the show's first person, on its first page
     await engine.whenReady();
     this.snaps.set(0, { data: engine.snapshot(), path: this.show.path ?? "/", who: this.show.who ?? "" });
-    void this.goTo(this.first, true);
+    const target = this.want ?? this.first;
+    this.want = undefined;
+    void this.goTo(target, target === this.first);
   }
   pause() {
     this.autoPaused = false;
@@ -515,6 +521,12 @@ export class Player {
    */
   async goTo(i: number, auto = false) {
     if (i < 0 || i >= this.sections.length) return;
+    // Not started (reduced motion, or a background tab), or the seed isn't saved yet: a chapter chosen
+    // now starts the player there, rather than restoring a start that doesn't exist
+    if (!this.snaps.has(0)) return void this.start(i);
+    // A jump by hand shows its destination at once (title, Back and On labels, the covering panel), so
+    // the bar never offers the old chapter's neighbours while the new one is being set up
+    if (!auto) this.emit({ index: i, title: this.sections[i]!.title, caption: "Getting this chapter ready…", progress: 0, skipping: true, done: false, paused: false });
     this.token.cut = true;
     const token = (this.token = { cut: false });
     const prev = this.running;
@@ -578,6 +590,9 @@ export class Player {
         }
         this.fast = false;
         this.cursor?.hide(false);
+        // Nothing from the chapters caught up on (a thought, a hover) carries into this one
+        this.cursor?.thought.clear();
+        this.unhover();
         // Started partway in (a link from the FAQs): the story so far is in place, but she still comes
         // in the front door. Signed out, she thinks why she's here, signs in, and walks to the page
         if (i === this.first && devUser.get()) {

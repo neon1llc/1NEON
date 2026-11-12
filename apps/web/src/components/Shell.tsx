@@ -24,6 +24,7 @@ import { Neo } from "./Neo.tsx";
 import { Palette } from "./Palette.tsx";
 import { gate, Stale, type Read } from "./Reads.tsx";
 import { Avatar, Icon, initials, LayerBadge, LAYERS, layerHint, layerName, layerSlug, Rings, useAsk } from "./ui.tsx";
+import { prefs } from "../lib/prefs.ts";
 
 
 // --- Session -----------------------------------------------------------------
@@ -75,7 +76,7 @@ let arriving = document.documentElement.classList.contains("from-site");
 // Whether this browser was last signed in or out, for the background shown while the session loads
 const LAST_KEY = "1neon.last";
 const lastSeen = () => {
-  try { return localStorage.getItem(LAST_KEY); } catch { return null; }
+  return prefs.get(LAST_KEY);
 };
 
 
@@ -112,7 +113,7 @@ function App() {
   // Remember whether this browser was last signed in, so a reload starts on the right background
   useEffect(() => {
     const state = me.data ? "in" : me.error instanceof HttpError && me.error.status === 401 ? "out" : undefined;
-    if (state) try { localStorage.setItem(LAST_KEY, state); } catch { /* storage blocked: the light loading line shows */ }
+    if (state) prefs.set(LAST_KEY, state);
   }, [me.data, me.error]);
   if (me.isPending) {
     // Mid sign-in (iOS often reloads the tab after a trip to the mail app): go straight back to the
@@ -561,7 +562,7 @@ function DemoBar() {
 const LAST_ORG = "1neon.lastOrg";
 function lastOrg(orgs: OrgSummary[]) {
   let slug: string | null = null;
-  try { slug = localStorage.getItem(LAST_ORG); } catch { /* storage blocked */ }
+  slug = prefs.get(LAST_ORG);
   return orgs.find((o) => o.slug === slug) ?? (orgs.length === 1 ? orgs[0] : undefined);
 }
 // What can take focus inside the menu, for moving focus into it when it opens
@@ -634,7 +635,7 @@ function FrameBody({ org, all, reads = [], children }: { org?: OrgSummary; all?:
     if (back?.isConnected && !back.closest("[inert]") && lost) back.focus();
   }, [open]);
   // Remember the organization in view, so pages outside one (profile, FAQs) keep its menu and tabs
-  useEffect(() => { if (org) try { localStorage.setItem(LAST_ORG, org.slug); } catch { /* storage blocked: falls back below */ } }, [org]);
+  useEffect(() => { if (org) prefs.set(LAST_ORG, org.slug); }, [org]);
   const navOrg = org ?? (all ? undefined : lastOrg(me.orgs));
   const base = navOrg ? `/o/${navOrg.slug}` : "";
   // Home: the organization's Home, All clients' board for an operator there, or the app's landing

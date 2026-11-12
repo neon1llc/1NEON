@@ -10,6 +10,7 @@ import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { dateLabel, daysSince, Empty, Health, LayerBadge, LAYERS, layerName } from "../components/ui.tsx";
 import { useProjects } from "../lib/hooks.ts";
 import { slide } from "../lib/motion.ts";
+import { prefs } from "../lib/prefs.ts";
 
 
 // How the list can be ordered, in plain words
@@ -24,12 +25,8 @@ type Sort = keyof typeof SORTS;
 
 // The person's last view and sort, kept in this browser only
 const VIEW_KEY = "1neon.projects.view";
-const read = (k: string, d: string) => {
-  try { return localStorage.getItem(k) ?? d; } catch { return d; }
-};
-const write = (k: string, v: string) => {
-  try { localStorage.setItem(k, v); } catch { /* private mode */ }
-};
+const read = (k: string, d: string) => prefs.get(k, d);
+const write = (k: string, v: string) => prefs.set(k, v);
 
 
 // Every project in the organization, as a list or a timeline

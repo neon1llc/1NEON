@@ -2,6 +2,14 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## Unreleased
+
+### Fixed
+- A guided walkthrough no longer stops at "One moment…" for someone whose Projects page is set to Timeline. The walkthrough keeps its own List or Timeline choice, last organization, and loading background in memory, so it never reads or changes the visitor's own, and it opens a project from either layout.
+- Before Start (with reduced motion on, or in a tab opened in the background), Back, On, and the chapter list start the walkthrough at the chosen chapter instead of throwing an error.
+- Jumping to a later chapter sets it up behind a panel that names the chapter, so the earlier chapters' screens no longer flash past. The bar shows the new chapter and its neighbours from the moment it's chosen, and no thought from the skipped chapters carries over.
+- The interactive demo keeps changes made in two tabs. Each change is applied on top of whatever another tab saved, under one lock shared by the browser's tabs, and is confirmed only once it's saved. Tabs opened together share the same starting data.
+
 ## v0.4.4 - 2026-11-12
 
 ### Fixed

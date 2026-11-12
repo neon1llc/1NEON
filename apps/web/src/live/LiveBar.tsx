@@ -134,6 +134,9 @@ export function LiveBar({ player }: { player: Player }) {
       {/* While it plays, the portal underneath doesn't take clicks, so a stray click can't knock the
           story off course. Pause to explore; resuming plays the section again from its start */}
       {!v.paused && !v.done && createPortal(<div className="live-shield" aria-hidden="true" />, document.body)}
+      {/* While a chapter is set up out of sight (a jump, a link from the FAQs), a panel covers the portal
+          so the earlier chapters don't flash past; the bar above, with Exit, stays usable */}
+      {v.skipping && createPortal(<div className="live-veil" role="status"><span>Getting chapter {v.index + 1} ready</span><b>{v.title}</b></div>, document.body)}
       {/* Every section in order, the current one marked; it unrolls downward from the bar. Below, the
           short demos (a different show loads fresh) */}
       <div id="live-list" className={`live-list${list ? " open" : ""}`} inert={!list}>
