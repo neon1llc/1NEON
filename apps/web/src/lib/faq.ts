@@ -59,6 +59,10 @@ const ALIASES: Record<string, string[]> = {
   "what-happens-to-our-data-when-the-work-ends": ["retention", "delete", "deletion", "offboarding", "cancel", "leave", "export"],
   "my-email-address-changed": ["new email", "change email", "email change"],
   "who-do-i-ask-for-access": ["access", "permission", "invite"],
+  "how-do-i-suggest-changes-to-a-proposal": ["markup", "mark up", "redline", "track changes", "docx", "word", "edit proposal"],
+  "who-buys-equipment-or-software-for-a-project": ["purchase", "purchases", "buy", "hardware", "reimburse", "reimbursement", "receipt"],
+  "what-if-we-need-something-new-after-approving": ["change request", "change order", "scope", "extra work", "add work"],
+  "what-is-a-proposal-revision": ["quote", "estimate", "expired", "expiry", "price check", "refresh"],
 };
 
 /** The aliases for one question (exported for the tests) */

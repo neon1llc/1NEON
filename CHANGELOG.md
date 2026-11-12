@@ -2,6 +2,14 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.5.1 - 2026-11-12
+
+### Changed
+- Help matches the proposal as it works now: the proposal opens from **Read the proposal** and downloads as Word as well as PDF, and the approval lists its terms again, including anything to buy, before you sign.
+- Help answers three more questions: how to suggest changes with a marked-up copy, who buys equipment or software (with receipts and paying back at cost), and what happens to a request made after approving. Searching help for markup, change order, reimburse, or an expired quote now finds them.
+- The sample project shows the numbered proposal and option ID, the signed approval, the label printer bought with its receipt, and the handover accepted by the owner.
+- Neo answers from the updated help (corpus v0.37.1).
+
 ## v0.5.0 - 2026-11-12
 
 ### Added
