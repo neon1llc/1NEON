@@ -2,7 +2,7 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
-## Unreleased
+## v0.5.0 - 2026-11-12
 
 ### Added
 - Proposals are issued in numbered revisions, one proposal per project. neon1 issues a revision (the first is 0039-r1), which freezes a copy of everything the proposal shows; every option in it gets an ID such as 0039-r1-B, and the decision names it. Earlier revisions stay readable, marked as replaced, and none can be edited or deleted.
@@ -40,6 +40,13 @@
 - Before Start (with reduced motion on, or in a tab opened in the background), Back, On, and the chapter list start the walkthrough at the chosen chapter instead of throwing an error.
 - Jumping to a later chapter sets it up behind a panel that names the chapter, so the earlier chapters' screens no longer flash past. The bar shows the new chapter and its neighbours from the moment it's chosen, and no thought from the skipped chapters carries over.
 - The interactive demo keeps changes made in two tabs. Each change is applied on top of whatever another tab saved, under one lock shared by the browser's tabs, and is confirmed only once it's saved. Tabs opened together share the same starting data.
+## v0.4.5 - 2026-11-12
+
+### Added
+- A closed project leads with the short version of its handover: what changed (the agreement as approved and the finished changes), the measured result before and now, who owns each system or account, and how much of the handoff checklist is done. Only the parts the project has are shown.
+
+### Changed
+- The Terms of use open with a short version, matching the Privacy policy. Nothing else in them changes.
 
 ## v0.4.4 - 2026-11-12
 

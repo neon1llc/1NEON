@@ -578,6 +578,11 @@ button.link { border: 0; background: none; padding: 0; color: var(--accent); tex
 .next-step { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; align-items: center; margin: 4px 0 8px; padding: 14px 18px; border: 1px solid var(--accent); border-radius: var(--r); background: var(--accent-soft); }
 .next-step .eyebrow { grid-column: 1 / -1; margin: 0; color: var(--accent); }
 .next-step p { margin: 0; }
+/* A closed project's handover: label and line pairs, the label above its line on a phone */
+.next-step .handover-list { grid-column: 1 / -1; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 4px 0 6px; }
+.next-step .handover-list dt { font-weight: 600; }
+.next-step .handover-list dd { margin: 0; }
+@media (max-width: 520px) { .next-step .handover-list { grid-template-columns: 1fr; gap: 2px; } .next-step .handover-list dd { margin-bottom: 6px; } }
 @media (max-width: 520px) { .next-step { grid-template-columns: 1fr; } .next-step .btn { justify-self: start; } }
 .meter { grid-template-columns: 58px 84px 1fr; }
 .meter b { font-weight: 600; color: var(--text); }
