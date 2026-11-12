@@ -13,12 +13,12 @@ const STORY: Record<Layer, { lead: string; cards: Card[] }> = {
     lead: "What the client wants, the ways to get there, and the choice.",
     cards: [
       { title: "Request", lines: [["Currently", "every night we copy about 40 orders from email and voicemail notes into a spreadsheet. It takes an hour, and a few orders get missed each week."], ["Goal", "orders land in one list on their own, and nobody retypes them."], ["Due", "before the holiday rush."]] },
-      { title: "Options", lines: ["Every proposal offers a few choices, each with what's in and out, the hours it takes, the price, and the result you can check. The figures are illustrative."], list: [
+      { title: "Options", lines: ["Proposal 0039-r1 offers a few choices, each with what's in and out, the hours it takes, the price, anything to buy, and the result you can check. Each option has its own ID. The figures are illustrative."], list: [
         { text: "Quick fix: an order form that writes straight into the spreadsheet, about 3 hours" },
         { text: "Solid setup: the form, plus order emails and voicemails added to the same list, with a 7pm summary, about 10 hours", state: "picked" },
         { text: "Fuller build: all of that, plus an online order page with pickup times, payment, and reminders, about 17 hours" },
       ] },
-      { title: "Decision", lines: ["The owner read the full proposal, then approved Solid setup in the portal on Oct 3. The decision, who made it, and the exact terms stay with the project."] },
+      { title: "Decision", lines: ["The owner read the proposal, then approved 0039-r1-B, Solid setup, in the portal on Oct 3, with a typed signature. The approval restated the terms first; the decision, who made it, and those exact terms stay with the project."] },
     ],
   },
   execution: {
@@ -29,6 +29,9 @@ const STORY: Record<Layer, { lead: string; cards: Card[] }> = {
         { text: "Order emails and voicemails added to the list", state: "done" },
         { text: "Daily summary at 7pm", state: "done" },
         { text: "A week running side by side with the old way", state: "now" },
+      ] },
+      { title: "Purchases", lines: ["From the approved option, bought by the bakery in its own name."], list: [
+        { text: "Label printer for pickup bags: estimate $90-$120, paid $104.99, receipt attached", state: "done" },
       ] },
       { title: "Update · Oct 17", lines: [["Health", "on track. Order emails and voicemails now arrive in the list within a minute. One order with a photo attachment needed a manual fix; that case is handled now. Waiting on you: confirm the summary should go to both owners."]] },
     ],
@@ -49,7 +52,7 @@ const STORY: Record<Layer, { lead: string; cards: Card[] }> = {
       { title: "Handover", lines: [], list: [
         { text: "A one-page runbook: where orders go, and what to do if one looks wrong", state: "done" },
         { text: "A 30-minute walkthrough with both owners, recorded for new staff", state: "done" },
-        { text: "Every account and bill in the bakery's own name", state: "done" },
+        { text: "Every account and bill in the bakery's own name, checked and accepted by the owner", state: "done" },
       ] },
       { title: "Care", lines: ["Optional and monthly: a check that the numbers still hold, and small changes as the bakery grows. The bakery can also run it without neon1."] },
     ],

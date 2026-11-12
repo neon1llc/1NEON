@@ -26,7 +26,7 @@ describe("faq anchors", () => {
 
   it("only keeps aliases for questions that exist", () => {
     const ids = new Set(all.map((i) => i.id));
-    for (const id of ["i-lost-my-phone-or-my-authenticator-app", "where-are-invoices-and-payments", "can-we-get-a-copy-of-our-data", "something-urgent-is-wrong-who-do-i-tell"]) {
+    for (const id of ["i-lost-my-phone-or-my-authenticator-app", "where-are-invoices-and-payments", "who-buys-equipment-or-software-for-a-project", "how-do-i-suggest-changes-to-a-proposal", "can-we-get-a-copy-of-our-data", "something-urgent-is-wrong-who-do-i-tell"]) {
       expect(ids.has(id)).toBe(true);
       expect(aliasesOf(id).length).toBeGreaterThan(0);
     }
@@ -37,7 +37,7 @@ describe("faq anchors", () => {
 describe("faq search", () => {
   const hits = (query: string) => all.filter((i) => matches(i, query)).map((i) => i.id);
 
-  it.each(["lost phone", "support", "invoice", "recovery", "export", "2FA", "MFA", "passkey", "phone lost"])("finds an answer for %s", (query) => {
+  it.each(["lost phone", "support", "invoice", "recovery", "export", "2FA", "MFA", "passkey", "phone lost", "markup", "change order", "expired quote", "reimburse"])("finds an answer for %s", (query) => {
     expect(hits(query).length).toBeGreaterThan(0);
   });
 
