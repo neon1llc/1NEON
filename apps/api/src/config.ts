@@ -26,6 +26,11 @@ export interface Config {
   neoModel?: string;
   /** The month's ceiling for Neo's model spend, in US dollars */
   neoMonthlyUsd?: number;
+  /** SSM SecureString names holding the Stripe secret key and webhook secret; unset means no online payments */
+  stripeKeyParam?: string;
+  stripeWebhookParam?: string;
+  /** The Object Lock bucket for locked copies of signed and issued records */
+  recordsBucket?: string;
 }
 
 
@@ -50,6 +55,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     devAuth,
     neoModel: env.NEO_MODEL || undefined,
     // A missing, zero, or nonsense value falls back to $8, never to unlimited
+    stripeKeyParam: env.STRIPE_KEY_PARAM || undefined,
+    stripeWebhookParam: env.STRIPE_WEBHOOK_PARAM || undefined,
+    recordsBucket: env.RECORDS_BUCKET || undefined,
     neoMonthlyUsd: Number(env.NEO_MONTHLY_USD) > 0 ? Math.min(Number(env.NEO_MONTHLY_USD), 50) : 8,
   };
 }

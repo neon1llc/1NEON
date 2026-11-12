@@ -31,6 +31,7 @@ import { orgRoutes } from "./routes/orgs.ts";
 import { projectRoutes } from "./routes/projects.ts";
 import { workspaceRoutes } from "./routes/workspace.ts";
 import { calendarRoutes } from "./routes/calendar.ts";
+import { billingRoutes, stripeWebhook } from "./routes/billing.ts";
 import { e164 } from "./sms.ts";
 
 
@@ -71,6 +72,9 @@ export function createApp(d: Deps) {
 
   // Local dev only: the in-memory file store's upload and download links (S3 links in production)
   devFileRoutes(app, k);
+
+  // Stripe's webhook: public, and checked by Stripe's signature instead of the CSRF header or a sign-in
+  const pay = stripeWebhook(app, k);
 
   // CSRF: every state-changing call must carry a custom header (plus SameSite=Strict cookies)
   app.use("*", async (c, next) => {
@@ -162,6 +166,7 @@ export function createApp(d: Deps) {
   commentRoutes(app, k);
   editRoutes(app, k);
   docRoutes(app, k);
+  billingRoutes(app, k, pay);
 
   return app;
 }

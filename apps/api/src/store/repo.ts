@@ -159,6 +159,11 @@ export class Repo {
     ]);
   }
 
+  // The tenant's write, for a transaction with other rows (an agreement signature and its audit)
+  tenantOp(t: Tenant, guard: { version: number }): WriteOp {
+    return { put: { ...keys.tenant(t.id), type: "tenant", GSI2PK: "KIND#TENANT", GSI2SK: t.clientId, ...t }, guard };
+  }
+
   // Lands only if the stored version still matches `expected`
   async saveTenant(t: Tenant, expected: number) {
     await this.table.write([

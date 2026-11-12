@@ -2,6 +2,7 @@
 
 
 import { NotifyPrefs } from "./notify.ts";
+import { InvoiceLine, InvoiceType, PaymentMethod, SignInput } from "./billing.ts";
 import { z } from "zod";
 import { AccessLevel, CalEventKind, CalRepeat, Health, ItemKind, Layer, ProjectRole, Theme, Tour, email, id } from "./model.ts";
 
@@ -111,7 +112,9 @@ export const UpdateItemInput = z.object({
 
 // Approval pins the option version shown to the approver. Initials agree that neon1 buys the items the
 // option lists for neon1 to buy, paid back at cost; they're required only when it lists any
-export const ApproveInput = z.object({ version: z.number().int(), conditions: z.string().max(2000).default(""), initials: z.string().trim().max(8).optional() });
+// The decision maker signs the approval: typed name and consent. Initials are kept for older callers;
+// when neon1 buys items, initials come from the signed name
+export const ApproveInput = z.object({ version: z.number().int(), conditions: z.string().max(2000).default(""), initials: z.string().trim().max(8).optional(), signature: SignInput });
 
 // neon1 issues the next revision of a project's proposal, saying what changed
 export const IssueInput = z.object({ note: z.string().trim().max(1000).default("") });
@@ -120,7 +123,44 @@ export const IssueInput = z.object({ note: z.string().trim().max(1000).default("
 export const AgreeInput = z.object({ version: z.number().int(), initials: z.string().trim().min(1).max(8) });
 
 // The client accepts a handover step, with an optional note
-export const AcceptInput = z.object({ version: z.number().int(), note: z.string().trim().max(500).default("") });
+export const AcceptInput = z.object({ version: z.number().int(), note: z.string().trim().max(500).default(""), signature: SignInput });
+
+
+// --- Billing: the service agreement, invoices, and payments ---------------------------
+
+// Signing the service agreement names the edition and hash the signer was shown, so a newer text can't be signed blind
+export const SignAgreementInput = SignInput.extend({ edition: z.string().max(16), hash: z.string().regex(/^[0-9a-f]{64}$/) });
+
+// neon1 drafts an invoice; without lines, 1NEON suggests them from the decision or the purchases
+export const CreateInvoiceInput = z.object({
+  type: InvoiceType,
+  lines: z.array(InvoiceLine).min(1).max(100).optional(),
+  decisionId: z.string().max(64).optional(),
+  appliesTo: z.string().max(64).optional(),
+  termsDays: z.number().int().min(0).max(90).optional(),
+  note: z.string().trim().max(1000).default(""),
+});
+
+// A draft's lines, tax, terms, or note
+export const UpdateInvoiceInput = z.object({
+  version: z.number().int(),
+  lines: z.array(InvoiceLine).min(1).max(100).optional(),
+  taxCents: z.number().int().min(0).max(100_000_000).optional(),
+  termsDays: z.number().int().min(0).max(90).optional(),
+  note: z.string().trim().max(1000).optional(),
+});
+
+// Issue a draft, or void an issued invoice with a reason
+export const IssueInvoiceInput = z.object({ version: z.number().int() });
+export const VoidInvoiceInput = z.object({ version: z.number().int(), reason: z.string().trim().min(3).max(500) });
+
+// A payment neon1 received outside Stripe (check, Zelle, wire), or a bank or card payment Stripe didn't report
+export const RecordPaymentInput = z.object({
+  amountCents: z.number().int().positive().max(1_000_000_000),
+  method: PaymentMethod,
+  ref: z.string().trim().max(120).default(""),
+  receivedAt: z.string().date(),
+});
 
 
 // The signed-in person's own profile

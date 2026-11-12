@@ -16,6 +16,7 @@ import { DeleteObjectCommand, GetObjectCommand, GetObjectTaggingCommand, GetObje
 import { SendTextMessageCommand, PinpointSMSVoiceV2Client } from "@aws-sdk/client-pinpoint-sms-voice-v2";
 import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import type { Records } from "./payments.ts";
 
 
 /** The identity directory: create sign-in accounts for invitees and check strong sign-in */
@@ -223,3 +224,22 @@ export class AwsTexter implements Texter {
 // browser demo can run the same API; they're re-exported here for existing imports
 export { MemoryDirectory, MemoryMailer, MemoryStorage, MemoryTexter } from "./local.ts";
 export { inviteEmail, passkeyEmail } from "./emails.ts";
+
+
+// Signed agreements, invoices, and payments are kept at least seven years
+const KEEP_YEARS = 7;
+
+/** S3 with Object Lock: each copy is locked in governance mode, so only break-glass access can remove it */
+export class S3Records implements Records {
+  private s3 = new S3Client({});
+  constructor(private bucket: string) {}
+
+  async put(key: string, record: unknown) {
+    const until = new Date();
+    until.setUTCFullYear(until.getUTCFullYear() + KEEP_YEARS);
+    await this.s3.send(new PutObjectCommand({
+      Bucket: this.bucket, Key: key, Body: JSON.stringify(record, null, 2), ContentType: "application/json",
+      ObjectLockMode: "GOVERNANCE", ObjectLockRetainUntilDate: until, ChecksumAlgorithm: "SHA256",
+    }));
+  }
+}

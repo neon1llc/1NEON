@@ -41,6 +41,27 @@ const versioned = {
 };
 
 
+/** A stored signature: what was signed (and its hash), who signed, how, and when */
+export const Signature = z.object({
+  // The service agreement, an option approval, or a handover acceptance
+  doc: z.enum(["agreement", "approval", "acceptance"]),
+  // The agreement edition ("1.0"), the option ID ("0039-r2-B"), or the handover step's title
+  ref: z.string().max(200),
+  hash: z.string().regex(/^[0-9a-f]{64}$/),
+  typedName: z.string().max(120),
+  // The consent wording exactly as shown
+  consent: z.string().max(400),
+  by: id,
+  name: z.string().max(80),
+  email: z.string().max(254),
+  at: isoDate,
+  // Where it was signed from, for the audit trail; absent when the request didn't say
+  ip: z.string().max(64).optional(),
+  ua: z.string().max(300).optional(),
+});
+export type Signature = z.infer<typeof Signature>;
+
+
 /** One column of an organization's workflow board; each stage belongs to one layer */
 export const Stage = z.object({
   id: id,
@@ -63,6 +84,8 @@ export const Tenant = z.object({
   stages: z.array(Stage).min(1).max(20),
   // IANA time zone for calendar wording such as "this month"; missing means America/New_York
   timeZone: z.string().max(64).optional(),
+  // Every signature of neon1's service agreement, oldest first; the latest at the current edition counts
+  agreements: z.array(Signature).max(50).optional(),
   ...versioned,
 });
 export type Tenant = z.infer<typeof Tenant>;
@@ -210,6 +233,8 @@ export const ItemKind = z.enum([
   "change", // Execute: change request against the decision
   "update", // Execute: health update
   "purchase", // Execute: something to buy for the agreed option, with its receipt
+  "invoice", // Execute: a bill for the work or purchases (made and issued only by the invoice routes)
+  "payment", // Execute: money received against one invoice (Stripe or recorded by hand)
   "signoff", // Execute: an approval needed from outside (landlord, building, a licensed trade)
   "metric", // Observe
   "check", // Observe
@@ -247,6 +272,8 @@ export const KIND_LAYER: Record<ItemKind, Layer> = {
   change: "execution",
   update: "execution",
   purchase: "execution",
+  invoice: "execution",
+  payment: "execution",
   signoff: "execution",
   metric: "observation",
   check: "observation",
@@ -267,6 +294,9 @@ export const STATUSES: Partial<Record<ItemKind, readonly string[]>> = {
   proposal: [],
   // To buy (open), bought, installed (done), or returned
   purchase: ["open", "bought", "done", "returned"],
+  // Invoices and payments change only through the billing routes
+  invoice: [],
+  payment: [],
 };
 // Every other kind is a simple work item
 export const WORK_STATUSES = ["open", "doing", "blocked", "done"] as const;
@@ -376,6 +406,8 @@ export const DecisionFields = z.object({
   code: z.string().max(24).optional(),
   // The approver's initials agreeing that neon1 buys the listed items, to be paid back at cost
   initials: z.string().max(8).optional(),
+  // The approver's electronic signature on this option ID, over a hash of the terms as approved
+  signature: Signature.optional(),
 });
 
 
@@ -399,6 +431,8 @@ export const RequirementFields = z.object({ priority: z.enum(["must", "should", 
 export const UpdateFields = z.object({ health: Health });
 
 
+
+
 // Who agreed, by initials, that neon1 buys an item for the client and is paid back at cost
 export const Agreement = z.object({ by: id, name: z.string().max(80), initials: z.string().trim().min(1).max(8), at: isoDate });
 
@@ -420,7 +454,7 @@ export const PurchaseFields = z.object({
 
 // A handover step the client accepted, with who, when, and a note
 export const HandoffFields = z.object({
-  accepted: z.object({ by: id, name: z.string().max(80), at: isoDate, note: z.string().max(500).default("") }).optional(),
+  accepted: z.object({ by: id, name: z.string().max(80), at: isoDate, note: z.string().max(500).default(""), signature: Signature.optional() }).optional(),
 });
 
 

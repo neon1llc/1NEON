@@ -2,7 +2,7 @@
 // approving an option into an immutable decision, and the advisory edit markers.
 
 
-import { AcceptInput, AgreeInput, ApproveInput, CreateItemInput, IssueInput, changeRecord, itemChanges, assessed, completionAfter, priceCheckDue, proposalRef, resolveTiming, revisions, DecisionFields, Item, OptionFields, PRICE_CHECK_DAYS, PurchaseFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, todayIn, type Project } from "@1neon/domain";
+import { AGREEMENT_EDITION, AcceptInput, AgreeInput, ApproveInput, canonical, finalLines, initialsOf, sha256Hex, signature, depositLines, InvoiceFields, CreateItemInput, IssueInput, changeRecord, itemChanges, assessed, completionAfter, priceCheckDue, proposalRef, resolveTiming, revisions, DecisionFields, Item, OptionFields, PRICE_CHECK_DAYS, PurchaseFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, todayIn, type Project } from "@1neon/domain";
 import type { Context } from "hono";
 import { z } from "zod";
 import { actorId, body, byRank, check, defined, fail, label, need, now, validateFields, who, type Env } from "../lib/http.ts";
@@ -17,7 +17,7 @@ const EDIT_MS = 2 * 60 * 1000;
 
 // A stable key for a create's requestId, the same in the API and the in-browser demo (which runs these
 // routes, so no node:crypto): two independent 32-bit FNV-1a passes, about 64 bits, in base 36
-function replayKey(s: string): string {
+export function replayKey(s: string): string {
   let a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
   for (let i = 0; i < s.length; i++) {
     const c = s.charCodeAt(i);
@@ -31,6 +31,11 @@ function replayKey(s: string): string {
 export function itemRoutes(app: App, k: Kit) {
   const { repo, project, activeMembers } = k;
 
+  /** Keep a locked copy of a signed record; the table is the source, so a failed copy is logged, not fatal */
+  async function keep(key: string, record: unknown) {
+    try { await k.d.records?.put(key, record); } catch (e) { console.error(JSON.stringify({ level: "error", message: "record copy failed", key, error: String(e) })); }
+  }
+
   // Layer items (Needs, Execute, Observe, Normalize)
 
   app.post("/t/:tid/projects/:pid/items", async (c) => {
@@ -40,6 +45,7 @@ export function itemRoutes(app: App, k: Kit) {
     need(c, input.kind === "request" ? "comment" : "write");
     if (input.kind === "decision") fail(400, "invalid", "Decisions are recorded by approving an option.");
     if (input.kind === "proposal") fail(400, "invalid", "Proposal revisions are made by issuing the proposal.");
+    if (input.kind === "invoice" || input.kind === "payment") fail(400, "invalid", "Invoices and payments are made through Billing.");
     // Agreements and acceptances are recorded by their own routes, by the people allowed to give them
     if (input.kind === "purchase" || input.kind === "handoff") { delete input.fields.agreed; delete input.fields.accepted; }
     // Options are neon1's proposals: neon1 writes, shares, and withdraws them; the client approves one
@@ -104,6 +110,7 @@ export function itemRoutes(app: App, k: Kit) {
     if (!item) fail(404, "not_found", "That item no longer exists.");
     if (item.kind === "decision") fail(400, "immutable", "Decisions can't be edited. Approve a new option to change the decision.");
     if (item.kind === "proposal") fail(400, "immutable", "An issued revision is a record and stays as issued. Issue the next revision instead.");
+    if (item.kind === "invoice" || item.kind === "payment") fail(400, "immutable", "Invoices and payments change only through Billing.");
     if (item.kind === "option" && !who(c).actor.operator) fail(403, "neon1_only", "Options are proposed by neon1. Comment on the option to ask for a change.");
     const input = await body(c, UpdateItemInput);
     // Agreements and acceptances only come from their routes; an edit keeps whatever was recorded
@@ -149,6 +156,9 @@ export function itemRoutes(app: App, k: Kit) {
     if (!item) fail(404, "not_found", "That item no longer exists.");
     if (item.kind === "decision") fail(400, "immutable", "Decisions are kept as a permanent record.");
     if (item.kind === "proposal") fail(400, "immutable", "Issued revisions are kept as a permanent record.");
+    // Payments and issued invoices are records; only neon1's own unissued draft may go
+    if (item.kind === "payment" || (item.kind === "invoice" && item.status !== "draft")) fail(400, "immutable", "Issued invoices and payments are kept as a permanent record. Void it with a reason, or issue a credit.");
+    if (item.kind === "invoice" && !who(c).actor.operator) fail(403, "neon1_only", "Invoices are drafted by neon1.");
     if (item.status === "approved") fail(400, "immutable", "An approved option is part of a decision's record and stays.");
     if (item.kind === "option" && !who(c).actor.operator) fail(403, "neon1_only", "Options are proposed by neon1. Comment on the option to ask for a change.");
     const version = Number(c.req.query("version"));
@@ -183,9 +193,11 @@ export function itemRoutes(app: App, k: Kit) {
     if (!snap) fail(409, "not_in_revision", `This option isn't part of Proposal ${proposalRef(rev.p.number, rev.p.rev)}. Ask neon1 to issue the next revision.`);
     if (snap.version !== option.version) fail(409, "changed_since_issue", `This option changed after Proposal ${proposalRef(rev.p.number, rev.p.rev)} was issued. neon1 issues the next revision before it can be approved.`);
     if (priceCheckDue(rev.p, todayIn(c.get("tenant").timeZone))) fail(409, "price_check", `The estimates in Proposal ${proposalRef(rev.p.number, rev.p.rev)} were checked over ${PRICE_CHECK_DAYS} days ago. Ask neon1 to refresh it, then approve.`);
+    // A client signs neon1's service agreement (the current edition) before approving paid work
+    const tenant = c.get("tenant");
+    if (!isOwnOrg(tenant.slug) && !(tenant.agreements ?? []).some((a) => a.ref === AGREEMENT_EDITION)) fail(409, "agreement_needed", `Sign neon1's service agreement (edition ${AGREEMENT_EDITION}) first. It covers every project, and you sign it once.`);
     const of = OptionFields.parse(option.fields);
     const neon1Buys = of.purchases.filter((x) => x.buyer === "neon1");
-    if (neon1Buys.length && !input.initials) fail(400, "initials_needed", "This option has neon1 buy some items for you, paid back at cost. Add your initials to agree.");
     const ts = now();
     const by = actorId(c);
     const approver = who(c).user;
@@ -193,6 +205,10 @@ export function itemRoutes(app: App, k: Kit) {
     const terms = { title: option.title, body: option.body, cost: of.cost, timeline: of.timeline, hours: of.hours || undefined, outsideCosts: of.outsideCosts || undefined, result: of.result || undefined, costScore: of.costScore, qualityScore: of.qualityScore, effortScore: of.effortScore, recommended: of.recommended, purchases: of.purchases.length ? of.purchases : undefined };
     const earlier = items.filter((i) => i.kind === "decision").map((i) => i.id);
     const name = approver.name || approver.email;
+    // The approver signs this option ID over a hash of exactly what they agreed to; when neon1 buys
+    // items, the same signature agrees to pay them back at cost, and its initials go on each purchase
+    const signed = signature("approval", snap.code, await sha256Hex(canonical({ code: snap.code, proposal: rev.title, terms, conditions: input.conditions })), input.signature, { id: by, name, email: approver.email }, ts, from(c));
+    const initials = input.initials || initialsOf(input.signature.typedName);
     const decision = Item.parse({
       tenantId: p.tenantId,
       projectId: p.id,
@@ -202,7 +218,7 @@ export function itemRoutes(app: App, k: Kit) {
       body: input.conditions,
       status: "approved",
       rank: ts,
-      fields: DecisionFields.parse({ optionId: option.id, optionVersion: option.version, approvedBy: by, approvedAt: ts, conditions: input.conditions, terms, approverName: approver.name || undefined, approverEmail: approver.email, supersedes: earlier.length ? earlier : undefined, proposalId: rev.id, code: snap.code, initials: neon1Buys.length ? input.initials : undefined }),
+      fields: DecisionFields.parse({ optionId: option.id, optionVersion: option.version, approvedBy: by, approvedAt: ts, conditions: input.conditions, terms, approverName: approver.name || undefined, approverEmail: approver.email, supersedes: earlier.length ? earlier : undefined, proposalId: rev.id, code: snap.code, initials: neon1Buys.length ? initials : undefined, signature: signed }),
       version: 1,
       createdAt: ts,
       updatedAt: ts,
@@ -218,16 +234,20 @@ export function itemRoutes(app: App, k: Kit) {
       last = rankBetween(last, "");
       return Item.parse({
         tenantId: p.tenantId, projectId: p.id, id: newId("i"), kind: "purchase", title: x.name, body: "", status: "open", rank: last,
-        fields: PurchaseFields.parse({ estimate: x.estimate, why: x.why, example: x.example, buyer: x.buyer, from: snap.code, agreed: x.buyer === "neon1" ? { by, name, initials: input.initials, at: ts } : undefined }),
+        fields: PurchaseFields.parse({ estimate: x.estimate, why: x.why, example: x.example, buyer: x.buyer, from: snap.code, agreed: x.buyer === "neon1" ? { by, name, initials, at: ts } : undefined }),
         version: 1, createdAt: ts, updatedAt: ts, updatedBy: by,
       });
     });
+    // A fixed price asks for a deposit: neon1 gets a draft to check and issue, never sent on its own
+    const deposit = /fixed/i.test(of.cost) ? draftInvoice(p, "deposit", depositLines(decision), ts, by) : undefined;
     await repo.table.write([
       repo.itemOp(approved, { version: option.version }),
       repo.itemOp(decision, { create: true }),
       ...buys.map((b) => repo.itemOp(b, { create: true })),
-      repo.auditOp({ tenantId: p.tenantId, actorId: by, action: "decision.approved", target: decision.id, summary: `${p.key}: approved ${snap.code} "${option.title}" (version ${option.version})` }),
+      ...(deposit ? [repo.itemOp(deposit, { create: true })] : []),
+      repo.auditOp({ tenantId: p.tenantId, actorId: by, action: "decision.approved", target: decision.id, summary: `${p.key}: approved ${snap.code} "${option.title}" (version ${option.version}), signed by ${input.signature.typedName}` }),
     ]);
+    await keep(`t/${p.tenantId}/p/${p.id}/decisions/${decision.id}.json`, decision);
     return c.json({ decision, option: approved, purchases: buys }, 201);
   });
 
@@ -285,8 +305,16 @@ export function itemRoutes(app: App, k: Kit) {
     const { p, it, u, ts, by } = await decide(c, "handoff");
     const input = await body(c, AcceptInput);
     if (input.version !== it.version) fail(409, "conflict", "This step changed since you read it. Review it again.", it);
-    const next: Item = { ...it, status: "done", completedAt: completionAfter(it, "done", ts), fields: { ...it.fields, accepted: { by, name: u.name || u.email, at: ts, note: input.note } }, version: it.version + 1, updatedAt: ts, updatedBy: by };
-    await repo.table.write([repo.itemOp(next, { version: it.version }), repo.auditOp({ tenantId: p.tenantId, actorId: by, action: "handoff.accepted", target: it.id, summary: `${p.key}: ${u.name || u.email} accepted "${it.title}"${input.note ? `: ${input.note}` : ""}` })]);
+    const signed = signature("acceptance", it.title, await sha256Hex(canonical({ id: it.id, version: it.version, title: it.title, body: it.body, note: input.note })), input.signature, { id: by, name: u.name || u.email, email: u.email }, ts, from(c));
+    const next: Item = { ...it, status: "done", completedAt: completionAfter(it, "done", ts), fields: { ...it.fields, accepted: { by, name: u.name || u.email, at: ts, note: input.note, signature: signed } }, version: it.version + 1, updatedAt: ts, updatedBy: by };
+    // The last handover step accepted: neon1 gets a draft of the final invoice for what's left on the price
+    const items = await repo.listItems(p.tenantId, p.id);
+    const steps = items.filter((i) => i.kind === "handoff").map((i) => (i.id === it.id ? next : i));
+    const decision = currentDecision(items);
+    const hasFinal = items.some((i) => i.kind === "invoice" && i.status !== "void" && i.fields.type === "final");
+    const final = steps.every((i) => i.status === "done") && decision && !hasFinal ? draftInvoice(p, "final", finalLines(decision, items), ts, by) : undefined;
+    await repo.table.write([repo.itemOp(next, { version: it.version }), ...(final ? [repo.itemOp(final, { create: true })] : []), repo.auditOp({ tenantId: p.tenantId, actorId: by, action: "handoff.accepted", target: it.id, summary: `${p.key}: ${u.name || u.email} accepted "${it.title}"${input.note ? `: ${input.note}` : ""}, signed by ${input.signature.typedName}` })]);
+    await keep(`t/${p.tenantId}/p/${p.id}/acceptances/${it.id}-v${next.version}.json`, next);
     return c.json(next);
   });
 }
@@ -312,5 +340,29 @@ export function editRoutes(app: App, k: Kit) {
     const p = await project(c);
     await repo.clearEditing(p.tenantId, p.id, c.req.param("recordId"), actorId(c));
     return c.json({ ok: true });
+  });
+}
+
+
+/** Where a signature came from, for its audit trail */
+export function from(c: Context<Env>) {
+  return { ip: c.req.header("x-forwarded-for")?.split(",")[0]?.trim(), ua: c.req.header("user-agent") };
+}
+
+/** The project's current decision: the latest approval no later decision replaced */
+export function currentDecision<T extends Pick<Item, "kind" | "id" | "fields" | "createdAt">>(items: T[]): T | undefined {
+  const decisions = items.filter((i) => i.kind === "decision");
+  const replaced = new Set(decisions.flatMap((d) => (d.fields.supersedes as string[] | undefined) ?? []));
+  return decisions.filter((d) => !replaced.has(d.id)).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+}
+
+/** A draft invoice for neon1 to check and issue; none when there is nothing to bill */
+export function draftInvoice(p: Project, type: "deposit" | "final" | "progress" | "reimbursement" | "retainer" | "credit", lines: InvoiceFields["lines"], ts: string, by: string, extra: Partial<InvoiceFields> = {}): Item | undefined {
+  if (!lines.length) return undefined;
+  const names = { deposit: "Deposit", final: "Final invoice", progress: "Progress invoice", reimbursement: "Purchases at cost", retainer: "Care plan", credit: "Credit" } as const;
+  return Item.parse({
+    tenantId: p.tenantId, projectId: p.id, id: newId("i"), kind: "invoice", title: names[type], body: "", status: "draft", rank: ts,
+    fields: InvoiceFields.parse({ type, lines, ...extra }),
+    version: 1, createdAt: ts, updatedAt: ts, updatedBy: by,
   });
 }

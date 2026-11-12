@@ -2,7 +2,7 @@
 // sample clients.
 
 
-import { CalEvent, DEFAULT_STAGES, Item, formatClientId, newId, rankBetween, type Member, type Project, type Tenant, type User } from "@1neon/domain";
+import { AGREEMENT_EDITION, AGREEMENT_TEXT, CalEvent, DEFAULT_STAGES, Item, formatClientId, newId, rankBetween, sha256Hex, signature, type Member, type Project, type Tenant, type User } from "@1neon/domain";
 import type { Repo } from "./store/repo.ts";
 import { issueProposal } from "./proposals.ts";
 
@@ -47,6 +47,11 @@ export async function seed(repo: Repo, operatorEmail = "pradeep@neon1.tech") {
   await member(acme, dana, "editor");
   await member(harbor, pradeep, "admin");
   await member(harbor, lee, "admin", "invited");
+
+  // Acme signed neon1's service agreement when it became a client; Harbor hasn't yet
+  const signedAcme: Tenant = { ...acme, agreements: [signature("agreement", AGREEMENT_EDITION, await sha256Hex(AGREEMENT_TEXT), { typedName: raj.name, consent: true }, { id: raj.id, name: raj.name, email: raj.email }, day(-21))], version: acme.version + 1 };
+  await repo.saveTenant(signedAcme, acme.version);
+  Object.assign(acme, signedAcme);
 
   let rank = "";
   // Project and item helpers with ranks appended in creation order

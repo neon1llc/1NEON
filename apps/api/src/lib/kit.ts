@@ -11,6 +11,7 @@ import type { Repo } from "../store/repo.ts";
 import type { NeoModel } from "../neo/agent.ts";
 import type { NeoBudget } from "../routes/neo.ts";
 import type { WriteOp } from "../store/types.ts";
+import type { Payments, Records } from "../payments.ts";
 import { actorId, check, fail, who, type Env } from "./http.ts";
 
 
@@ -29,6 +30,10 @@ export interface Deps {
   outbox?: "inline" | "worker";
   // Optional: Neo for signed-in people (Bedrock in production). Without it, /neo answers 503
   neo?: { model: NeoModel; modelId: string; budget?: NeoBudget };
+  // Optional: Stripe for card and bank payments. Without it, invoices are paid by check, Zelle, or wire
+  payments?: Payments;
+  // Optional: locked, write-once copies of signed and issued records (S3 Object Lock in production)
+  records?: Records;
 }
 
 
