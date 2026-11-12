@@ -4,7 +4,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { Link, NavLink, Navigate, Outlet, useLocation, useParams } from "react-router";
+import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { menuOf } from "@1neon/domain";
 import { api, DEMO as IN_DEMO, LIVE as IN_LIVE, devUser, HttpError, pickPerson, resetDemo, Unconfirmed } from "../lib/api.ts";
 import { failureOf, read } from "../lib/reads.ts";
@@ -535,8 +535,11 @@ function TabOnly() {
 function DemoBar() {
   const me = useSession();
   const qc = useQueryClient();
-  // Back to the picker as someone else; the demo's data stays as it is
-  const switchPerson = () => { devUser.set(""); void qc.invalidateQueries(); };
+  // Back to the picker as someone else, starting from home: the page in view may belong to an
+  // organization the next person can't open. Resetting first drops the last person's session, so
+  // home waits for the next one instead of redirecting by the old one. The demo's data stays as it is
+  const navigate = useNavigate();
+  const switchPerson = () => { devUser.set(""); void qc.resetQueries(); navigate("/", { replace: true }); };
   // Start over forgets every change made on this device
   const ask = useAsk();
   const startOver = async () => { if (await ask({ title: "Start the demo over?", body: "Every change you made in this demo goes away.", yes: "Start over", danger: true })) void resetDemo(); };

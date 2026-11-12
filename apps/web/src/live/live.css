@@ -189,7 +189,10 @@ dialog.live-modal { box-shadow: 0 24px 64px rgba(0, 0, 0, .25), 0 0 0 100vmax rg
 .live-mail aside { border-right: 1px solid var(--p-line); overflow: auto; }
 .mail-h { margin: 0; padding: 12px 14px 8px; font-weight: 700; font-size: 13px; color: var(--p-dim); }
 .live-mail ul { list-style: none; margin: 0; padding: 0; }
-.mail-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 8px; padding: 10px 14px; border-bottom: 1px solid #eaeef2; cursor: pointer; }
+.mail-row { border-bottom: 1px solid #eaeef2; }
+/* The row's button carries the layout, and looks like a mail app's row rather than a button */
+.mail-open { all: unset; box-sizing: border-box; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 8px; padding: 10px 14px; cursor: pointer; }
+.mail-open:focus-visible { outline: 2px solid var(--p-hi); outline-offset: -2px; }
 .mail-row:hover { background: var(--p-soft); }
 .mail-row.on { background: #ddf4ff; }
 .mail-from { font-weight: 600; }
