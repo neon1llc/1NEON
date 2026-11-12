@@ -44,9 +44,10 @@ export function headFor(pathname: string): Head {
     // The same answers are published in the knowledge center, which is the copy to credit
     return { title: "1NEON FAQs · neon1", description: "Short answers about using the 1NEON client portal: signing in, projects, approvals, files, access, support, and your data.", canonical: `${SITE}/knowledge/faq/1neon-help/` };
   }
-  if (path === "/1NEON/privacy") return { title: "Privacy policy · 1NEON", description: `What information the portal collects, why, and what you can do about it. ${PORTAL}` };
-  if (path === "/1NEON/terms") return { title: "Terms of use · 1NEON", description: `The terms for using neon1.tech and the 1NEON portal. ${PORTAL}` };
-  if (path === "/1NEON/cookies") return { title: "Cookies and browser storage · 1NEON", description: `The cookies the portal needs and what it saves in your browser. ${PORTAL}` };
+  // The policies are published in the knowledge center too, which is the copy to credit, like the FAQs
+  if (path === "/1NEON/privacy") return { title: "Privacy policy · 1NEON", description: `What information the portal collects, why, and what you can do about it. ${PORTAL}`, canonical: `${SITE}/knowledge/policies/privacy/` };
+  if (path === "/1NEON/terms") return { title: "Terms of use · 1NEON", description: `The terms for using neon1.tech and the 1NEON portal. ${PORTAL}`, canonical: `${SITE}/knowledge/policies/terms/` };
+  if (path === "/1NEON/cookies") return { title: "Cookies and browser storage · 1NEON", description: `The cookies the portal needs and what it saves in your browser. ${PORTAL}`, canonical: `${SITE}/knowledge/policies/cookies/` };
   // Sign-in and everything behind it: for clients, not for search
   if (path === "/1NEON") return { title: "Sign in · 1NEON client portal", description: `Sign in to your projects. Access is by invitation. ${PORTAL}`, noindex: true };
   const section = sectionOf(path.slice("/1NEON".length));
