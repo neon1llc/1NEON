@@ -36,7 +36,12 @@ const storage = new S3Storage(cfg.docsBucket);
 // Without both parameters, invoices are still issued and paid by check, Zelle, or wire
 async function stripe() {
   if (!cfg.stripeKeyParam || !cfg.stripeWebhookParam) return undefined;
-  const r = await new SSMClient({}).send(new GetParametersCommand({ Names: [cfg.stripeKeyParam, cfg.stripeWebhookParam], WithDecryption: true }));
+  // A read that fails (say, access not granted yet) leaves online payment off rather than the whole API down
+  const r = await new SSMClient({}).send(new GetParametersCommand({ Names: [cfg.stripeKeyParam, cfg.stripeWebhookParam], WithDecryption: true })).catch((e: unknown) => {
+    console.error(JSON.stringify({ level: "error", message: "stripe keys unreadable; online payment off", error: String(e) }));
+    return undefined;
+  });
+  if (!r) return undefined;
   const value = (name: string) => r.Parameters?.find((x) => x.Name === name)?.Value;
   const key = value(cfg.stripeKeyParam), hook = value(cfg.stripeWebhookParam);
   // A placeholder value (set by Terraform before the real key is put in) leaves online payment off. A restricted key (rk_) with Checkout Sessions write is all it needs
