@@ -72,10 +72,10 @@ Charts made from your organization's own data: open and overdue work, how often 
 ## Decisions and approvals
 
 ### How do I approve an option?
-Open the project's **Needs** layer, compare the options, and choose **Approve this option**. You can add conditions, such as "only after 6pm". The approval is recorded with your name, the time, and a copy of the option's terms (title, description, price, hours, timeline, and outside costs) exactly as you saw them. Options come from neon1; to ask for a change, comment on the option. [Watch it](/1NEON/live?play=decide).
+Open the project's **Needs** layer, compare the options, and choose **Approve this option**. You can add conditions, such as "only after 6pm". Then type your full name and tick the box to sign; your typed name is your signature. The approval is recorded with your signature, your name, the time, and a copy of the option's terms (title, description, price, hours, timeline, and outside costs) exactly as you saw them. Options come from neon1; to ask for a change, comment on the option. [Watch it](/1NEON/live?play=decide).
 
 ### Can I download the proposal?
-Yes. Under the options, choose **Read the full proposal**. It puts the discovery, the goals, every option with what's in and out, the hours and prices, what each of us will do, and the agreement on one page. Use **Print or save as PDF** to keep a copy or sign it on paper. Approving in 1NEON counts the same as signing it. [Watch it](/1NEON/live?play=decide).
+Yes. Under the options, choose **Read the full proposal**. It puts the discovery, the goals, every option with what's in and out, the hours and prices, what each of us will do, and the agreement on one page. Use **Print or save as PDF** to keep a copy or sign it on paper. Signing your approval in 1NEON counts the same as signing it on paper. [Watch it](/1NEON/live?play=decide).
 
 ### Who can approve?
 The person named as the project's decision maker. If nobody is named, an admin of your organization can. Only an admin of your organization can name or change the decision maker, under **People** on the project's overview, after confirming it's them; editors can change everyone else on the project. Each change is recorded with the old and new decision maker, and neon1 can't be named, since it proposes the options. (In neon1's own organization, where neon1 is the client, it can.) [Watch it](/1NEON/live?play=decide).
@@ -140,7 +140,13 @@ An admin of your organization. Admins invite people and change their access. If 
 An approval records that your organization agreed to that option as shown: its scope, cost, and timeline, plus any conditions you added. Both sides can rely on that record. It works alongside your signed agreement with neon1, which governs the paid work.
 
 ### Where are invoices and payments?
-Not in 1NEON. Invoices and payment happen outside the portal, as your signed agreement sets out.
+Under the project's **Execute** layer, in **Invoices**. Each invoice opens on neon1's letterhead with its lines, due date, what has been paid, and what's left, ready to print or save as a PDF. Choose **Pay** to pay online by bank transfer (ACH, preferred) or card, through Stripe's secure page; 1NEON never sees your card or bank details. You can also pay by check, Zelle, or wire, and neon1 records it when it arrives. [Watch it](/1NEON/live?play=build).
+
+### Can an invoice be changed?
+Not once it's issued. An issued invoice is numbered and kept exactly as issued. A mistake is fixed with a credit that reduces it, or by voiding it with a reason, and both stay on record.
+
+### What is the service agreement?
+neon1's terms for all work with your organization: how work is agreed, paying, ownership, confidentiality, and how either of us can end it. An admin of your organization signs it once in 1NEON, under **Settings**, before the first option can be approved. You can read it any time at [/1NEON/agreement](/1NEON/agreement). [Watch it](/1NEON/live?play=decide).
 
 ### Something urgent is wrong. Who do I tell?
 Email [hello@neon1.tech](mailto:hello@neon1.tech) with what happened and when. neon1 is one person working planned hours, with no 24/7 or emergency response, so for something that can't wait, such as a fraud on your bank account or an outage your business can't run without, contact the provider responsible first. Report a security problem in the portal itself to [security@neon1.tech](mailto:security@neon1.tech).

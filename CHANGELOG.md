@@ -13,8 +13,22 @@
 - Constraints and assumptions, as their own list in Needs and their own section of the proposal.
 - A request added after a decision asks whether it changes the agreed scope; one that does is flagged for the next revision.
 - Handover steps can be checked and accepted by the decision maker, with a note on what they checked.
+- neon1's service agreement, in 1NEON and at /1NEON/agreement. An admin of a client organization signs it once, with their typed name and a consent box, before the first option can be approved. The signature records the edition, a fingerprint of the exact text, the time, and where it came from.
+- Approvals and handover acceptances are signed the same way. The approval records a fingerprint of the terms that were signed, the printed proposal and its Word copy show the signature, and initials for purchases come from the signed name.
+- Invoices under Execute: a deposit invoice is drafted when a fixed-price option is approved and a final invoice when the handover is accepted. Reimbursement, progress, care plan, and credit invoices can be added too. neon1 checks a draft and issues it; issuing numbers it (such as INV-0039-01), sets its due date, and fixes its contents with a fingerprint. Clients never see drafts.
+- An invoice page on neon1's letterhead, ready to print or save as a PDF, showing the lines, credits, payments, what is left, and how to pay.
+- Pay online through Stripe Checkout, by bank transfer (ACH, preferred) or card. Stripe's signed webhook records the payment once, including bank payments that clear days later. Checks, Zelle, and wires are recorded by neon1. If the Stripe account can't take bank payments yet, Checkout offers card alone.
+- Issued invoices and payments are permanent. A mistake is corrected with a credit or by voiding with a reason, and an invoice with payments can't be voided. A locked copy of every signature, issued invoice, and payment is kept for seven years.
+- A Billing notification group (on by default) for signatures, issued and voided invoices, and payments.
+- Maria's walkthrough signs the service agreement, signs her approval, pays the deposit invoice by bank transfer, and signs her handover acceptance.
+
+### Infrastructure
+- A records bucket with S3 Object Lock (governance mode, seven years) for the locked copies.
+- Stripe's restricted key and webhook signing secret are read from SecureString parameters (/1neon/prod/stripe/...). Terraform creates them with placeholder values and never sees the real ones; until they are set, online payment stays off.
 
 ### Changed
+- Approving an option or accepting a handover step needs a typed signature; initials alone no longer approve. Neo can't approve on anyone's behalf and points to Approve instead.
+- The help page explains invoices, paying, and the service agreement.
 - The printed proposal shows the date its revision was issued, which no longer moves when an option is edited or approved, and only the acceptance recorded against that revision. Each printed page carries the proposal's ID and its page number, and a demo proposal says on every page that it's a fictional sample.
 - Maria's walkthrough reads the numbered proposal, sees the approval restate the terms, buys the label printer from her option and attaches the receipt, marks Sam's training done, and accepts the last handover step. The runbook she receives is a full page instead of one line.
 

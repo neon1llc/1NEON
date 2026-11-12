@@ -96,7 +96,7 @@ function acceptanceOf(d: Item): Acceptance | undefined {
   const r = DecisionFields.safeParse(d.fields);
   if (!r.success) return undefined;
   const f = r.data;
-  return { name: f.approverName || f.approverEmail || "A member", email: f.approverEmail, code: f.code ?? "", title: f.terms?.title ?? d.title.replace(/^Approved: /, ""), at: f.approvedAt, conditions: f.conditions || undefined, initials: f.initials };
+  return { name: f.approverName || f.approverEmail || "A member", email: f.approverEmail, code: f.code ?? "", title: f.terms?.title ?? d.title.replace(/^Approved: /, ""), at: f.approvedAt, conditions: f.conditions || undefined, initials: f.initials, signature: f.signature };
 }
 
 
@@ -291,6 +291,7 @@ function Proposal({ snapshot: s, rev, latestRev, decided, inForce, timeZone, slu
               <p><b>{a.name}</b>{a.email ? ` (${a.email})` : ""} approved <b>{a.code}</b> ({a.title}) on {longDate(a.at)}.</p>
               {a.initials && <p>Initialed <b>{a.initials}</b>: neon1 buys the items marked for it, paid back at cost with the receipt.</p>}
               {a.conditions && <p><b>Conditions:</b> {a.conditions}</p>}
+              {a.signature && <p>Signed electronically as <span className="sign-name">{a.signature.typedName}</span>. Fingerprint of the signed terms: <code>{a.signature.hash.slice(0, 16)}</code>.</p>}
               <p className="pp-small">1NEON keeps this revision and the approved terms exactly as shown, with who approved and when. Neither can be edited afterwards.</p>
             </div>
           );

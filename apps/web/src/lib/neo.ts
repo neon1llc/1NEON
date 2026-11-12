@@ -150,9 +150,9 @@ export async function runStep(op: NeoOp): Promise<void> {
     case "comment":
       await api(`/t/${op.tid}/projects/${op.pid}/items/${op.iid}/comments`, { method: "POST", body: { body: op.text } });
       return;
+    // An approval is signed by the person, with their typed name, so Neo never sends one on their behalf
     case "approve_option":
-      await api(`/t/${op.tid}/projects/${op.pid}/items/${op.iid}/approve`, { method: "POST", body: { version: await itemVersion(op.tid, op.pid, op.iid), conditions: op.conditions } });
-      return;
+      throw new Error("Approvals are signed by you, with your typed name. Open the option under Needs and choose Approve to sign it.");
     case "invite":
       await api(`/t/${op.tid}/members/invite`, { method: "POST", body: { people: op.people } });
       return;

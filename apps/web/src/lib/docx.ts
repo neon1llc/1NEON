@@ -17,7 +17,7 @@ export const ID_PROPERTY = "neon1-proposal-id";
 const longDate = (iso: string) => new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 
 /** What one acceptance block says, when the revision was decided */
-export interface Acceptance { name: string; email?: string; code: string; title: string; at: string; conditions?: string; initials?: string }
+export interface Acceptance { name: string; email?: string; code: string; title: string; at: string; conditions?: string; initials?: string; signature?: { typedName: string; hash: string } }
 
 
 /** Build the .docx for one issued revision and hand it to the browser as a download */
@@ -87,7 +87,7 @@ export async function downloadDocx(p: Pick<ProposalFields, "number" | "rev" | "i
   children.push(bullet("To suggest changes, mark up this document and upload it to the project's Files; neon1 answers with the next revision."));
   if (opts.accepted) {
     const a = opts.accepted;
-    children.push(sub("Accepted in 1NEON"), para(`${a.name}${a.email ? ` (${a.email})` : ""} approved ${a.code}, ${a.title}, on ${longDate(a.at)}.${a.initials ? ` Initialed ${a.initials} for items neon1 buys, paid back at cost.` : ""}`));
+    children.push(sub("Accepted in 1NEON"), para(`${a.name}${a.email ? ` (${a.email})` : ""} approved ${a.code}, ${a.title}, on ${longDate(a.at)}.${a.initials ? ` Initialed ${a.initials} for items neon1 buys, paid back at cost.` : ""}${a.signature ? ` Signed electronically as ${a.signature.typedName}; fingerprint ${a.signature.hash.slice(0, 16)}.` : ""}`));
     if (a.conditions) children.push(para(`Conditions: ${a.conditions}`));
   } else {
     children.push(para(`I, ____________________________ (print name), choose option ${s.options.map((o) => o.code).join(" / ")} for ${s.orgName}.`));

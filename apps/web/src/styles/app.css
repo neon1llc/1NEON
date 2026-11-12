@@ -1277,3 +1277,21 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
 @media (max-width: 480px) { .terms-list { grid-template-columns: 1fr; } .terms-list dd { margin-bottom: 6px; } }
 .purchase-meta { display: flex; gap: 6px 12px; flex-wrap: wrap; align-items: center; margin-top: 4px; font-size: 13px; }
 .accepted-note { margin-top: 4px; font-size: 13px; color: var(--ok); }
+
+
+/* --- Signing and billing ------------------------------------------------------------------ */
+/* The signature box: a typed name set apart like a signature line, and the consent beneath it */
+.sign-box { display: grid; gap: 6px; margin: 12px 0 4px; }
+.sign-box .sign-name { font: italic 20px/1.2 Georgia, "Times New Roman", serif; border: 0; border-bottom: 1.5px solid var(--text); border-radius: 0; background: transparent; padding: 6px 2px; max-width: 420px; }
+.sign-box .sign-consent { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.4; }
+.sign-box .sign-consent input { margin-top: 2px; flex: none; }
+.sign-card { margin-top: 24px; display: grid; gap: 8px; }
+.accept-form { display: grid; gap: 8px; margin-top: 6px; max-width: 520px; }
+.notice.ok { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+/* An invoice row: number, type, and state on one line, amounts and payments under it */
+.invoice-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.invoice-head .title { font-weight: 600; }
+.invoice-row.is-void .title { text-decoration: line-through; color: var(--muted); }
+/* The printed invoice's totals sit right under the lines */
+.inv-lines td:nth-child(n + 2), .inv-lines tfoot td { text-align: right; white-space: nowrap; }
+.inv-lines tfoot th { text-align: right; font-weight: 500; }

@@ -99,6 +99,22 @@ export async function planWork() {
 }
 
 /** The three tasks, done */
+/** Pradeep issues the deposit drafted when Maria approved */
+export async function issueDeposit() {
+  const { t, p, items } = await project();
+  const draft = items.find((i) => i.kind === "invoice" && i.status === "draft" && i.fields.type === "deposit");
+  if (draft) await as(`/t/${t}/projects/${p.id}/invoices/${draft.id}/issue`, "POST", { version: draft.version });
+}
+
+/** Her bank (ACH) payment clears; in the walkthrough Pradeep records it, as Stripe would */
+export async function depositPaid() {
+  const { t, p, items } = await project();
+  const inv = items.find((i) => i.kind === "invoice" && i.status === "issued" && i.fields.type === "deposit");
+  if (!inv) return;
+  const lines = (inv.fields.lines as { qty: number; unitCents: number }[]).reduce((n, l) => n + Math.round(l.qty * l.unitCents), 0);
+  await as(`/t/${t}/projects/${p.id}/invoices/${inv.id}/payments`, "POST", { amountCents: lines, method: "ach", ref: "Bank transfer", receivedAt: new Date().toISOString().slice(0, 10) });
+}
+
 export async function finishWork() {
   await patch((i) => i.title === "Order form connected to the spreadsheet", { status: "done" });
   await patch((i) => i.title === "Order emails and voicemails added to the list", { status: "done" });
@@ -433,7 +449,17 @@ export const STORY: Section[] = [
       await s.scroll(900, 1400);
       await s.think("It's numbered, 0039-r1, and each option has its own ID. Approving in 1NEON counts as choosing.");
       await s.click({ sel: "a", text: "Back to options" }, 1200);
-      await s.say("She approves the recommended one, with a condition");
+      await s.say("First, once, she signs neon1's service agreement for the bakery");
+      await s.think("He said there's one agreement that covers everything. Let me read it first.");
+      await s.go(`${base}/agreement`, "Service agreement");
+      await s.scroll(900, 1400);
+      await s.think("Purchases at cost, invoices due in 15 days, my data stays mine. Fair.");
+      await s.scroll(1600, 1200);
+      await s.type("#agreement-sign-name", "Maria Lopez");
+      await s.click("#agreement-sign-name ~ .sign-consent input", 400);
+      await s.click({ sel: ".sign-card button", text: /^Sign for/ }, 1400);
+      await s.go(`${base}/projects/${KEY}/needs#options`, "Options");
+      await s.say("She approves the recommended one, with a condition, and signs it");
       await s.think("B it is. Pradeep recommends it too.");
       await s.click({ sel: ".options article:nth-child(2) button", text: "Approve this option" }, 700);
       await s.say("The approval restates exactly what she's accepting");
@@ -441,7 +467,9 @@ export const STORY: Section[] = [
       await s.hover("dialog[open] .terms-list", 1200);
       await s.think("Just not before Saturday. That's our busiest day.");
       await s.type("#cond", "Go live after the Saturday rush.");
-      await s.click({ sel: "dialog[open] .actions button", text: /^Approve/ }, 1600);
+      await s.type("#approve-sign-name", "Maria Lopez");
+      await s.click("#approve-sign-name ~ .sign-consent input", 400);
+      await s.click({ sel: "dialog[open] .actions button", text: /^Sign and approve/ }, 1600);
       await s.top();
       await s.think("Good, the decision is written down, condition and all.");
       await s.hover(".decision", 1200);
@@ -476,6 +504,12 @@ export const STORY: Section[] = [
       await s.think("It wants the receipt. It's right here.");
       await dropFile(s, { sel: ".item:has(.purchase-meta) .file-ask .chip", text: "Attach the receipt" }, "staples-receipt.pdf", "Staples receipt: Brother QL-820NWB label printer, $104.99", { layer: "execution", itemId: (items) => items.find((i) => i.kind === "purchase")?.id });
       await s.wait(700);
+      await s.say("Half the fixed price is due up front: Pradeep issues the deposit invoice");
+      await s.others(issueDeposit, 900, "Pradeep issued the deposit invoice");
+      await s.think("The deposit invoice is here. $850, due in two weeks.");
+      await s.hover({ sel: ".invoice-row", text: "INV-" }, 1100);
+      await s.say("She pays by bank transfer; Pradeep's records show it paid");
+      await s.others(depositPaid, 900, "Her bank payment arrived");
       await s.others(finishWork, 1200, "Pradeep finished three tasks");
       await s.think("All three are done already.");
       await s.hover({ sel: ".item", text: "Daily summary at 7pm" }, 900);
@@ -545,7 +579,10 @@ export const STORY: Section[] = [
       await s.think("Sam's trained. I'll accept that one myself.");
       await s.click({ sel: '.item:has(input[aria-label="Done: The people who use it are trained on it"]) button.chip', text: "Check it and accept" }, 500);
       await s.type('input[aria-label="What you checked (optional)"]', "Sam closed Friday using the runbook");
-      await s.click({ sel: "form.line button", text: /^Accept$/ }, 1000);
+      await s.type('form.accept-form input.sign-name', "Maria Lopez");
+      await s.click("form.accept-form .sign-consent input", 400);
+      await s.click({ sel: "form.accept-form button", text: /^Sign and accept$/ }, 1000);
+      await s.say("Accepting the last step drafts the final invoice for the rest, for Pradeep to send");
       await s.say("And adds ongoing care from a suggestion");
       await s.think("A monthly check-in makes sense for us.");
       await s.click({ sel: "button", text: "+ Add care item" }, 500);

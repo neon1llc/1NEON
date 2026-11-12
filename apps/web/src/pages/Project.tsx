@@ -2,7 +2,7 @@
 // Execute, Observe, Normalize).
 
 
-import { betterWhen, canApprove, changedSince, currentDecision, todayIn, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, priceCheckDue, ProjectRole, proposalRef, PurchaseFields, HandoffFields, revisions, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
+import { balanceOf, invoiceState, InvoiceFields, money as dollars, betterWhen, canApprove, changedSince, currentDecision, todayIn, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, priceCheckDue, ProjectRole, proposalRef, PurchaseFields, HandoffFields, revisions, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
 import { ArrowRight, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
@@ -14,6 +14,7 @@ import { Link, NavLink, useLocation, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, ConflictDialog, Dialog, Empty, Health, HEALTH_LABEL, LayerBadge, LAYERS, layerHint, layerName, layerProgress, OnionProgress, Trend, ago, dateLabel, daysSince, layerFromSlug, layerSlug, useToast } from "../components/ui.tsx";
 import { api, DEMO, HttpError } from "../lib/api.ts";
+import { AgreementNeeded, Invoices, SignBox, signReady, useAgreementSigned, type SignValue } from "../components/Billing.tsx";
 import { firstYear, money, parseCost, type Recurring } from "../lib/cost.ts";
 import { numberProblem, optionalNumber } from "../lib/measures.ts";
 import { problem, useMembers, useProject, useProjects, useRefresh, useSubmit } from "../lib/hooks.ts";
@@ -37,6 +38,8 @@ const KIND_LABEL: Record<ItemKind, [string, string]> = {
   change: ["Change", "Changes"],
   update: ["Update", "Status updates"],
   purchase: ["Purchase", "Purchases"],
+  invoice: ["Invoice", "Invoices"],
+  payment: ["Payment", "Payments"],
   signoff: ["Outside approval", "Outside approvals"],
   metric: ["Measure", "Measures"],
   check: ["Check", "Checks"],
@@ -47,11 +50,12 @@ const KIND_LABEL: Record<ItemKind, [string, string]> = {
   care: ["Care item", "Care plan"],
   retro: ["Retro note", "Retrospective"],
 };
-// Kinds shown under a layer tab. Decisions appear as banners and revisions in the proposal strip, never as editable rows
-const KINDS_IN = (layer: Layer) => (Object.keys(KIND_LAYER) as ItemKind[]).filter((k) => KIND_LAYER[k] === layer && k !== "decision" && k !== "proposal");
+// Kinds shown under a layer tab. Decisions appear as banners, revisions in the proposal strip, and
+// invoices and payments in Invoices (under Execute), never as editable rows
+const KINDS_IN = (layer: Layer) => (Object.keys(KIND_LAYER) as ItemKind[]).filter((k) => KIND_LAYER[k] === layer && !["decision", "proposal", "invoice", "payment"].includes(k));
 // Every work item is done or not done, with a checkbox, so each counted need can be finished. Options
 // finish by approval, measures by reaching their target, and decisions and updates are records
-const CHECKABLE = new Set<ItemKind>((Object.keys(KIND_LAYER) as ItemKind[]).filter((k) => !["option", "metric", "decision", "update", "purchase", "proposal", "constraint"].includes(k)));
+const CHECKABLE = new Set<ItemKind>((Object.keys(KIND_LAYER) as ItemKind[]).filter((k) => !["option", "metric", "decision", "update", "purchase", "proposal", "constraint", "invoice", "payment"].includes(k)));
 
 
 /** A project by key (FLOW-1): the key resolves to an ID through the project list */
@@ -180,7 +184,20 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
   const fresh = cur && !priceCheckDue(cur.p, todayIn(org.timeZone));
   const ready = proposed.filter((o) => cur?.p.snapshot.options.some((x) => x.id === o.id && x.version === o.version));
   const unissued = !approved && proposed.length > 0 && (!cur || changedSince(cur.p, items).any);
-  if (unissued && me.operator && canWrite) {
+  // Money first once anything is billed: the client's open invoices, neon1's drafts to check and issue
+  const today = todayIn(org.timeZone);
+  const owed = items.filter((i) => i.kind === "invoice" && balanceOf(i, items) > 0);
+  const drafts = items.filter((i) => i.kind === "invoice" && i.status === "draft");
+  const overdue = owed.filter((i) => invoiceState(i, items, today) === "overdue");
+  if (!me.operator && owed.length) {
+    const first = overdue[0] ?? owed[0]!;
+    const f = InvoiceFields.parse(first.fields);
+    text = <>{overdue.length ? <>Invoice {f.number} is <b>overdue</b>: </> : <>Invoice {f.number} is ready: </>}{dollars(balanceOf(first, items))}, due {dateLabel(f.dueDate)}.{owed.length > 1 ? ` ${owed.length - 1} more ${owed.length === 2 ? "is" : "are"} open.` : ""}</>;
+    action = { to: `${base}/execute#billing`, label: "See and pay" };
+  } else if (me.operator && drafts.length) {
+    text = <>{drafts.length === 1 ? `A ${String(drafts[0]!.fields.type)} invoice is` : `${drafts.length} invoices are`} drafted. Check {drafts.length === 1 ? "it" : "them"}, then issue.</>;
+    action = { to: `${base}/execute#billing`, label: "Check invoices" };
+  } else if (unissued && me.operator && canWrite) {
     text = <>Issue the proposal{cur ? `'s next revision, r${cur.p.rev + 1},` : ""} so the client can approve an option.</>;
     action = { to: `${base}/needs#options`, label: cur ? `Issue r${cur.p.rev + 1}` : "Issue the proposal" };
   } else if (proposed.length && canApprove(actor, access, p.people, isOwnOrg(org.slug)).ok) {
@@ -655,6 +672,8 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
           </section>
         );
       })}
+      {/* Execute ends with the project's invoices: Pay for the client, drafts and payments for neon1 */}
+      {layer === "execution" && <Invoices items={items} path={path} project={project} />}
       {/* Every file filed under this layer of the project; anyone in the organization can add one */}
       <section className="kind-group">
         <h2 className="section-h">Files <small>{docs.filter((d) => d.uploaded && d.layer === layer).length}</small></h2>
@@ -925,13 +944,13 @@ function Meter({ label, value }: { label: keyof typeof SCORE_WORDS; value: numbe
  * made before terms were copied say so plainly rather than showing today's option as the agreement
  */
 function DecisionCard({ d, names, superseded }: { d: Item; names?: Map<string, string>; superseded?: boolean }) {
-  const f = d.fields as { approvedBy?: string; approvedAt?: string; optionVersion?: number; approverName?: string; code?: string; initials?: string; terms?: { title: string; body?: string; cost?: string; timeline?: string } };
+  const f = d.fields as { approvedBy?: string; approvedAt?: string; optionVersion?: number; approverName?: string; code?: string; initials?: string; signature?: { typedName: string; at: string; hash: string }; terms?: { title: string; body?: string; cost?: string; timeline?: string } };
   const by = f.approverName || names?.get(String(f.approvedBy)) || "a member";
   return (
     <div className={`decision${superseded ? " superseded" : ""}`} id={`item-${d.id}`}>
       <b>{d.title}</b>
       {superseded && <span className="tag" style={{ marginLeft: 8 }}>replaced by a later decision</span>}
-      <div className="small muted">by {by} · {ago(String(f.approvedAt))} · {f.code ? <span className="opt-code">{f.code}</span> : `option version ${String(f.optionVersion)}`}{f.initials ? ` · initialed ${f.initials} for items neon1 buys` : ""}</div>
+      <div className="small muted">by {by} · {ago(String(f.approvedAt))} · {f.code ? <span className="opt-code">{f.code}</span> : `option version ${String(f.optionVersion)}`}{f.signature ? ` · signed "${f.signature.typedName}"` : ""}{f.initials ? ` · initialed ${f.initials} for items neon1 buys` : ""}</div>
       {f.terms ? (
         <div className="small" style={{ margin: "6px 0 0" }}>
           {(f.terms.cost || f.terms.timeline) && <div className="mono">Agreed: {[f.terms.cost, f.terms.timeline].filter(Boolean).join(" · ")}</div>}
@@ -1045,11 +1064,12 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
   // The option waiting on approval, the conditions being typed, and initials when neon1 buys something
   const [approving, setApproving] = useState<Item>();
   const [conditions, setConditions] = useState("");
-  const [initials, setInitials] = useState("");
+  const [sign, setSign] = useState<SignValue>({ typedName: "", consent: false });
+  const signed = useAgreementSigned();
   // Which option the typed conditions belong to: reopening the same one keeps them (after a lost
   // reply, say), and another option starts blank
   const [draftFor, setDraftFor] = useState<string>();
-  const startApprove = (o: Item) => { if (draftFor !== o.id) { setConditions(""); setInitials(""); setDraftFor(o.id); } setApproving(o); };
+  const startApprove = (o: Item) => { if (draftFor !== o.id) { setConditions(""); setSign({ typedName: "", consent: false }); setDraftFor(o.id); } setApproving(o); };
   // The option open in its panel (details, comments, and for neon1 the edit fields)
   const [openId, setOpenId] = useState<string>();
   const opened = items.find((o) => o.id === openId);
@@ -1076,7 +1096,7 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
     if (!o) return;
     try {
       // Approvals are never retried on their own; a lost reply says so and the page re-reads
-      await api(`${path}/items/${o.id}/approve`, { method: "POST", body: { version: o.version, conditions, initials: initials.trim() || undefined } });
+      await api(`${path}/items/${o.id}/approve`, { method: "POST", body: { version: o.version, conditions, signature: { typedName: sign.typedName.trim(), consent: sign.consent } } });
       toast(`Approved: ${inRev(o)?.code ?? ""} ${o.title}`);
       setDraftFor(undefined);
     } catch (e) {
@@ -1163,15 +1183,11 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
         )}
         <label htmlFor="cond">Conditions (optional)</label>
         <textarea id="cond" value={conditions} onChange={(e) => setConditions(e.target.value)} maxLength={2000} placeholder="e.g. only if the work happens after 6pm" />
-        {neon1Buys.length > 0 && (
-          <>
-            <label htmlFor="init">Your initials, agreeing that neon1 buys {neon1Buys.map((x) => x.name).join(" and ")} and is paid back at cost, with the receipt</label>
-            <input id="init" value={initials} onChange={(e) => setInitials(e.target.value.toUpperCase())} maxLength={8} autoComplete="off" style={{ maxWidth: 120 }} required />
-          </>
-        )}
-        <p className="small muted">Approving accepts this option's scope and estimate. It isn't a bill or a signature: work begins under your service agreement. 1NEON keeps a copy of these terms with who approved and when; neither can be edited afterwards.</p>
+        {neon1Buys.length > 0 && <p className="small">Signing also agrees that neon1 buys {neon1Buys.map((x) => x.name).join(" and ")} for you and is paid back at cost, with the receipt.</p>}
+        {signed ? <SignBox id="approve-sign" value={sign} onChange={setSign} /> : <AgreementNeeded />}
+        <p className="small muted">Signing approves this option's scope and estimate under your service agreement. 1NEON keeps a copy of these terms with your signature, who signed and when; none of it can be edited afterwards. Invoices follow as the proposal says.</p>
         <div className="actions">
-          <button className="btn btn-primary" disabled={neon1Buys.length > 0 && !initials.trim()} onClick={() => void approve()}>Approve {aCode ?? ""}</button>
+          <button className="btn btn-primary" disabled={!signed || !signReady(sign)} onClick={() => void approve()}>Sign and approve {aCode ?? ""}</button>
           <button className="btn btn-ghost" onClick={() => setApproving(undefined)}>Cancel</button>
         </div>
       </Dialog>
@@ -1256,14 +1272,15 @@ function Accept({ item, path, project }: { item: Item; path: string; project: Pr
   const refresh = useRefresh(org.id);
   const [note, setNote] = useState("");
   const [open, setOpen] = useState(false);
+  const [sign, setSign] = useState<SignValue>({ typedName: "", consent: false });
   const f = HandoffFields.safeParse(item.fields);
   const accepted = f.success ? f.data.accepted : undefined;
-  if (accepted) return <p className="accepted-note">Accepted by {accepted.name}, {dateLabel(accepted.at.slice(0, 10))}{accepted.note ? `: ${accepted.note}` : ""}</p>;
+  if (accepted) return <p className="accepted-note">Accepted by {accepted.name}, {dateLabel(accepted.at.slice(0, 10))}{accepted.note ? `: ${accepted.note}` : ""}{accepted.signature ? `, signed "${accepted.signature.typedName}"` : ""}</p>;
   const decider = canApprove({ userId: me.user.id, operator: me.operator, strongSession: false }, access, project.people, isOwnOrg(org.slug)).ok;
   if (!decider) return null;
   const accept = async () => {
     try {
-      await api(`${path}/items/${item.id}/accept`, { method: "POST", body: { version: item.version, note } });
+      await api(`${path}/items/${item.id}/accept`, { method: "POST", body: { version: item.version, note, signature: { typedName: sign.typedName.trim(), consent: sign.consent } } });
       toast(`Accepted: ${item.title}`);
       setOpen(false);
     } catch (e) {
@@ -1272,10 +1289,13 @@ function Accept({ item, path, project }: { item: Item; path: string; project: Pr
     refresh();
   };
   return open ? (
-    <form className="line" onSubmit={(e) => { e.preventDefault(); void accept(); }}>
+    <form className="accept-form" onSubmit={(e) => { e.preventDefault(); if (signReady(sign)) void accept(); }}>
       <input aria-label="What you checked (optional)" placeholder="What you checked (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} />
-      <button className="btn btn-primary btn-sm">Accept</button>
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+      <SignBox id={`accept-${item.id}`} value={sign} onChange={setSign} />
+      <div className="line">
+        <button className="btn btn-primary btn-sm" disabled={!signReady(sign)}>Sign and accept</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
     </form>
   ) : <button type="button" className="chip" onClick={() => setOpen(true)}>Check it and accept</button>;
 }
