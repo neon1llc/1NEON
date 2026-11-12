@@ -2,11 +2,14 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
-## Unreleased
+## v0.4.4 - 2026-11-12
 
 ### Fixed
 - In the interactive demo, Switch person starts the next person at their own home, instead of on a page from an organization they can't open.
 - In a paused walkthrough, the messages in Maria's pretend inbox are buttons, so they open from the keyboard as well as with a click.
+
+### Changed
+- Help says how someone who has lost every second step gets back in: an email from the account's address, then a call to a phone number already on record and, where there is one, another admin's written OK, before anything is removed.
 
 ## v0.4.3 - 2026-11-12
 
