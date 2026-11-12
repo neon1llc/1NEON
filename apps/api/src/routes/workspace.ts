@@ -85,8 +85,8 @@ export function workspaceRoutes(app: App, k: Kit) {
     const today = todayIn(t.timeZone, new Date(now()));
     const glance = [];
     for (const p of live) {
-      const work = (await repo.listItems(t.id, p.id)).filter((i) => i.kind !== "update" && i.kind !== "decision" && i.kind !== "metric");
-      const openWork = work.filter((i) => i.status !== "done" && i.status !== "approved" && i.status !== "declined");
+      const work = (await repo.listItems(t.id, p.id)).filter((i) => !["update", "decision", "metric", "proposal", "constraint"].includes(i.kind));
+      const openWork = work.filter((i) => !["done", "approved", "declined", "returned"].includes(i.status));
       const next = openWork.filter((i) => i.dueDate && i.dueDate >= today).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!))[0];
       const st = stageName.get(p.stageId);
       glance.push({

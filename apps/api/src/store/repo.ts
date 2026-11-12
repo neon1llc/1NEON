@@ -15,6 +15,8 @@ export const keys = {
   // Global lookups: slug, email, and Cognito subject point at a tenant or user ID
   slug: (slug: string) => ({ PK: `SLUG#${slug}`, SK: "META" }),
   clientCounter: { PK: "COUNTER", SK: "CLIENTID" },
+  // Proposal numbers run across all of neon1 (0039, 0040, ...), one per project
+  proposalCounter: { PK: "COUNTER", SK: "PROPOSAL" },
   user: (uid: string) => ({ PK: `USER#${uid}`, SK: "PROFILE" }),
   email: (email: string) => ({ PK: `EMAIL#${email.toLowerCase()}`, SK: "USER" }),
   subject: (sub: string) => ({ PK: `SUB#${sub}`, SK: "USER" }),
@@ -144,12 +146,22 @@ export class Repo {
     return this.table.increment(keys.clientCounter.PK, keys.clientCounter.SK);
   }
 
+  // Proposal numbers continue after neon1's 2025 proposals: the first is PROPOSAL_FIRST
+  async nextProposalNumber(first: number) {
+    return first - 1 + (await this.table.increment(keys.proposalCounter.PK, keys.proposalCounter.SK));
+  }
+
   // Tenant and slug claim land together, so two organizations can't share an address
   async createTenant(t: Tenant) {
     await this.table.write([
       { put: { ...keys.tenant(t.id), type: "tenant", GSI2PK: "KIND#TENANT", GSI2SK: t.clientId, ...t }, guard: { create: true } },
       { put: { ...keys.slug(t.slug), tenantId: t.id }, guard: { create: true } },
     ]);
+  }
+
+  // The tenant's write, for a transaction with other rows (an agreement signature and its audit)
+  tenantOp(t: Tenant, guard: { version: number }): WriteOp {
+    return { put: { ...keys.tenant(t.id), type: "tenant", GSI2PK: "KIND#TENANT", GSI2SK: t.clientId, ...t }, guard };
   }
 
   // Lands only if the stored version still matches `expected`

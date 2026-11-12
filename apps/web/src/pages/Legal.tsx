@@ -1,7 +1,9 @@
-// apps/web/src/pages/Legal.tsx - Public legal pages under /1NEON: privacy, terms, and cookies.
+// apps/web/src/pages/Legal.tsx - Public legal pages under /1NEON: privacy, terms, cookies, and the
+// service agreement.
 // Readable without signing in.
 
 
+import { AGREEMENT_TEXT } from "@1neon/domain";
 import { Link } from "react-router";
 import { Markdown } from "../components/Markdown.tsx";
 import cookies from "../legal/cookie-notice.md?raw";
@@ -10,7 +12,8 @@ import terms from "../legal/terms-of-use.md?raw";
 
 
 // The source of each page lives in src/legal as Markdown, so edits stay reviewable as text
-const DOCS = { privacy, terms, cookies } as const;
+// The service agreement comes from the domain package, so the page and what clients sign are one text
+const DOCS = { privacy, terms, cookies, agreement: AGREEMENT_TEXT } as const;
 
 
 /** One legal document, with links to the others */
@@ -21,7 +24,7 @@ export function Legal({ doc }: { doc: keyof typeof DOCS }) {
       {/* Rendered from Markdown, then links to the other two documents */}
       <Markdown source={DOCS[doc]} />
       <p className="small muted" style={{ marginTop: 40 }}>
-        <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link> · <Link to="/cookies">Cookies</Link> · <Link to="/faqs">FAQs</Link>
+        <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link> · <Link to="/cookies">Cookies</Link> · <Link to="/agreement">Service agreement</Link> · <Link to="/faqs">FAQs</Link>
       </p>
     </main>
   );

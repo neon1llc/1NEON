@@ -2,8 +2,9 @@
 // sample clients.
 
 
-import { CalEvent, DEFAULT_STAGES, Item, formatClientId, newId, rankBetween, type Member, type Project, type Tenant, type User } from "@1neon/domain";
+import { AGREEMENT_EDITION, AGREEMENT_TEXT, CalEvent, InvoiceFields, canonical, invoiceNumber, invoiceTotal, DEFAULT_STAGES, Item, formatClientId, newId, rankBetween, sha256Hex, signature, type Member, type Project, type Tenant, type User } from "@1neon/domain";
 import type { Repo } from "./store/repo.ts";
+import { issueProposal } from "./proposals.ts";
 
 
 // ISO timestamp `offset` days from now, so demo data always looks recent
@@ -47,6 +48,11 @@ export async function seed(repo: Repo, operatorEmail = "pradeep@neon1.tech") {
   await member(harbor, pradeep, "admin");
   await member(harbor, lee, "admin", "invited");
 
+  // Acme signed neon1's service agreement when it became a client; Harbor hasn't yet
+  const signedAcme: Tenant = { ...acme, agreements: [signature("agreement", AGREEMENT_EDITION, await sha256Hex(AGREEMENT_TEXT), { typedName: raj.name, consent: true }, { id: raj.id, name: raj.name, email: raj.email }, day(-21))], version: acme.version + 1 };
+  await repo.saveTenant(signedAcme, acme.version);
+  Object.assign(acme, signedAcme);
+
   let rank = "";
   // Project and item helpers with ranks appended in creation order
   const project = async (t: Tenant, key: string, name: string, stageId: string, health: Project["health"], summary: string, people: Project["people"], daysInStage: number) => {
@@ -73,12 +79,15 @@ export async function seed(repo: Repo, operatorEmail = "pradeep@neon1.tech") {
   await item(intake, "requirement", "Patients upload once; nothing is retyped", { fields: { priority: "must" } });
   await item(intake, "requirement", "Staff see at a glance what's complete", { fields: { priority: "should" } });
   await item(intake, "option", "A. Tidy the inbox: rules, templates, and a checklist", { status: "proposed", body: "Fastest, cheapest. Keeps email as the system.", fields: { cost: "$900 fixed", hours: "about 5 hours", costScore: 5, qualityScore: 2, effortScore: 5, timeline: "1 week", recommended: false } });
-  await item(intake, "option", "B. Small intake portal on AWS", { status: "proposed", body: "Patients upload once; the office sees status at a glance. Runs in your AWS account.", fields: { cost: "$6,500 fixed", hours: "about 36 hours", outsideCosts: "About $15/mo to AWS, billed to you", result: "A complete intake reaches the patient record without retyping, the same day.", costScore: 3, qualityScore: 5, effortScore: 3, timeline: "4 weeks", recommended: true } });
+  await item(intake, "option", "B. Small intake portal on AWS", { status: "proposed", body: "Patients upload once; the office sees status at a glance. Runs in your AWS account.", fields: { cost: "$6,500 fixed", hours: "about 36 hours", outsideCosts: "About $15/mo to AWS, billed to you", result: "A complete intake reaches the patient record without retyping, the same day.", costScore: 3, qualityScore: 5, effortScore: 3, timeline: "4 weeks", recommended: true, purchases: [{ name: "Document scanner for the front desk", why: "Paper forms patients bring in go straight into the portal", example: "Fujitsu ScanSnap iX1600 or similar", estimate: "$400-$500", buyer: "client" }] } });
   await item(intake, "option", "C. Practice-management add-on", { status: "proposed", body: "Vendor module; less control, monthly per-seat fee.", fields: { cost: "$1,000 fixed", hours: "about 6 hours", outsideCosts: "$240/mo to the vendor", costScore: 3, qualityScore: 3, effortScore: 4, timeline: "2 weeks", recommended: false } });
   await item(intake, "metric", "Intake turnaround", { fields: { category: "performance", unit: "hours", direction: "down", baseline: 62, baselineDate: day(-25).slice(0, 10), target: 4, readings: [] } });
   await item(intake, "metric", "Staff minutes per intake", { fields: { category: "performance", unit: "min", direction: "down", baseline: 24, baselineDate: day(-25).slice(0, 10), target: 8, readings: [] } });
   await item(intake, "file_request", "Upload a blank copy of the current intake form", { assigneeId: dana.id, dueDate: day(-2).slice(0, 10) });
   await item(intake, "handoff", "Accounts are in the client's name", { dueDate: day(20).slice(0, 10) });
+  await item(intake, "constraint", "Changes to the patient record system happen after 6pm", { body: "The front desk uses it all day; any downtime is scheduled after hours." });
+  // The proposal as neon1 issued it, so its options can be approved (Proposal 0039 r1)
+  await issueProposal(repo, acme, intake, { id: pradeep.id, name: pradeep.name });
 
   // Acme: work in progress, at risk
   const backup = await project(acme, "SEC-1", "Backups that restore", "build", "at_risk", "Nightly backups exist but have never been restored.", [{ userId: pradeep.id, role: "lead_engineer" }, { userId: dana.id, role: "tech_contact" }], 9);
@@ -87,6 +96,16 @@ export async function seed(repo: Repo, operatorEmail = "pradeep@neon1.tech") {
   await item(backup, "milestone", "Weekly restore test running on its own", { dueDate: day(12).slice(0, 10) });
   await item(backup, "update", "Restore test blocked on vendor login", { fields: { health: "at_risk" } });
   await item(backup, "metric", "Days since last successful restore test", { fields: { category: "reliability", unit: "days", direction: "down", baseline: 900, target: 30, readings: [{ at: day(-2).slice(0, 10), value: 900, note: "" }] } });
+
+  // Its billing so far: the deposit, paid by bank transfer, and a progress invoice that's open
+  const invoice = async (seq: number, type: "deposit" | "progress", text: string, cents: number, issued: number) => {
+    const f = InvoiceFields.parse({ type, lines: [{ text, qty: 1, unitCents: cents }], number: invoiceNumber(backup.key, seq), issuedAt: day(issued), issuedBy: pradeep.id, dueDate: day(issued + 15).slice(0, 10), billTo: { org: acme.name, name: raj.name, email: raj.email } });
+    f.hash = await sha256Hex(canonical({ ...f, hash: undefined, total: invoiceTotal(f) }));
+    return item(backup, "invoice", `Invoice ${f.number}`, { status: "issued", fields: f, createdAt: day(issued), updatedAt: day(issued) });
+  };
+  const deposit = await invoice(1, "deposit", "50% deposit on backups that restore", 120_000, -8);
+  await item(backup, "payment", `Payment on ${String(deposit.fields.number)}`, { status: "done", fields: { invoiceId: deposit.id, amountCents: 120_000, method: "ach", ref: "Stripe bank transfer", receivedAt: day(-3).slice(0, 10), recordedBy: pradeep.id }, createdAt: day(-3), updatedAt: day(-3) });
+  await invoice(2, "progress", "Restore testing set up, as agreed", 60_000, -1);
 
   await project(acme, "AI-1", "Answers from our own policies", "listen", "not_started", "Staff interrupt Raj for policy questions.", [{ userId: pradeep.id, role: "lead_engineer" }], 2);
   // Harbor: a migration in Verify with real readings, plus a new intake

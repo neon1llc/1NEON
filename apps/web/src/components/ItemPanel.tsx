@@ -3,7 +3,7 @@
 // and Linear use, so a list stays short and every detail is one tap away.
 
 
-import { MetricFields, OptionFields, STATUSES, WORK_STATUSES, type AuditEvent, type Item, type ItemKind } from "@1neon/domain";
+import { MetricFields, OptionFields, PurchaseFields, PurchaseLine, STATUSES, WORK_STATUSES, type AuditEvent, type Item, type ItemKind } from "@1neon/domain";
 import { numberProblem, optionalNumber } from "../lib/measures.ts";
 import { useQuery } from "@tanstack/react-query";
 import { Trash2, X } from "lucide-react";
@@ -26,7 +26,23 @@ export const STATUS_WORDS: Record<string, string> = {
   proposed: "Shared for approval",
   declined: "Declined",
   approved: "Approved",
+  bought: "Bought",
+  returned: "Returned",
+  issued: "Issued",
+  superseded: "Replaced by a later revision",
 };
+// A purchase reads as to buy, bought, installed, or returned
+const PURCHASE_WORDS: Record<string, string> = { open: "To buy", bought: "Bought", done: "Installed", returned: "Returned" };
+/** A status in plain words for its kind */
+export const statusWord = (kind: string, s: string) => (kind === "purchase" ? PURCHASE_WORDS[s] : undefined) ?? STATUS_WORDS[s] ?? s;
+
+
+// An option's expected purchases edit as lines: "name | estimate | client or neon1 | why | example"
+export const linesOf = (list: PurchaseLine[]) => list.map((x) => [x.name, x.estimate, x.buyer, x.why, x.example].join(" | ").replace(/( \| )+$/, "")).join("\n");
+export function parseLines(text: string): PurchaseLine[] {
+  return text.split("\n").map((l) => l.split("|").map((x) => x.trim())).filter((x) => x[0]).map(([name, estimate = "", buyer = "", why = "", example = ""]) =>
+    PurchaseLine.parse({ name: name!.slice(0, 120), estimate: estimate.slice(0, 80), buyer: /^neon1$/i.test(buyer) ? "neon1" : "client", why: why.slice(0, 300), example: example.slice(0, 300) }));
+}
 
 
 // A comment as the API returns it
@@ -52,7 +68,11 @@ const draftOf = (i: Item): Draft => ({ title: i.title, body: i.body, status: i.s
 function kindFields(i: Item): Record<string, string> {
   if (i.kind === "option") {
     const o = OptionFields.parse(i.fields);
-    return { cost: o.cost, timeline: o.timeline, hours: o.hours, outsideCosts: o.outsideCosts, result: o.result, costScore: String(o.costScore), qualityScore: String(o.qualityScore), effortScore: String(o.effortScore), recommended: o.recommended ? "yes" : "" };
+    return { cost: o.cost, timeline: o.timeline, hours: o.hours, outsideCosts: o.outsideCosts, result: o.result, costScore: String(o.costScore), qualityScore: String(o.qualityScore), effortScore: String(o.effortScore), recommended: o.recommended ? "yes" : "", purchases: linesOf(o.purchases) };
+  }
+  if (i.kind === "purchase") {
+    const x = PurchaseFields.parse(i.fields);
+    return { estimate: x.estimate, actual: x.actual, vendor: x.vendor, buyer: x.buyer, why: x.why, example: x.example };
   }
   if (i.kind === "metric") {
     const m = MetricFields.parse(i.fields);
@@ -65,6 +85,7 @@ function kindFields(i: Item): Record<string, string> {
 function typed(key: string, v: string): unknown {
   if (key.endsWith("Score")) return Number(v);
   if (key === "recommended") return v === "yes";
+  if (key === "purchases") return parseLines(v);
   // Only called once the panel has checked the text (numberProblem); blank leaves the value unset
   if (key === "baseline" || key === "target") { const n = optionalNumber(v); return n.ok ? n.value : undefined; }
   return v;
@@ -268,7 +289,7 @@ export function ItemPanel({ item, label, path, open, onClose }: { item: Item; la
       <div className="props">
         <label>Status
           <select value={draft.status} disabled={!canWrite || base.status === "approved"} onChange={(e) => setDraft({ ...draft, status: e.target.value })}>
-            {[...new Set([draft.status, ...choices])].map((s) => <option key={s} value={s}>{STATUS_WORDS[s] ?? s}</option>)}
+            {[...new Set([draft.status, ...choices])].map((s) => <option key={s} value={s}>{statusWord(base.kind, s)}</option>)}
           </select>
         </label>
         <label>Owner
@@ -343,7 +364,7 @@ function conflictRows(draft: Draft, base: Item, theirs: Item, person: (uid: stri
   const rows: { label: string; mine: string; theirs: string }[] = [];
   if ("title" in mine) rows.push({ label: "Title", mine: draft.title, theirs: t.title });
   if ("body" in mine) rows.push({ label: "Details", mine: draft.body, theirs: t.body });
-  if ("status" in mine) rows.push({ label: "Status", mine: STATUS_WORDS[draft.status] ?? draft.status, theirs: STATUS_WORDS[t.status] ?? t.status });
+  if ("status" in mine) rows.push({ label: "Status", mine: statusWord(base.kind, draft.status), theirs: statusWord(base.kind, t.status) });
   if ("assigneeId" in mine) rows.push({ label: "Owner", mine: person(draft.assigneeId), theirs: person(t.assigneeId) });
   if ("dueDate" in mine) rows.push({ label: "Due", mine: draft.dueDate, theirs: t.dueDate });
   // A kind's own fields (cost, scores, unit, and so on), one row each
@@ -371,6 +392,11 @@ function KindFields({ kind, f, onChange }: { kind: ItemKind; f: Record<string, s
       <label>Hours<input value={f.hours ?? ""} onChange={(e) => set("hours", e.target.value)} placeholder="e.g. about 10 hours" maxLength={80} /></label>
       <label>Outside costs<input value={f.outsideCosts ?? ""} onChange={(e) => set("outsideCosts", e.target.value)} placeholder="e.g. none; uses your Google account" maxLength={160} /></label>
       <label>Result<input value={f.result ?? ""} onChange={(e) => set("result", e.target.value)} placeholder="e.g. every order in one list by 7pm" maxLength={300} /></label>
+      {/* What the option expects to be bought; the client buys unless a line says neon1 */}
+      <label style={{ gridColumn: "1 / -1" }}>Expected purchases
+        <textarea rows={3} value={f.purchases ?? ""} onChange={(e) => set("purchases", e.target.value)} placeholder="One per line: name | estimate | client or neon1 | why | example" />
+        <span className="small muted">One per line: name | estimate | client or neon1 | why | example. neon1 buys only with the client's initials, paid back at cost.</span>
+      </label>
       <label className="check"><input type="checkbox" checked={f.recommended === "yes"} onChange={(e) => set("recommended", e.target.checked ? "yes" : "")} /> Recommended</label>
       {/* The three ratings read as one group, on one line at every width */}
       <fieldset className="ratings">
@@ -383,6 +409,21 @@ function KindFields({ kind, f, onChange }: { kind: ItemKind; f: Record<string, s
           </label>
         ))}
       </fieldset>
+    </div>
+  );
+  if (kind === "purchase") return (
+    <div className="props">
+      <label>Estimate<input value={f.estimate ?? ""} onChange={(e) => set("estimate", e.target.value)} placeholder="e.g. $400-$500" maxLength={80} /></label>
+      <label>Actual cost<input value={f.actual ?? ""} onChange={(e) => set("actual", e.target.value)} placeholder="e.g. $439.99" maxLength={80} /></label>
+      <label>Bought from<input value={f.vendor ?? ""} onChange={(e) => set("vendor", e.target.value)} placeholder="e.g. B&H Photo" maxLength={120} /></label>
+      <label>Who buys
+        <select value={f.buyer ?? "client"} onChange={(e) => set("buyer", e.target.value)}>
+          <option value="client">The client</option>
+          <option value="neon1">neon1, paid back at cost</option>
+        </select>
+      </label>
+      <label>Why<input value={f.why ?? ""} onChange={(e) => set("why", e.target.value)} maxLength={300} /></label>
+      <label>Example<input value={f.example ?? ""} onChange={(e) => set("example", e.target.value)} placeholder="a model or a link" maxLength={300} /></label>
     </div>
   );
   if (kind === "metric") return (

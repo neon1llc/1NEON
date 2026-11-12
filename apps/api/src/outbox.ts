@@ -9,7 +9,7 @@
 // "Accepted" means the provider took the message; it is not proof that it was delivered.
 
 
-import { groupOf, wants, type AuditEvent, type Member, type User } from "@1neon/domain";
+import { groupOf, neon1Only, wants, type AuditEvent, type Member, type User } from "@1neon/domain";
 import type { Config } from "./config.ts";
 import { inviteEmail, noticeEmail } from "./emails.ts";
 import type { Mailer, Texter } from "./services.ts";
@@ -260,6 +260,8 @@ async function eventTargets(d: OutboxDeps, e: AuditEvent, clock: Clock): Promise
     if (m.status !== "joined" || m.userId === e.actorId) continue;
     const u = await io(repo.getUser(m.userId));
     if (!u) continue;
+    // neon1's working drafts reach neon1 only
+    if (neon1Only(e.action) && !cfg.operatorEmails.includes(u.email)) continue;
     if (wants(u.notify, e.action, "email")) {
       const mail = noticeEmail({ orgName: tenant?.name ?? "1NEON", by, summary: e.summary, url: `${cfg.publicUrl}/1NEON/o/${tenant?.slug ?? ""}/workspace`, important: groupOf(e.action).level === "critical" });
       targets.push({ key: u.id, channel: "email", send: (signal) => d.mailer.send(u.email, mail.subject, mail.text, mail.html, undefined, signal) });

@@ -11,6 +11,10 @@ import { Repo } from "./store/repo.ts";
 import type { WriteOp } from "./store/types.ts";
 
 
+// A signed approval or acceptance: the typed name and the consent box
+const SIGN = { typedName: "Raj Patel", consent: true };
+
+
 const OP = "pradeep@neon1.tech";
 let table: MemoryTable;
 let repo: Repo;
@@ -64,7 +68,7 @@ describe("approved terms", () => {
 
   it("copies the terms into the decision and keeps the approved option from changing or disappearing", async () => {
     const { option, path, p } = await flowOption();
-    const approved = await call(s.raj.email, "POST", `${path}/items/${option.id}/approve`, { version: option.version });
+    const approved = await call(s.raj.email, "POST", `${path}/items/${option.id}/approve`, { version: option.version, signature: SIGN });
     expect(approved.status).toBe(201);
     const terms = approved.json.decision.fields.terms;
     expect(terms.title).toBe(option.title);
@@ -81,10 +85,12 @@ describe("approved terms", () => {
 
   it("approves a new option as a new decision that marks the earlier one replaced, which keeps its terms", async () => {
     const { option, path, p } = await flowOption();
-    const first = await call(s.raj.email, "POST", `${path}/items/${option.id}/approve`, { version: option.version });
+    const first = await call(s.raj.email, "POST", `${path}/items/${option.id}/approve`, { version: option.version, signature: SIGN });
     const next = await call(OP, "POST", `${path}/items`, { kind: "option", title: "Revised plan", status: "proposed", fields: { cost: "$2,000" } });
     expect(next.status).toBe(201);
-    const second = await call(s.raj.email, "POST", `${path}/items/${next.json.id}/approve`, { version: next.json.version });
+    // A new option is approved from the next revision, which neon1 issues
+    expect((await call(OP, "POST", `${path}/proposals`, { note: "Adds a revised plan" })).status).toBe(201);
+    const second = await call(s.raj.email, "POST", `${path}/items/${next.json.id}/approve`, { version: next.json.version, signature: SIGN });
     expect(second.status).toBe(201);
     expect(second.json.decision.fields.supersedes).toEqual([first.json.decision.id]);
     expect((await repo.getItem(p.tenantId, p.id, first.json.decision.id))!.fields.terms).toEqual(first.json.decision.fields.terms);
@@ -94,7 +100,7 @@ describe("approved terms", () => {
     const { option, path, p } = await flowOption();
     const [edit, approve] = await Promise.all([
       call(OP, "PATCH", `${path}/items/${option.id}`, { version: option.version, fields: { cost: "$1" } }),
-      call(s.raj.email, "POST", `${path}/items/${option.id}/approve`, { version: option.version }),
+      call(s.raj.email, "POST", `${path}/items/${option.id}/approve`, { version: option.version, signature: SIGN }),
     ]);
     const stored = (await repo.getItem(p.tenantId, p.id, option.id))!;
     const decisions = (await repo.listItems(p.tenantId, p.id)).filter((i) => i.kind === "decision");

@@ -3,6 +3,7 @@
 
 import type { Layer, Stage, Tenant } from "@1neon/domain";
 import { useRef, useState } from "react";
+import { Link } from "react-router";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { LayerBadge, LAYERS, layerName, useToast } from "../components/ui.tsx";
 import { api } from "../lib/api.ts";
@@ -61,6 +62,8 @@ export function Settings() {
       <div className="card" style={{ display: "grid", gap: 6, maxWidth: 520 }}>
         <div><span className="muted small">Organization</span> <b>{org.name}</b></div>
         <div><span className="muted small">Client ID</span> <span className="mono">{org.clientId}</span></div>
+        {/* neon1's service agreement: who signed it, or a way to read and sign it */}
+        <div><span className="muted small">Service agreement</span> {org.agreements?.length ? <>signed by {org.agreements.at(-1)!.typedName}, edition {org.agreements.at(-1)!.ref}. </> : "not signed yet. "}<Link to={`/o/${summary.slug}/agreement`}>{org.agreements?.length ? "Read it" : "Read and sign"}</Link></div>
         <div><span className="muted small">Address</span> <span className="mono">neon1.tech/1NEON/o/{org.slug}</span></div>
         <div><span className="muted small">Your access</span> <span className="tag">{access}</span></div>
       </div>

@@ -12,6 +12,10 @@ import { MemoryTable } from "./store/memory.ts";
 import { Repo } from "./store/repo.ts";
 
 
+// A signed approval or acceptance: the typed name and the consent box
+const SIGN = { typedName: "Raj Patel", consent: true };
+
+
 // Each test gets a fresh in-memory store with the demo data, and calls the app as a given person
 const OP = "pradeep@neon1.tech";
 let app: ReturnType<typeof createApp>;
@@ -266,7 +270,7 @@ describe("projects and concurrency", () => {
     const p = list.json.find((x: { key: string }) => x.key === "FLOW-1");
     const full = await call("raj@acmedental.example", "GET", `/t/${s.acme.id}/projects/${p.id}`);
     const option = full.json.items.find((i: { kind: string; fields: { recommended?: boolean } }) => i.kind === "option" && i.fields.recommended);
-    const r = await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/projects/${p.id}/items/${option.id}/approve`, { version: option.version });
+    const r = await call("raj@acmedental.example", "POST", `/t/${s.acme.id}/projects/${p.id}/items/${option.id}/approve`, { version: option.version, signature: SIGN });
     expect(r.status).toBe(201);
     expect(r.json.decision.fields.optionVersion).toBe(option.version);
     const edit = await call(OP, "PATCH", `/t/${s.acme.id}/projects/${p.id}/items/${r.json.decision.id}`, { version: 1, title: "changed" });
@@ -328,27 +332,28 @@ describe("approvals", () => {
   it("lets only the named decision maker approve", async () => {
     const { options, path } = await flow1();
     const o = options[0];
-    expect((await call(dana, "POST", `${path}/items/${o.id}/approve`, { version: o.version })).json.error).toBe("not_decider");
-    expect((await call(OP, "POST", `${path}/items/${o.id}/approve`, { version: o.version })).json.error).toBe("not_decider");
-    expect((await call(raj, "POST", `${path}/items/${o.id}/approve`, { version: o.version })).status).toBe(201);
+    expect((await call(dana, "POST", `${path}/items/${o.id}/approve`, { version: o.version, signature: SIGN })).json.error).toBe("not_decider");
+    expect((await call(OP, "POST", `${path}/items/${o.id}/approve`, { version: o.version, signature: SIGN })).json.error).toBe("not_decider");
+    expect((await call(raj, "POST", `${path}/items/${o.id}/approve`, { version: o.version, signature: SIGN })).status).toBe(201);
   });
 
   it("approves a proposed option once, and never a draft", async () => {
     const { options, path } = await flow1();
     const o = options[0];
-    await call(raj, "POST", `${path}/items/${o.id}/approve`, { version: o.version });
-    expect((await call(raj, "POST", `${path}/items/${o.id}/approve`, { version: o.version + 1 })).json.error).toBe("not_proposed");
+    await call(raj, "POST", `${path}/items/${o.id}/approve`, { version: o.version, signature: SIGN });
+    expect((await call(raj, "POST", `${path}/items/${o.id}/approve`, { version: o.version + 1, signature: SIGN })).json.error).toBe("not_proposed");
     const draft = await call(OP, "POST", `${path}/items`, { kind: "option", title: "D. Something new" });
-    expect((await call(raj, "POST", `${path}/items/${draft.json.id}/approve`, { version: 1 })).json.error).toBe("not_proposed");
+    expect((await call(raj, "POST", `${path}/items/${draft.json.id}/approve`, { version: 1, signature: SIGN })).json.error).toBe("not_proposed");
   });
 
   it("lets a client admin approve when nobody is named, but not neon1", async () => {
     const p = (await call(OP, "POST", `/t/${s.acme.id}/projects`, { name: "No decider" })).json;
     const path = `/t/${s.acme.id}/projects/${p.id}`;
     const o = await call(OP, "POST", `${path}/items`, { kind: "option", title: "Only option", status: "proposed" });
-    expect((await call(OP, "POST", `${path}/items/${o.json.id}/approve`, { version: 1 })).json.error).toBe("not_decider");
-    expect((await call(dana, "POST", `${path}/items/${o.json.id}/approve`, { version: 1 })).json.error).toBe("not_decider");
-    expect((await call(raj, "POST", `${path}/items/${o.json.id}/approve`, { version: 1 })).status).toBe(201);
+    expect((await call(OP, "POST", `${path}/proposals`, {})).status).toBe(201);
+    expect((await call(OP, "POST", `${path}/items/${o.json.id}/approve`, { version: 1, signature: SIGN })).json.error).toBe("not_decider");
+    expect((await call(dana, "POST", `${path}/items/${o.json.id}/approve`, { version: 1, signature: SIGN })).json.error).toBe("not_decider");
+    expect((await call(raj, "POST", `${path}/items/${o.json.id}/approve`, { version: 1, signature: SIGN })).status).toBe(201);
   });
 
   it("refuses statuses outside each kind's list, including a hand-set approval", async () => {
@@ -363,7 +368,7 @@ describe("approvals", () => {
   it("keeps an approved option approved", async () => {
     const { options, path } = await flow1();
     const o = options[0];
-    const r = await call(raj, "POST", `${path}/items/${o.id}/approve`, { version: o.version });
+    const r = await call(raj, "POST", `${path}/items/${o.id}/approve`, { version: o.version, signature: SIGN });
     const back = await call(OP, "PATCH", `${path}/items/${o.id}`, { version: r.json.option.version, status: "draft" });
     expect(back.json.error).toBe("immutable");
   });
@@ -713,7 +718,7 @@ describe("naming the decision maker", () => {
     const gone = await call(dana, "PATCH", path, { version: p.version, people: [] });
     expect(gone.json.error).toBe("decider_admin_only");
     const o = (await call(dana, "GET", path)).json.items.find((i: { kind: string }) => i.kind === "option");
-    expect((await call(dana, "POST", `${path}/items/${o.id}/approve`, { version: o.version })).json.error).toBe("not_decider");
+    expect((await call(dana, "POST", `${path}/items/${o.id}/approve`, { version: o.version, signature: SIGN })).json.error).toBe("not_decider");
   });
 
   it("lets an editor change other roles while the decision maker stays", async () => {

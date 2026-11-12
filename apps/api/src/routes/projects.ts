@@ -4,7 +4,7 @@
 
 import { CreateProjectInput, assessed, Item, MoveProjectInput, UpdateProjectInput, newId, rankBetween, templateById, type Project, changeRecord, projectChanges } from "@1neon/domain";
 import { z } from "zod";
-import { MAX_TRANSACTION, actorId, body, byRank, defined, fail, need, now } from "../lib/http.ts";
+import { MAX_TRANSACTION, actorId, body, byRank, defined, fail, need, now, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
 import { ConflictError } from "../store/types.ts";
 
@@ -104,7 +104,9 @@ export function projectRoutes(app: App, k: Kit) {
     const t = c.get("tenant");
     const p = await project(c);
     const [items, docs, edits] = await Promise.all([repo.listItems(t.id, p.id), repo.listDocs(t.id, p.id), repo.listEdits(t.id, p.id)]);
-    return c.json({ project: p, items: items.sort(byRank), docs, edits });
+    // Invoice drafts are neon1's working copies; a client sees an invoice once it is issued
+    const shown = who(c).actor.operator ? items : items.filter((i) => !(i.kind === "invoice" && i.status === "draft"));
+    return c.json({ project: p, items: shown.sort(byRank), docs, edits });
   });
 
   // Edit project fields; `targetDate: null` clears the date

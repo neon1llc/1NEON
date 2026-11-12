@@ -1235,10 +1235,22 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
 .pp-sign p { margin: 10px 0; }
 .pp-foot { display: grid; justify-items: center; gap: 2px; margin-top: 20px; padding-top: 10px; border-top: 1px solid var(--pp-line); color: var(--pp-muted); font-size: 12px; }
 .pp-foot span:first-child { color: var(--pp-green); font-style: italic; font-size: 13px; }
+.pp-title h1 { margin: 0; font-size: 15px; font-weight: 600; color: var(--pp-green); font-family: inherit; }
+.pp-code { font-family: var(--mono, ui-monospace, monospace); font-size: .78em; color: var(--pp-muted); font-weight: 500; white-space: nowrap; }
+/* Where a copy stands: a draft, an earlier revision, or one past its price check (grayed, still readable) */
+.pp-state { max-width: 860px; margin: 0 auto 12px; padding: 8px 12px; border-left: 3px solid var(--line-strong); background: var(--frame); color: var(--text); font-size: 13px; }
+.pp-state.warn { border-left-color: var(--amber); }
+.proposal.pp-faded { filter: grayscale(1); opacity: .72; }
 @media (max-width: 640px) {
   .proposal { padding: 20px 16px; font-size: 14px; }
   .pp-title { text-align: left; }
   .pp-costs { display: block; overflow-x: auto; }
+}
+/* On a phone the facts stack: each label above its value */
+@media (max-width: 480px) {
+  .pp-facts, .pp-facts tbody, .pp-facts tr { display: block; }
+  .pp-facts tr { display: grid; grid-template-columns: 1fr; }
+  .pp-facts th { width: auto; border-bottom: 0; }
 }
 /* Printing shows only the proposal, as a plain white page */
 @media print {
@@ -1246,6 +1258,45 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
   body * { visibility: hidden; }
   .proposal, .proposal * { visibility: visible; }
   .proposal { position: absolute; inset: 0 0 auto 0; max-width: none; margin: 0; padding: 0; border: 0; }
-  .pp-tools, .pp-note { display: none; }
+  .pp-tools, .pp-state { display: none; }
+  .proposal.pp-faded { filter: none; opacity: 1; }
+  .pp-note { max-width: none; margin: 0 0 10px; border-left: 3px solid #b26b00; background: none; }
   .pp-bar, .pp-facts th, .pp-costs thead th, .pp-duties thead th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+
+/* --- Proposals, purchases, and acceptance --------------------------------------- */
+/* One proposal revision in a list; replaced or past-price-check ones are grayed but still open */
+.revision { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.revision.faded { opacity: .62; }
+.revision.faded:hover, .revision.faded:focus-within { opacity: 1; }
+/* The strip above the options: which revision, where it stands, and its actions */
+.proposal-strip { display: grid; gap: 6px; margin: 0 0 12px; padding: 12px 14px; }
+.proposal-strip.faded { background: var(--frame); }
+.proposal-strip .acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.opt-code { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+/* The approval screen restates the terms being accepted */
+.terms-list { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 8px 0 12px; font-size: 14px; }
+.terms-list dt { color: var(--muted); }
+.terms-list dd { margin: 0; }
+@media (max-width: 480px) { .terms-list { grid-template-columns: 1fr; } .terms-list dd { margin-bottom: 6px; } }
+.purchase-meta { display: flex; gap: 6px 12px; flex-wrap: wrap; align-items: center; margin-top: 4px; font-size: 13px; }
+.accepted-note { margin-top: 4px; font-size: 13px; color: var(--ok); }
+
+
+/* --- Signing and billing ------------------------------------------------------------------ */
+/* The signature box: a typed name set apart like a signature line, and the consent beneath it */
+.sign-box { display: grid; gap: 6px; margin: 12px 0 4px; }
+.sign-box .sign-name { font: italic 20px/1.2 Georgia, "Times New Roman", serif; border: 0; border-bottom: 1.5px solid var(--text); border-radius: 0; background: transparent; padding: 6px 2px; max-width: 420px; }
+.sign-box .sign-consent { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.4; }
+.sign-box .sign-consent input { margin-top: 2px; flex: none; }
+.sign-card { margin-top: 24px; display: grid; gap: 8px; }
+.accept-form { display: grid; gap: 8px; margin-top: 6px; max-width: 520px; }
+.notice.ok { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+/* An invoice row: number, type, and state on one line, amounts and payments under it */
+.invoice-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.invoice-head .title { font-weight: 600; }
+.invoice-row.is-void .title { text-decoration: line-through; color: var(--muted); }
+/* The printed invoice's totals sit right under the lines */
+.inv-lines td:nth-child(n + 2), .inv-lines tfoot td { text-align: right; white-space: nowrap; }
+.inv-lines tfoot th { text-align: right; font-weight: 500; }

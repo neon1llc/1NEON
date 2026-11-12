@@ -5,7 +5,7 @@
 
 import { liveEngine } from "../lib/api.ts";
 import type { Section, Stage } from "./player.ts";
-import { signInWithCode } from "./opening.ts";
+import { signInWithCode, walkTo } from "./opening.ts";
 import { MARIA, PRADEEP } from "./seed.ts";
 
 
@@ -69,7 +69,8 @@ export async function proposeOptions() {
       "Includes:\n- Everything in A\n- Order emails and voicemail transcripts copied into the list as they arrive, each marked to check, so nothing is retyped or missed\n- A 7pm email to you and Sam: tomorrow's pickups, and anything still to check\n- A dry run on last week's 41 real orders before go-live\n- A week side by side with the old way, with two short check-ins\n- A one-page runbook and a 30-minute walkthrough, recorded for new staff",
       "Not included:\n- Taking payment online\n- Changes to your phone service",
       "Depends on:\n- Your phone service emailing voicemail transcripts. Most do, and if yours doesn't, a free Google Voice number can",
-    ].join("\n\n"), { cost: "$1,700 fixed", hours: "about 10 hours", timeline: "2 weeks", outsideCosts: "None. It uses your Google account", result: "Every order is in one list by 7pm, with under 10 minutes of checking a night.", costScore: 4, qualityScore: 4, effortScore: 4, recommended: true }],
+    ].join("\n\n"), { cost: "$1,700 fixed", hours: "about 10 hours", timeline: "2 weeks", outsideCosts: "None. It uses your Google account", result: "Every order is in one list by 7pm, with under 10 minutes of checking a night.", costScore: 4, qualityScore: 4, effortScore: 4, recommended: true,
+      purchases: [{ name: "Label printer for pickup bags", estimate: "$90-$120", buyer: "client", why: "Prints a pickup tag from each order in the list", example: "Brother QL-820NWB" }] }],
     ["C. Fuller build", [
       "Everything in B, plus an online order page where customers choose a pickup time, pay ahead, and get a reminder.",
       "Includes:\n- Everything in B\n- An order page on Square's free online store, with your menu, pickup times, and holiday cutoffs\n- Payment when ordering, and an email or text reminder the day before pickup\n- Online orders copied into the same list",
@@ -82,6 +83,9 @@ export async function proposeOptions() {
     const { t, p } = await project();
     await as(`/t/${t}/projects/${p.id}/items/${o.id}`, "PATCH", { version: o.version, status: "proposed" });
   }
+  // Issuing freezes the numbered revision Maria approves from (Proposal 0039-r1)
+  const { t, p } = await project();
+  await as(`/t/${t}/projects/${p.id}/proposals`, "POST", { note: "" });
   await moveTo("decide");
 }
 
@@ -95,18 +99,75 @@ export async function planWork() {
 }
 
 /** The three tasks, done */
+/** Pradeep issues the deposit drafted when Maria approved */
+export async function issueDeposit() {
+  await issue("deposit");
+}
+
+/** Pradeep checks the final invoice drafted when Maria accepted the handover, and issues it */
+export async function issueFinal() {
+  await issue("final");
+}
+
+// Issue the draft invoice of one type, as Pradeep would from Execute
+async function issue(type: string) {
+  const { t, p, items } = await project();
+  const draft = items.find((i) => i.kind === "invoice" && i.status === "draft" && i.fields.type === type);
+  if (draft) await as(`/t/${t}/projects/${p.id}/invoices/${draft.id}/issue`, "POST", { version: draft.version });
+}
+
+/** Her bank (ACH) payment clears; in the walkthrough it's recorded as Stripe's webhook would */
+export async function depositPaid() {
+  await paid("deposit");
+}
+
+/** The final invoice's bank payment clears the same way */
+export async function finalPaid() {
+  await paid("final");
+}
+
+// Record the whole of an issued invoice of one type as paid by bank transfer
+async function paid(type: string) {
+  const { t, p, items } = await project();
+  const inv = items.find((i) => i.kind === "invoice" && i.status === "issued" && i.fields.type === type);
+  if (!inv) return;
+  const cents = (inv.fields.lines as { qty: number; unitCents: number }[]).reduce((n, l) => n + Math.round(l.qty * l.unitCents), 0);
+  await as(`/t/${t}/projects/${p.id}/invoices/${inv.id}/payments`, "POST", { amountCents: cents, method: "ach", ref: "Stripe bank transfer", receivedAt: new Date().toISOString().slice(0, 10) });
+}
+
 export async function finishWork() {
   await patch((i) => i.title === "Order form connected to the spreadsheet", { status: "done" });
   await patch((i) => i.title === "Order emails and voicemails added to the list", { status: "done" });
   await patch((i) => i.title === "Daily summary at 7pm", { status: "done" });
 }
 
-/** Handover: the stage, a runbook, and a recorded walkthrough */
+/** The runbook Pradeep hands over: one page the bakery can follow without him */
+const RUNBOOK = [
+  "Maple Street Bakery: orders runbook",
+  "",
+  "Where orders go",
+  "- Every order, from the form, email, or voicemail, lands in the Orders sheet, one row each, sorted by pickup.",
+  "- Rows marked CHECK came from an email or voicemail. Read the original (linked in the row), fix anything, and clear the mark.",
+  "",
+  "Every evening",
+  "- The 7pm email lists tomorrow's pickups and anything still marked CHECK. Clear those before closing.",
+  "- Print pickup tags: select tomorrow's rows, then Extensions > Print tags (label printer at the front desk).",
+  "",
+  "If something looks wrong",
+  "- An order missing: search the inbox for the customer's name; add the row by hand if it never arrived.",
+  "- No 7pm email: check the Orders sheet's Triggers page (Extensions > Apps Script > Triggers) shows it running.",
+  "- Anything else: email hello@neon1.tech with a screenshot.",
+  "",
+  "Accounts (all in the bakery's name)",
+  "- Google account: owner Maria; Sam is an editor on the Orders sheet only.",
+].join("\n");
+
+/** Handover: the stage, the runbook, and the walkthrough Sam takes on Friday */
 export async function handOver() {
   await moveTo("handover");
   const { t, p } = await project();
-  await (await engine()).uploadAs(PRADEEP, t, "orders-runbook.txt", "Where orders go, and what to do if one looks wrong.", { layer: "next", projectId: p.id });
-  await add("training", "Front desk walkthrough, recorded for new staff");
+  await (await engine()).uploadAs(PRADEEP, t, "orders-runbook.txt", RUNBOOK, { layer: "next", projectId: p.id });
+  await add("training", "Front desk walkthrough for Sam, recorded for new staff");
 }
 
 
@@ -149,7 +210,7 @@ function primer() {
   el.append(h);
   for (const t of [
     "Maria owns Maple Street Bakery. Every night her team retypes about 40 orders from email and voicemail into a spreadsheet. Pradeep at neon1 has invited her to 1NEON, the portal where they'll fix that together.",
-    "You'll watch her sign in with a code from her email, set up her alerts, invite her team, start a project, choose from Pradeep's options, follow the work, and take the handover. Her thoughts appear beside the cursor.",
+    "You'll watch her sign in with a code from her email, set up her alerts, invite her team, start a project, sign for the option she chooses, follow the work, pay the deposit, and take the handover. Her thoughts appear beside the cursor.",
     "Everything here is made up and stays in this browser. The bar above pauses it, steps between parts, and changes the speed.",
   ]) {
     const p = document.createElement("p");
@@ -402,18 +463,33 @@ export const STORY: Section[] = [
       await s.hover({ sel: ".options article", text: "C. Fuller build" }, 900);
       await s.say("The full proposal: what's in and out, the hours, and what each side will do");
       await s.think("Let me read the whole proposal before I say yes.");
-      await s.click({ sel: "a", text: "Read the full proposal" }, 1200);
+      await s.click({ sel: "a", text: "Read the proposal" }, 1200);
       await s.scroll(700, 1400);
       await s.think("What I do, what he does. Clear enough.");
       await s.scroll(900, 1400);
-      await s.think("Approving in 1NEON counts as choosing. Good, no printing.");
+      await s.think("It's numbered, 0039-r1, and each option has its own ID. Approving in 1NEON counts as choosing.");
       await s.click({ sel: "a", text: "Back to options" }, 1200);
-      await s.say("She approves the recommended one, with a condition");
+      await s.say("First, once, she signs neon1's service agreement for the bakery");
+      await s.think("He said there's one agreement that covers everything. Let me read it first.");
+      await s.go(`${base}/agreement`, "Service agreement");
+      await s.scroll(900, 1400);
+      await s.think("Purchases at cost, invoices due in 15 days, my data stays mine. Fair.");
+      await s.scroll(1600, 1200);
+      await s.type("#agreement-sign-name", "Maria Lopez");
+      await s.click("#agreement-sign-name ~ .sign-consent input", 400);
+      await s.click({ sel: ".sign-card button", text: /^Sign for/ }, 1400);
+      await s.go(`${base}/projects/${KEY}/needs#options`, "Options");
+      await s.say("She approves the recommended one, with a condition, and signs it");
       await s.think("B it is. Pradeep recommends it too.");
       await s.click({ sel: ".options article:nth-child(2) button", text: "Approve this option" }, 700);
+      await s.say("The approval restates exactly what she's accepting");
+      await s.think("$1,700, two weeks, and we buy a label printer ourselves. That's what I read.");
+      await s.hover("dialog[open] .terms-list", 1200);
       await s.think("Just not before Saturday. That's our busiest day.");
       await s.type("#cond", "Go live after the Saturday rush.");
-      await s.click({ sel: "dialog[open] button", text: /^Approve$/ }, 1600);
+      await s.type("#approve-sign-name", "Maria Lopez");
+      await s.click("#approve-sign-name ~ .sign-consent input", 400);
+      await s.click({ sel: "dialog[open] .actions button", text: /^Sign and approve/ }, 1600);
       await s.top();
       await s.think("Good, the decision is written down, condition and all.");
       await s.hover(".decision", 1200);
@@ -441,9 +517,48 @@ export const STORY: Section[] = [
       await s.type('textarea[aria-label="Write a comment"]', "Could the summary go to Sam too?");
       await s.click({ sel: ".comment-box button", text: "Send" }, 900);
       await s.click('dialog[open] button[aria-label="Close"]', 600);
+      await s.say("The label printer from her option is on the list, for the bakery to buy");
+      await s.think("I picked up the label printer at Staples yesterday. Let me mark it bought.");
+      await s.hover({ sel: ".item", text: "Label printer for pickup bags" }, 900);
+      await s.choose('select[aria-label="Where Label printer for pickup bags stands"]', "bought", 900);
+      await s.think("It wants the receipt. It's right here.");
+      await dropFile(s, { sel: ".item:has(.purchase-meta) .file-ask .chip", text: "Attach the receipt" }, "staples-receipt.pdf", "Staples receipt: Brother QL-820NWB label printer, $104.99", { layer: "execution", itemId: (items) => items.find((i) => i.kind === "purchase")?.id });
+      await s.wait(700);
       await s.others(finishWork, 1200, "Pradeep finished three tasks");
       await s.think("All three are done already.");
       await s.hover({ sel: ".item", text: "Daily summary at 7pm" }, 900);
+    },
+  },
+  {
+    id: "pay",
+    title: "Pay an invoice",
+    why: "Pradeep's email says the deposit invoice is ready. Let me sign in and pay it.",
+    run: async (s) => {
+      await s.say("Half the fixed price is due up front, as her option said: Pradeep issues the deposit invoice");
+      await s.others(issueDeposit, 900, "Pradeep issued the deposit invoice");
+      await walkTo(s, `${base}/projects/${KEY}/execute`);
+      await s.top();
+      await s.say("Next step tells her it's ready, how much, and when it's due");
+      await s.think("$850, due in two weeks. That's the half up front.");
+      await s.hover(".next-step", 1100);
+      await s.click({ sel: ".next-step a", text: "See and pay" }, 1000);
+      await s.say("Every invoice lives under Execute, with what's paid and what's left");
+      await s.hover({ sel: ".invoice-row", text: "INV-" }, 900);
+      await s.think("Let me see the invoice itself first.");
+      await s.click({ sel: ".invoice-row a.title", text: "INV-" }, 1200);
+      await s.say("The invoice, on neon1's letterhead: its number, the lines, the due date, and how to pay");
+      await s.think("Deposit, 50% of option B, 0039-r1-B. It matches what I signed.");
+      await s.scroll(500, 1400);
+      await s.think("Bank transfer is preferred. I'll do that.");
+      await s.top();
+      await s.say("Pay opens Stripe's secure page; 1NEON never sees her bank or card details");
+      await s.click({ sel: ".pp-tools button", text: /^Pay / }, 1400);
+      await s.say("She pays by bank transfer (ACH). It clears in a few days, and Stripe tells 1NEON");
+      await s.others(depositPaid, 1200, "Her bank payment cleared");
+      await s.think("Paid in full. It says so right on the invoice.");
+      await s.hover(".inv-lines tfoot", 1200);
+      await s.click({ sel: "a", text: "Back to invoices" }, 1000);
+      await s.hover({ sel: ".invoice-row", text: "INV-" }, 1000);
     },
   },
   {
@@ -498,12 +613,27 @@ export const STORY: Section[] = [
         ["Accounts are in the client's name", "The accounts are in the bakery's name. Check."],
         ["Admin access transferred to the client", "I have admin access now. Check."],
         ["Docs delivered and walked through", "Pradeep walked me through the docs."],
-        ["The people who use it are trained on it", "And Sam's trained. All done."],
       ];
       for (const [t, thought] of steps) {
         await s.think(thought);
         await s.click(`input[aria-label="Done: ${t}"]`, 450);
       }
+      await s.say("Sam takes the walkthrough on Friday; she marks the training done");
+      await s.think("Sam ran Friday's orders on his own after the walkthrough.");
+      await s.click('input[aria-label="Done: Front desk walkthrough for Sam, recorded for new staff"]', 600);
+      await s.say("Pradeep retires the old order spreadsheet's macros and steps his own access down");
+      await s.others(async () => {
+        await patch((i) => i.title === "Older tools it replaces retired or merged, and leftovers cleaned up", { status: "done" });
+        await patch((i) => i.title === "neon1 access reduced or removed", { status: "done" });
+      }, 900, "Pradeep finished his two handover steps");
+      await s.say("For the last step she checks it herself and accepts it, in writing");
+      await s.think("Sam's trained. I'll accept that one myself.");
+      await s.click({ sel: '.item:has(input[aria-label="Done: The people who use it are trained on it"]) button.chip', text: "Check it and accept" }, 500);
+      await s.type('input[aria-label="What you checked (optional)"]', "Sam closed Friday using the runbook");
+      await s.type('form.accept-form input.sign-name', "Maria Lopez");
+      await s.click("form.accept-form .sign-consent input", 400);
+      await s.click({ sel: "form.accept-form button", text: /^Sign and accept$/ }, 1000);
+      await s.say("Accepting the last step drafts the final invoice for the rest, for Pradeep to send");
       await s.say("And adds ongoing care from a suggestion");
       await s.think("A monthly check-in makes sense for us.");
       await s.click({ sel: "button", text: "+ Add care item" }, 500);
@@ -516,6 +646,9 @@ export const STORY: Section[] = [
     title: "Ongoing care",
     why: "It's been running a while. Let me sign in and see how things look across everything.",
     run: async (s) => {
+      await s.say("Pradeep issues the final invoice for the other half; she pays it the same way");
+      await s.others(issueFinal, 900, "Pradeep issued the final invoice");
+      await s.others(finalPaid, 900, "Her bank payment cleared");
       await s.others(async () => { await moveTo("care"); }, 700, "Pradeep moved the project to Care");
       await s.say("The whole project, on a timeline");
       await s.think("I want to see the whole thing at once.");

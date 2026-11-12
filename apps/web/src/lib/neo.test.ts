@@ -61,14 +61,14 @@ describe("the conversation", () => {
 describe("plan steps", () => {
   it("reads the current version before each change", async () => {
     await neo.runStep({ op: "update_item", tid: "T", pid: "P", iid: "I", status: "done" });
-    await neo.runStep({ op: "approve_option", tid: "T", pid: "P", iid: "I", conditions: "" });
+    // Approvals are signed by the person, so Neo refuses and sends nothing
+    await expect(neo.runStep({ op: "approve_option", tid: "T", pid: "P", iid: "I", conditions: "" })).rejects.toThrow(/signed by you/);
     await neo.runStep({ op: "move_project", tid: "T", pid: "P", stageId: "S" });
     await neo.runStep({ op: "update_member", tid: "T", uid: "U", access: "viewer" });
     await neo.runStep({ op: "update_me", theme: "matrix" });
     const writes = calls.filter((c) => c.method !== "GET");
     expect(writes).toEqual([
       { path: "/t/T/projects/P/items/I", method: "PATCH", body: { version: 9, status: "done" } },
-      { path: "/t/T/projects/P/items/I/approve", method: "POST", body: { version: 9, conditions: "" } },
       { path: "/t/T/projects/P/move", method: "POST", body: { version: 4, stageId: "S", reason: undefined } },
       { path: "/t/T/members/U", method: "PATCH", body: { version: 3, access: "viewer" } },
       { path: "/me", method: "PATCH", body: { version: 7, theme: "matrix" } },

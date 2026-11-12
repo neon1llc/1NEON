@@ -12,3 +12,6 @@ export * from "./notify.ts";
 export * from "./timing.ts";
 export * from "./neo.ts";
 export * from "./changes.ts";
+export * from "./proposal.ts";
+export * from "./agreement.ts";
+export * from "./billing.ts";

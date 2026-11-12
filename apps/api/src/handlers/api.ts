@@ -6,7 +6,9 @@ import { handle } from "hono/aws-lambda";
 import { createApp } from "../app.ts";
 import { CognitoAuth } from "../auth.ts";
 import { loadConfig } from "../config.ts";
-import { AwsTexter, CognitoDirectory, S3Storage, SesMailer } from "../services.ts";
+import { GetParametersCommand, SSMClient } from "@aws-sdk/client-ssm";
+import { AwsTexter, CognitoDirectory, S3Records, S3Storage, SesMailer } from "../services.ts";
+import { StripePayments } from "../payments.ts";
 import { beforeDeadline, drainOutbox } from "../outbox.ts";
 import { sweepFiles } from "../files.ts";
 import { DynamoTable } from "../store/dynamo.ts";
@@ -29,6 +31,24 @@ const mailer = new SesMailer(cfg.mailFrom);
 // Texts only once the toll-free number is set up
 const texter = cfg.smsFrom ? new AwsTexter(cfg.smsFrom) : undefined;
 const storage = new S3Storage(cfg.docsBucket);
+
+// Stripe's keys stay in SSM (SecureString), read once at cold start; never in the environment or the repo.
+// Without both parameters, invoices are still issued and paid by check, Zelle, or wire
+async function stripe() {
+  if (!cfg.stripeKeyParam || !cfg.stripeWebhookParam) return undefined;
+  // A read that fails (say, access not granted yet) leaves online payment off rather than the whole API down
+  const r = await new SSMClient({}).send(new GetParametersCommand({ Names: [cfg.stripeKeyParam, cfg.stripeWebhookParam], WithDecryption: true })).catch((e: unknown) => {
+    console.error(JSON.stringify({ level: "error", message: "stripe keys unreadable; online payment off", error: String(e) }));
+    return undefined;
+  });
+  if (!r) return undefined;
+  const value = (name: string) => r.Parameters?.find((x) => x.Name === name)?.Value;
+  const key = value(cfg.stripeKeyParam), hook = value(cfg.stripeWebhookParam);
+  // A placeholder value (set by Terraform before the real key is put in) leaves online payment off. A restricted key (rk_) with Checkout Sessions write is all it needs
+  return key && /^(sk|rk)_/.test(key) && hook?.startsWith("whsec_") ? new StripePayments(key, hook) : undefined;
+}
+const payments = await stripe();
+
 const app = createApp({
   cfg,
   repo,
@@ -40,6 +60,9 @@ const app = createApp({
   // Messages wait in the outbox for the scheduled worker below, never inside a request
   outbox: "worker",
   // Neo for signed-in people, once a model is configured; capped by the month's budget
+  payments,
+  // Locked copies of signed approvals, agreements, invoices, and payments
+  records: cfg.recordsBucket ? new S3Records(cfg.recordsBucket) : undefined,
   neo: cfg.neoModel ? { model: bedrockNeo(), modelId: cfg.neoModel, budget: { ...DEFAULT_BUDGET, monthlyUsd: cfg.neoMonthlyUsd ?? DEFAULT_BUDGET.monthlyUsd } } : undefined,
 });
 

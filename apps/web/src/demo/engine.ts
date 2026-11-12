@@ -19,7 +19,8 @@ import { persistFailed } from "../lib/persist.ts";
 const DB = "1neon-demo";
 const STORE = "state";
 const KEY = "v1";
-export interface Saved { rows: Row[]; files: [string, { type: string; bytes: Uint8Array }][] }
+// `rev` changes on every save, so a tab can tell another tab saved since it last read
+export interface Saved { rows: Row[]; files: [string, { type: string; bytes: Uint8Array }][]; rev?: string }
 // The live playback's snapshots also hold the pretend inbox, texts, and who holds a session
 interface LiveSaved extends Saved { mail: Mail[]; texts: Text[]; session?: LiveSession; passkeys: number }
 /** One email or text the in-browser API sent, with when */
@@ -95,6 +96,54 @@ const directory = new MemoryDirectory();
 const stamp = <T extends object>(list: T[]) => { const push = list.push.bind(list); list.push = (...xs: T[]) => push(...xs.map((x) => ({ at: Date.now(), ...x }))); };
 stamp(mailer.sent);
 stamp(texter.sent);
+// --- Several tabs on one saved demo ------------------------------------------
+// Each tab holds the demo in memory. A change is answered only after it's saved, and every change
+// runs under one lock shared by this browser's tabs: re-read what another tab saved, apply the change
+// on top, save, then tell the other tabs. So two tabs never overwrite each other's acknowledged work
+
+// The revision this tab last read or saved
+let rev: string | undefined;
+// Another tab saved since this one last read (told over the channel; reads catch up before answering)
+let stale = false;
+const channel = !live && typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("1neon-demo") : undefined;
+if (channel) channel.onmessage = (e) => { if ((e.data as { rev?: string })?.rev !== rev) stale = true; };
+
+// Take a saved copy as this tab's own
+function adopt(saved: Saved) {
+  table.restore(saved.rows);
+  storage.files.clear();
+  for (const [k, f] of saved.files) storage.files.set(k, f);
+  rev = saved.rev;
+}
+
+// Catch up with another tab's save, if there was one; nothing saved (a reset) keeps this tab's copy
+async function catchUp() {
+  const saved = await load();
+  if (saved?.rows.length && saved.rev !== rev) adopt(saved);
+  stale = false;
+}
+
+// One change at a time across this browser's tabs (where the browser has Web Locks; else this tab only)
+let queue: Promise<unknown> = Promise.resolve();
+function exclusive<T>(fn: () => Promise<T>): Promise<T> {
+  if (typeof navigator !== "undefined" && navigator.locks) return navigator.locks.request("1neon-demo", fn) as Promise<T>;
+  const run = queue.then(fn, fn);
+  queue = run.catch(() => undefined);
+  return run;
+}
+
+// The save in flight, if any, so a reset can wait for it
+let saving: Promise<boolean> = Promise.resolve(true);
+async function save() {
+  const next = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  saving = store({ rows: table.snapshot(), files: [...storage.files], rev: next });
+  if (await saving) {
+    rev = next;
+    channel?.postMessage({ rev });
+  }
+}
+
+
 // The live playback's signed-in session, when a short demo signs in for real (none in the whole project)
 let session: LiveSession | undefined;
 const ready = (async () => {
@@ -102,10 +151,16 @@ const ready = (async () => {
   if (live) {
     session = await (await import("../live/seed.ts")).liveSeed(new Repo(table), mailer);
   } else if (saved?.rows.length) {
-    table.restore(saved.rows);
-    for (const [k, f] of saved.files) storage.files.set(k, f);
+    adopt(saved);
   } else {
-    await seed(new Repo(table));
+    // The seed makes fresh ids, so the first tab seeds and saves under the lock, and any other tab
+    // opened meanwhile takes that same copy: two tabs never hold two different Acme Dentals
+    await exclusive(async () => {
+      const first = await load();
+      if (first?.rows.length) return adopt(first);
+      await seed(new Repo(table));
+      await save();
+    });
   }
   // The demo's people sign in by picking who to be; Pradeep is the neon1 operator, as in real use
   return createApp({
@@ -117,17 +172,6 @@ const ready = (async () => {
     storage,
   });
 })();
-
-
-// Saves are coalesced, so a burst of changes writes once
-let pending: ReturnType<typeof setTimeout> | undefined;
-// The save in flight, if any, so a reset can wait for it
-let saving: Promise<boolean> = Promise.resolve(true);
-function save() {
-  if (live) return;
-  clearTimeout(pending);
-  pending = setTimeout(() => { saving = store({ rows: table.snapshot(), files: [...storage.files] }); }, 150);
-}
 
 
 /** Answer one request the way the real API would. Changes are saved on this device */
@@ -148,19 +192,29 @@ export async function demoFetch(url: string, init: RequestInit = {}): Promise<Re
     // The session rides along for its own person only, never for someone acting as another
     if (session && req.headers.get("x-dev-user")?.toLowerCase() === session.email) req.headers.set("x-dev-session", session.id);
   }
-  const res = await app.fetch(req);
-  if ((init.method ?? "GET") !== "GET") save();
-  return res;
+  if (live) return app.fetch(req);
+  // Reading: first catch up if another tab saved meanwhile
+  if ((init.method ?? "GET") === "GET") {
+    if (stale) await catchUp();
+    return app.fetch(req);
+  }
+  // Changing: under the shared lock, on top of the latest saved copy, answered once it's saved
+  return exclusive(async () => {
+    await catchUp();
+    const res = await app.fetch(req);
+    await save();
+    return res;
+  });
 }
 
 
 /** Forget everything this device changed, back to the starting demo. Resolves once the saved copy
  * is really deleted (or there was none to delete), so the reload that follows starts fresh */
 export async function resetDemo() {
-  clearTimeout(pending);
-  // A save already under way finishes first, so it can't land after the delete
+  // A save already under way finishes first, so it can't land after the delete; the other tabs
+  // keep their copies until they reload
   await saving;
-  await store(undefined);
+  await exclusive(() => store(undefined));
 }
 
 

@@ -2,6 +2,7 @@
 // ordering, IDs, and metric progress.
 
 
+import { changedSince, findProposalRef, optionLetter, proposalFileName } from "./proposal.ts";
 import { describe, expect, it } from "vitest";
 import { can, canApprove, canNameDecider, deciderIds, type Action } from "./access.ts";
 import { initialRanks, rankBetween } from "./rank.ts";
@@ -196,9 +197,10 @@ describe("notification groups", () => {
       "member.invited": "access", "member.joined": "access", "member.updated": "access", "member.signedin": "signins",
       "org.created": "updates", "org.stages": "workflow", "project.created": "workflow", "project.moved": "workflow",
       "project.trashed": "workflow", "project.updated": "updates",
+      "agreement.signed": "billing", "invoice.issued": "billing", "invoice.voided": "billing", "payment.recorded": "billing", "payment.failed": "billing",
     };
     for (const kind of Object.keys(KIND_LAYER)) {
-      for (const verb of ["created", "updated", "deleted"]) expected[`${kind}.${verb}`] = kind === "option" ? "decisions" : "updates";
+      for (const verb of ["created", "updated", "deleted"]) expected[`${kind}.${verb}`] = kind === "option" ? "decisions" : kind === "payment" ? "billing" : "updates";
     }
     for (const [action, group] of Object.entries(expected)) expect([action, groupOf(action).id]).toEqual([action, group]);
     // Comments on, updates off: comments reach the person and item edits don't, in both channels
@@ -260,5 +262,32 @@ describe("organization calendar", () => {
     expect(_dateIn("2026-11-02T04:30:00Z", "America/New_York")).toBe("2026-11-01");
     expect(_monday("2026-11-15")).toBe("2026-11-09");
     expect(_monday("2026-11-09")).toBe("2026-11-09");
+  });
+});
+
+
+// Proposal IDs read back from a file name, a document property, or a header line
+describe("proposal references", () => {
+  it("finds the number and revision in the forms a markup carries", () => {
+    expect(findProposalRef("neon1-maple-street-proposal-0039-r2.docx")).toEqual({ number: 39, rev: 2 });
+    expect(findProposalRef("Proposal 0039 r12 (markup from Raj)")).toEqual({ number: 39, rev: 12 });
+    expect(findProposalRef("0040-rev3")).toEqual({ number: 40, rev: 3 });
+    expect(findProposalRef("orders-week.zip")).toBeUndefined();
+    expect(proposalFileName("maple-street", 39, 2, "pdf")).toBe("neon1-maple-street-proposal-0039-r2.pdf");
+    expect(optionLetter("B. Solid setup", 0)).toBe("B");
+    expect(optionLetter("Solid setup", 2)).toBe("C");
+  });
+
+  it("says which options changed since a revision, ignoring an approval of an issued one", () => {
+    const snap = { options: [{ id: "a", version: 2, status: "proposed" }, { id: "b", version: 1, status: "proposed" }] } as never;
+    const now = [
+      { id: "a", kind: "option" as const, status: "approved", version: 3, title: "A" },
+      { id: "b", kind: "option" as const, status: "proposed", version: 2, title: "B" },
+      { id: "c", kind: "option" as const, status: "proposed", version: 1, title: "C" },
+    ];
+    const r = changedSince({ snapshot: snap }, now);
+    expect(r.edited.map((o) => o.id)).toEqual(["b"]);
+    expect(r.added.map((o) => o.id)).toEqual(["c"]);
+    expect(r.any).toBe(true);
   });
 });

@@ -38,6 +38,9 @@ variable "neo_monthly_usd" {
   type    = number
   default = 8
 }
+# Where locked copies of signed and billing records go
+variable "records_bucket" { type = string }
+variable "records_bucket_arn" { type = string }
 variable "log_retention_days" {
   type    = number
   default = 90
@@ -116,6 +119,29 @@ data "aws_iam_policy_document" "api" {
     actions   = ["s3:GetObject", "s3:GetObjectAttributes", "s3:PutObject", "s3:DeleteObject", "s3:GetObjectTagging"]
     resources = ["${var.docs_bucket_arn}/t/*"]
   }
+  # Locked copies of signed agreements, approvals, invoices, and payments; written once, never deleted
+  statement {
+    sid       = "Records"
+    actions   = ["s3:PutObject", "s3:PutObjectRetention"]
+    resources = ["${var.records_bucket_arn}/*"]
+  }
+  # Stripe's keys, read once per cold start
+  statement {
+    sid       = "StripeKeys"
+    actions   = ["ssm:GetParameters"]
+    resources = [aws_ssm_parameter.stripe_key.arn, aws_ssm_parameter.stripe_webhook.arn]
+  }
+  # SecureString decryption, only through SSM
+  statement {
+    sid       = "StripeKeysDecrypt"
+    actions   = ["kms:Decrypt"]
+    resources = ["arn:aws:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["ssm.${data.aws_region.current.region}.amazonaws.com"]
+    }
+  }
   statement {
     sid       = "Directory"
     actions   = ["cognito-idp:AdminGetUser", "cognito-idp:AdminCreateUser", "cognito-idp:AdminDisableUser", "cognito-idp:AdminEnableUser", "cognito-idp:AdminUserGlobalSignOut"]
@@ -173,6 +199,29 @@ resource "aws_iam_role_policy" "trigger" {
 }
 
 
+# --- Stripe keys ---
+
+
+# Placeholders Terraform creates once; the real values are put in by hand (aws ssm put-parameter
+# --overwrite) and never pass through Terraform state, the repo, or chat. Until then online payment is off
+resource "aws_ssm_parameter" "stripe_key" {
+  name        = "/1neon/${var.env}/stripe/secret-key"
+  description = "Stripe restricted key (rk_live_...) with Checkout Sessions write"
+  type        = "SecureString"
+  value       = "unset"
+  lifecycle { ignore_changes = [value] }
+}
+
+# The webhook endpoint's signing secret (whsec_...), from the Stripe Dashboard
+resource "aws_ssm_parameter" "stripe_webhook" {
+  name        = "/1neon/${var.env}/stripe/webhook-secret"
+  description = "Stripe webhook signing secret for /1NEON/api/billing/stripe"
+  type        = "SecureString"
+  value       = "unset"
+  lifecycle { ignore_changes = [value] }
+}
+
+
 # --- Functions ---
 
 
@@ -217,6 +266,9 @@ resource "aws_lambda_function" "api" {
       OPERATOR_EMAILS                     = var.operator_emails
       NEO_MODEL                           = var.neo_model
       NEO_MONTHLY_USD                     = tostring(var.neo_monthly_usd)
+      RECORDS_BUCKET                      = var.records_bucket
+      STRIPE_KEY_PARAM                    = aws_ssm_parameter.stripe_key.name
+      STRIPE_WEBHOOK_PARAM                = aws_ssm_parameter.stripe_webhook.name
       NODE_OPTIONS                        = "--enable-source-maps"
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
     }

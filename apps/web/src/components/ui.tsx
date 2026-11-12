@@ -97,9 +97,10 @@ export function layerProgress(items: { kind: string; status: string }[], layerOf
   const options = items.filter((i) => i.kind === "option");
   for (const i of items) {
     const l = layerOf(i.kind);
-    if (!l || i.kind === "decision" || i.kind === "update" || i.kind === "option") continue;
+    // Records (decisions, updates, revisions, constraints) aren't work to finish; options count once below
+    if (!l || ["decision", "update", "option", "proposal", "constraint"].includes(i.kind)) continue;
     out[l][1]++;
-    if (i.status === "done") out[l][0]++;
+    if (i.status === "done" || (i.kind === "purchase" && i.status === "returned")) out[l][0]++;
   }
   const ol = layerOf("option");
   if (options.length && ol) {
