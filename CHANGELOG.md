@@ -20,7 +20,10 @@
 - Pay online through Stripe Checkout, by bank transfer (ACH, preferred) or card. Stripe's signed webhook records the payment once, including bank payments that clear days later. Checks, Zelle, and wires are recorded by neon1. If the Stripe account can't take bank payments yet, Checkout offers card alone.
 - Issued invoices and payments are permanent. A mistake is corrected with a credit or by voiding with a reason, and an invoice with payments can't be voided. A locked copy of every signature, issued invoice, and payment is kept for seven years.
 - A Billing notification group (on by default) for signatures, issued and voided invoices, and payments.
-- Maria's walkthrough signs the service agreement, signs her approval, pays the deposit invoice by bank transfer, and signs her handover acceptance.
+- A "Pay an invoice" chapter in the walkthrough (/1NEON/live?play=pay): Pradeep issues the deposit, Next step tells Maria it's ready, she reads it on the letterhead and pays it by bank transfer. The full story also has her sign the service agreement and her approval, Pradeep finish his own handover steps, Maria sign her acceptance, and the final invoice paid in Care.
+- Pay on the invoice page itself, as well as in the project's Invoices.
+- The interactive demo's Backups that restore project has a deposit paid by bank transfer and an open progress invoice to pay.
+- Help: what a proposal revision is, how to accept a handover step, and a new Invoices and paying section (where invoices are, how to pay, when they're sent, corrections, and the service agreement), each with a walkthrough link.
 
 ### Infrastructure
 - A records bucket with S3 Object Lock (governance mode, seven years) for the locked copies.

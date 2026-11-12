@@ -5,7 +5,7 @@
 
 import { liveEngine } from "../lib/api.ts";
 import type { Section, Stage } from "./player.ts";
-import { signInWithCode } from "./opening.ts";
+import { signInWithCode, walkTo } from "./opening.ts";
 import { MARIA, PRADEEP } from "./seed.ts";
 
 
@@ -101,18 +101,38 @@ export async function planWork() {
 /** The three tasks, done */
 /** Pradeep issues the deposit drafted when Maria approved */
 export async function issueDeposit() {
+  await issue("deposit");
+}
+
+/** Pradeep checks the final invoice drafted when Maria accepted the handover, and issues it */
+export async function issueFinal() {
+  await issue("final");
+}
+
+// Issue the draft invoice of one type, as Pradeep would from Execute
+async function issue(type: string) {
   const { t, p, items } = await project();
-  const draft = items.find((i) => i.kind === "invoice" && i.status === "draft" && i.fields.type === "deposit");
+  const draft = items.find((i) => i.kind === "invoice" && i.status === "draft" && i.fields.type === type);
   if (draft) await as(`/t/${t}/projects/${p.id}/invoices/${draft.id}/issue`, "POST", { version: draft.version });
 }
 
-/** Her bank (ACH) payment clears; in the walkthrough Pradeep records it, as Stripe would */
+/** Her bank (ACH) payment clears; in the walkthrough it's recorded as Stripe's webhook would */
 export async function depositPaid() {
+  await paid("deposit");
+}
+
+/** The final invoice's bank payment clears the same way */
+export async function finalPaid() {
+  await paid("final");
+}
+
+// Record the whole of an issued invoice of one type as paid by bank transfer
+async function paid(type: string) {
   const { t, p, items } = await project();
-  const inv = items.find((i) => i.kind === "invoice" && i.status === "issued" && i.fields.type === "deposit");
+  const inv = items.find((i) => i.kind === "invoice" && i.status === "issued" && i.fields.type === type);
   if (!inv) return;
-  const lines = (inv.fields.lines as { qty: number; unitCents: number }[]).reduce((n, l) => n + Math.round(l.qty * l.unitCents), 0);
-  await as(`/t/${t}/projects/${p.id}/invoices/${inv.id}/payments`, "POST", { amountCents: lines, method: "ach", ref: "Bank transfer", receivedAt: new Date().toISOString().slice(0, 10) });
+  const cents = (inv.fields.lines as { qty: number; unitCents: number }[]).reduce((n, l) => n + Math.round(l.qty * l.unitCents), 0);
+  await as(`/t/${t}/projects/${p.id}/invoices/${inv.id}/payments`, "POST", { amountCents: cents, method: "ach", ref: "Stripe bank transfer", receivedAt: new Date().toISOString().slice(0, 10) });
 }
 
 export async function finishWork() {
@@ -190,7 +210,7 @@ function primer() {
   el.append(h);
   for (const t of [
     "Maria owns Maple Street Bakery. Every night her team retypes about 40 orders from email and voicemail into a spreadsheet. Pradeep at neon1 has invited her to 1NEON, the portal where they'll fix that together.",
-    "You'll watch her sign in with a code from her email, set up her alerts, invite her team, start a project, choose from Pradeep's options, follow the work, and take the handover. Her thoughts appear beside the cursor.",
+    "You'll watch her sign in with a code from her email, set up her alerts, invite her team, start a project, sign for the option she chooses, follow the work, pay the deposit, and take the handover. Her thoughts appear beside the cursor.",
     "Everything here is made up and stays in this browser. The bar above pauses it, steps between parts, and changes the speed.",
   ]) {
     const p = document.createElement("p");
@@ -504,15 +524,41 @@ export const STORY: Section[] = [
       await s.think("It wants the receipt. It's right here.");
       await dropFile(s, { sel: ".item:has(.purchase-meta) .file-ask .chip", text: "Attach the receipt" }, "staples-receipt.pdf", "Staples receipt: Brother QL-820NWB label printer, $104.99", { layer: "execution", itemId: (items) => items.find((i) => i.kind === "purchase")?.id });
       await s.wait(700);
-      await s.say("Half the fixed price is due up front: Pradeep issues the deposit invoice");
-      await s.others(issueDeposit, 900, "Pradeep issued the deposit invoice");
-      await s.think("The deposit invoice is here. $850, due in two weeks.");
-      await s.hover({ sel: ".invoice-row", text: "INV-" }, 1100);
-      await s.say("She pays by bank transfer; Pradeep's records show it paid");
-      await s.others(depositPaid, 900, "Her bank payment arrived");
       await s.others(finishWork, 1200, "Pradeep finished three tasks");
       await s.think("All three are done already.");
       await s.hover({ sel: ".item", text: "Daily summary at 7pm" }, 900);
+    },
+  },
+  {
+    id: "pay",
+    title: "Pay an invoice",
+    why: "Pradeep's email says the deposit invoice is ready. Let me sign in and pay it.",
+    run: async (s) => {
+      await s.say("Half the fixed price is due up front, as her option said: Pradeep issues the deposit invoice");
+      await s.others(issueDeposit, 900, "Pradeep issued the deposit invoice");
+      await walkTo(s, `${base}/projects/${KEY}/execute`);
+      await s.top();
+      await s.say("Next step tells her it's ready, how much, and when it's due");
+      await s.think("$850, due in two weeks. That's the half up front.");
+      await s.hover(".next-step", 1100);
+      await s.click({ sel: ".next-step a", text: "See and pay" }, 1000);
+      await s.say("Every invoice lives under Execute, with what's paid and what's left");
+      await s.hover({ sel: ".invoice-row", text: "INV-" }, 900);
+      await s.think("Let me see the invoice itself first.");
+      await s.click({ sel: ".invoice-row a.title", text: "INV-" }, 1200);
+      await s.say("The invoice, on neon1's letterhead: its number, the lines, the due date, and how to pay");
+      await s.think("Deposit, 50% of option B, 0039-r1-B. It matches what I signed.");
+      await s.scroll(500, 1400);
+      await s.think("Bank transfer is preferred. I'll do that.");
+      await s.top();
+      await s.say("Pay opens Stripe's secure page; 1NEON never sees her bank or card details");
+      await s.click({ sel: ".pp-tools button", text: /^Pay / }, 1400);
+      await s.say("She pays by bank transfer (ACH). It clears in a few days, and Stripe tells 1NEON");
+      await s.others(depositPaid, 1200, "Her bank payment cleared");
+      await s.think("Paid in full. It says so right on the invoice.");
+      await s.hover(".inv-lines tfoot", 1200);
+      await s.click({ sel: "a", text: "Back to invoices" }, 1000);
+      await s.hover({ sel: ".invoice-row", text: "INV-" }, 1000);
     },
   },
   {
@@ -575,6 +621,11 @@ export const STORY: Section[] = [
       await s.say("Sam takes the walkthrough on Friday; she marks the training done");
       await s.think("Sam ran Friday's orders on his own after the walkthrough.");
       await s.click('input[aria-label="Done: Front desk walkthrough for Sam, recorded for new staff"]', 600);
+      await s.say("Pradeep retires the old order spreadsheet's macros and steps his own access down");
+      await s.others(async () => {
+        await patch((i) => i.title === "Older tools it replaces retired or merged, and leftovers cleaned up", { status: "done" });
+        await patch((i) => i.title === "neon1 access reduced or removed", { status: "done" });
+      }, 900, "Pradeep finished his two handover steps");
       await s.say("For the last step she checks it herself and accepts it, in writing");
       await s.think("Sam's trained. I'll accept that one myself.");
       await s.click({ sel: '.item:has(input[aria-label="Done: The people who use it are trained on it"]) button.chip', text: "Check it and accept" }, 500);
@@ -595,6 +646,9 @@ export const STORY: Section[] = [
     title: "Ongoing care",
     why: "It's been running a while. Let me sign in and see how things look across everything.",
     run: async (s) => {
+      await s.say("Pradeep issues the final invoice for the other half; she pays it the same way");
+      await s.others(issueFinal, 900, "Pradeep issued the final invoice");
+      await s.others(finalPaid, 900, "Her bank payment cleared");
       await s.others(async () => { await moveTo("care"); }, 700, "Pradeep moved the project to Care");
       await s.say("The whole project, on a timeline");
       await s.think("I want to see the whole thing at once.");

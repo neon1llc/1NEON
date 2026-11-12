@@ -2,7 +2,7 @@
 // sample clients.
 
 
-import { AGREEMENT_EDITION, AGREEMENT_TEXT, CalEvent, DEFAULT_STAGES, Item, formatClientId, newId, rankBetween, sha256Hex, signature, type Member, type Project, type Tenant, type User } from "@1neon/domain";
+import { AGREEMENT_EDITION, AGREEMENT_TEXT, CalEvent, InvoiceFields, canonical, invoiceNumber, invoiceTotal, DEFAULT_STAGES, Item, formatClientId, newId, rankBetween, sha256Hex, signature, type Member, type Project, type Tenant, type User } from "@1neon/domain";
 import type { Repo } from "./store/repo.ts";
 import { issueProposal } from "./proposals.ts";
 
@@ -96,6 +96,16 @@ export async function seed(repo: Repo, operatorEmail = "pradeep@neon1.tech") {
   await item(backup, "milestone", "Weekly restore test running on its own", { dueDate: day(12).slice(0, 10) });
   await item(backup, "update", "Restore test blocked on vendor login", { fields: { health: "at_risk" } });
   await item(backup, "metric", "Days since last successful restore test", { fields: { category: "reliability", unit: "days", direction: "down", baseline: 900, target: 30, readings: [{ at: day(-2).slice(0, 10), value: 900, note: "" }] } });
+
+  // Its billing so far: the deposit, paid by bank transfer, and a progress invoice that's open
+  const invoice = async (seq: number, type: "deposit" | "progress", text: string, cents: number, issued: number) => {
+    const f = InvoiceFields.parse({ type, lines: [{ text, qty: 1, unitCents: cents }], number: invoiceNumber(backup.key, seq), issuedAt: day(issued), issuedBy: pradeep.id, dueDate: day(issued + 15).slice(0, 10), billTo: { org: acme.name, name: raj.name, email: raj.email } });
+    f.hash = await sha256Hex(canonical({ ...f, hash: undefined, total: invoiceTotal(f) }));
+    return item(backup, "invoice", `Invoice ${f.number}`, { status: "issued", fields: f, createdAt: day(issued), updatedAt: day(issued) });
+  };
+  const deposit = await invoice(1, "deposit", "50% deposit on backups that restore", 120_000, -8);
+  await item(backup, "payment", `Payment on ${String(deposit.fields.number)}`, { status: "done", fields: { invoiceId: deposit.id, amountCents: 120_000, method: "ach", ref: "Stripe bank transfer", receivedAt: day(-3).slice(0, 10), recordedBy: pradeep.id }, createdAt: day(-3), updatedAt: day(-3) });
+  await invoice(2, "progress", "Restore testing set up, as agreed", 60_000, -1);
 
   await project(acme, "AI-1", "Answers from our own policies", "listen", "not_started", "Staff interrupt Raj for policy questions.", [{ userId: pradeep.id, role: "lead_engineer" }], 2);
   // Harbor: a migration in Verify with real readings, plus a new intake

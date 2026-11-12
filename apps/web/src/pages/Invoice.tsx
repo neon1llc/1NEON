@@ -7,9 +7,9 @@ import { InvoiceFields, PaymentFields, balanceOf, invoiceState, invoiceTotal, mo
 import { Printer } from "lucide-react";
 import { useEffect } from "react";
 import { Link, useParams } from "react-router";
-import { lineAmount } from "../components/Billing.tsx";
+import { lineAmount, usePay } from "../components/Billing.tsx";
 import { gate } from "../components/Reads.tsx";
-import { useOrg, useTopBar } from "../components/Shell.tsx";
+import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
 import { Empty } from "../components/ui.tsx";
 import { DEMO } from "../lib/api.ts";
 import { FICTIONAL } from "../lib/docx.ts";
@@ -29,6 +29,8 @@ export function InvoicePage() {
   const projects = useProjects(org.id);
   const pid = projects.data?.find((p) => p.key === key)?.id;
   const detail = useProject(org.id, pid);
+  const me = useSession();
+  const pay = usePay(`/t/${org.id}/projects/${pid}`);
   const base = `/o/${summary.slug}/projects/${key}`;
   useTopBar(<span><Link to={`/o/${summary.slug}/projects`}>Projects</Link> / <Link to={base}>{key}</Link> / Invoice</span>, [key, summary.slug]);
   const it = detail.data?.items.find((i) => i.id === iid && i.kind === "invoice");
@@ -55,7 +57,9 @@ export function InvoicePage() {
     <>
       <div className="pp-tools">
         <Link className="btn btn-ghost btn-sm" to={`${base}/execute#billing`}>Back to invoices</Link>
-        <button type="button" className="btn btn-primary btn-sm" onClick={() => window.print()}><Printer size={15} aria-hidden="true" /> Print or save as PDF</button>
+        {/* The client pays what's left right here, as from the project's Invoices */}
+        {!me.operator && f.type !== "credit" && it.status === "issued" && left > 0 && <button type="button" className="btn btn-primary btn-sm" onClick={() => void pay(it)}>Pay {money(left)}</button>}
+        <button type="button" className={`btn ${!me.operator && left > 0 && it.status === "issued" ? "btn-ghost" : "btn-primary"} btn-sm`} onClick={() => window.print()}><Printer size={15} aria-hidden="true" /> Print or save as PDF</button>
       </div>
       {it.status === "draft" && <p className="pp-state" role="status">Draft, only neon1 sees it. Issuing numbers it and shows it to the client.</p>}
       {state === "void" && <p className="pp-state warn" role="status">Void{f.voided ? `: ${f.voided.reason}` : ""}. Nothing is owed on it.</p>}
@@ -111,7 +115,7 @@ export function InvoicePage() {
           <section className="pp-section">
             <h2 className="pp-bar">How to pay</h2>
             <ul className="pp-list">
-              <li>Online in 1NEON: open the project's invoices and choose <b>Pay</b>. A bank transfer (ACH) is preferred; cards are accepted too.</li>
+              <li>Online in 1NEON: open this invoice or the project's invoices and choose <b>Pay</b>. A bank transfer (ACH) is preferred; cards are accepted too.</li>
               <li>By check to neon1 LLC, 418 Broadway, Ste R, Albany, NY 12207, with {f.number} in the memo.</li>
               <li>By Zelle or wire: ask at hello@neon1.tech for the details, and put {f.number} in the note.</li>
             </ul>

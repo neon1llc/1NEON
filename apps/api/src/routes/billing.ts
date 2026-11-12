@@ -208,7 +208,7 @@ export function billingRoutes(app: App, k: Kit, pay: ReturnType<typeof stripeWeb
     });
     issued.hash = await sha256Hex(canonical({ ...issued, hash: undefined, total: invoiceTotal(issued) }));
     const next: Item = { ...it, title: `${issued.type === "credit" ? "Credit" : "Invoice"} ${issued.number}`, status: "issued", fields: issued, version: it.version + 1, updatedAt: ts, updatedBy: actorId(c) };
-    await repo.table.write([repo.itemOp(next, { version: it.version }), repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: "invoice.issued", target: it.id, summary: `${p.key}: issued ${issued.number} for ${money(invoiceTotal(issued))}, due ${issued.dueDate}` })]);
+    await repo.table.write([repo.itemOp(next, { version: it.version }), repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: "invoice.issued", target: it.id, summary: `${p.key}: issued ${issued.number} for ${money(invoiceTotal(issued))}, due ${new Date(`${issued.dueDate}T00:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })}` })]);
     await keep(k, `t/${p.tenantId}/p/${p.id}/invoices/${issued.number}.json`, next);
     return c.json(next);
   });

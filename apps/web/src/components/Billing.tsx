@@ -12,6 +12,23 @@ import { useOrg, useSession } from "./Shell.tsx";
 import { Dialog, dateLabel, useToast } from "./ui.tsx";
 
 
+// --- Paying ---------------------------------------------------------------------------------
+
+/** Pay opens Stripe's page in this tab; without online payment, the invoice's other ways to pay stand.
+ * Shared by the project's Invoices and the invoice page, so both say the same thing */
+export function usePay(path: string) {
+  const toast = useToast();
+  return async (inv: Pick<Item, "id">) => {
+    try {
+      const r = await api<{ url: string }>(`${path}/invoices/${inv.id}/pay`, { method: "POST" });
+      window.location.assign(r.url);
+    } catch (e) {
+      toast(e instanceof HttpError && e.body.error === "payments_off" ? (DEMO ? "This is a demo, so no money moves. In 1NEON, Pay opens Stripe's secure page." : String(e.body.message)) : problem(e));
+    }
+  };
+}
+
+
 // --- Signing ---------------------------------------------------------------------------------
 
 /** A signature as the API takes it */
@@ -98,15 +115,7 @@ export function Invoices({ items, path, project }: { items: Item[]; path: string
     }
     refresh();
   };
-  // Pay opens Stripe's page in this tab; without online payment, the invoice's other ways to pay stand
-  const pay = async (inv: Item) => {
-    try {
-      const r = await api<{ url: string }>(`${path}/invoices/${inv.id}/pay`, { method: "POST" });
-      window.location.assign(r.url);
-    } catch (e) {
-      toast(e instanceof HttpError && e.body.error === "payments_off" ? (DEMO ? "In the demo, payments aren't taken. neon1 records them as they arrive." : String(e.body.message)) : problem(e));
-    }
-  };
+  const pay = usePay(path);
   if (!invoices.length && !me.operator) return null;
   return (
     <section className="kind-group" id="billing">

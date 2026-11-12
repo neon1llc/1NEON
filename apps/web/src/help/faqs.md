@@ -69,7 +69,10 @@ A whole month at a time, named at the top. The arrows step a month back or forwa
 ### What is Insights?
 Charts made from your organization's own data: open and overdue work, how often things finish on time, days to a decision, work finished per week, where projects sit across the four layers, and how healthy they are. Work counts as finished on the day it was marked done, so editing it later doesn't move it; if it's reopened and finished again, the latest finish counts. The page explains how each number is counted. [Watch it](/1NEON/live?play=observe).
 
-## Decisions and approvals
+## Proposals, decisions, and signing
+
+### What is a proposal revision?
+neon1's options for a project are issued together as a numbered proposal, such as 0039-r1, and each option in it gets its own ID, such as 0039-r1-B. Issuing a revision freezes a copy of everything it shows, so what you approve is exactly what you read. If the options change, neon1 issues the next revision (0039-r2); earlier ones stay readable, marked as replaced. Each revision also shows when its prices were checked; after the recheck date, approval waits until neon1 refreshes it. [Watch it](/1NEON/live?play=propose).
 
 ### How do I approve an option?
 Open the project's **Needs** layer, compare the options, and choose **Approve this option**. You can add conditions, such as "only after 6pm". Then type your full name and tick the box to sign; your typed name is your signature. The approval is recorded with your signature, your name, the time, and a copy of the option's terms (title, description, price, hours, timeline, and outside costs) exactly as you saw them. Options come from neon1; to ask for a change, comment on the option. [Watch it](/1NEON/live?play=decide).
@@ -82,6 +85,12 @@ The person named as the project's decision maker. If nobody is named, an admin o
 
 ### Can an approval be changed?
 Not edited. Once approved, neither the decision nor the option it came from can be edited or removed. To change course, a new option is proposed and approved; the earlier decision stays on record, marked as replaced, so the history stays clear.
+
+### What does approving an option commit us to?
+An approval records that your organization agreed to that option as shown: its scope, cost, and timeline, plus any conditions you added. Both sides can rely on that record. It works alongside your signed agreement with neon1, which governs the paid work.
+
+### How do I accept a handover step?
+On the project's **Normalize** layer, steps that need your sign-off show **Check it and accept**. Note what you checked if you like, type your full name, and tick the box to sign. The acceptance is recorded with your signature and can't be edited afterwards. When the last step is accepted, neon1 prepares the final invoice. [Watch it](/1NEON/live?play=handover).
 
 ### What do Cost, Quality, and Effort mean?
 They're neon1's assessment of each option, from 1 to 5, where more filled dots is always better. **Cost** is the total cost. **Quality** is how fully it meets the requirements you agreed. **Effort** is your team's effort to adopt and run it. Each option also lists one-time and recurring charges apart, with a first-year total when it has both; the written price on the option is what you'd agree to. Figures in the demo and the walkthrough are illustrative. [Watch it](/1NEON/live?play=propose).
@@ -134,19 +143,24 @@ Your email address is how 1NEON knows you, and it can't be changed on your profi
 ### Who do I ask for access?
 An admin of your organization. Admins invite people and change their access. If you don't know who that is, or neon1's own access needs to change, email [hello@neon1.tech](mailto:hello@neon1.tech).
 
-## Support, billing, and your data
-
-### What does approving an option commit us to?
-An approval records that your organization agreed to that option as shown: its scope, cost, and timeline, plus any conditions you added. Both sides can rely on that record. It works alongside your signed agreement with neon1, which governs the paid work.
+## Invoices and paying
 
 ### Where are invoices and payments?
-Under the project's **Execute** layer, in **Invoices**. Each invoice opens on neon1's letterhead with its lines, due date, what has been paid, and what's left, ready to print or save as a PDF. Choose **Pay** to pay online by bank transfer (ACH, preferred) or card, through Stripe's secure page; 1NEON never sees your card or bank details. You can also pay by check, Zelle, or wire, and neon1 records it when it arrives. [Watch it](/1NEON/live?play=build).
+Under the project's **Execute** layer, in **Invoices**, with what's paid and what's left on each. When one is ready or overdue, **Next step** at the top of the project says so and links to it. Each invoice opens on neon1's letterhead with its number, lines, due date, and how to pay, ready to print or save as a PDF. [Watch it](/1NEON/live?play=pay).
+
+### How do I pay an invoice?
+Choose **Pay** on the invoice. Stripe's secure page opens, where you pay by bank transfer (ACH, preferred) or card; 1NEON never sees your bank or card details. A card payment shows as paid within a minute, and a bank transfer once it clears, usually in a few business days. You can also pay by check, Zelle, or wire, with the invoice number in the memo, and neon1 records it when it arrives. [Watch it](/1NEON/live?play=pay).
+
+### When are invoices sent?
+As the option you approved says. For a fixed price, half is invoiced when you approve, as a deposit, and the rest when you accept the handover. Items neon1 buys for you are billed at cost with the receipt, and a care plan is billed monthly. Invoices are due in 15 days unless the option says otherwise, and each one emails whoever is set to get billing notices. [Watch it](/1NEON/live?play=pay).
 
 ### Can an invoice be changed?
-Not once it's issued. An issued invoice is numbered and kept exactly as issued. A mistake is fixed with a credit that reduces it, or by voiding it with a reason, and both stay on record.
+Not once it's issued. An issued invoice is numbered and kept exactly as issued. A mistake is fixed with a credit that reduces it, or by voiding it with a reason, and both stay on record. An invoice that has a payment can't be voided.
 
 ### What is the service agreement?
-neon1's terms for all work with your organization: how work is agreed, paying, ownership, confidentiality, and how either of us can end it. An admin of your organization signs it once in 1NEON, under **Settings**, before the first option can be approved. You can read it any time at [/1NEON/agreement](/1NEON/agreement). [Watch it](/1NEON/live?play=decide).
+neon1's terms for all work with your organization: how work is agreed, paying, ownership, confidentiality, and how either of us can end it. An admin of your organization signs it once in 1NEON (open it from **Settings**), before the first option can be approved, and it covers every project. You can read it any time at [/1NEON/agreement](/1NEON/agreement). [Watch it](/1NEON/live?play=decide).
+
+## Support and your data
 
 ### Something urgent is wrong. Who do I tell?
 Email [hello@neon1.tech](mailto:hello@neon1.tech) with what happened and when. neon1 is one person working planned hours, with no 24/7 or emergency response, so for something that can't wait, such as a fraud on your bank account or an outage your business can't run without, contact the provider responsible first. Report a security problem in the portal itself to [security@neon1.tech](mailto:security@neon1.tech).
