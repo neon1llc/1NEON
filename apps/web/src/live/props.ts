@@ -37,6 +37,7 @@ export class MailWindow {
   constructor(private owner: string) {
     this.el = document.createElement("div");
     this.el.className = "live-prop live-mail";
+    this.el.setAttribute("role", "region");
     this.el.setAttribute("aria-label", "Maria's email (part of the demo)");
     this.el.innerHTML = `
       <div class="mail-top"><span class="mail-dots"><i></i><i></i><i></i></span><b>Mail</b><span class="mail-me"></span></div>
@@ -62,12 +63,14 @@ export class MailWindow {
       li.className = "mail-row unread";
       li.dataset.i = String(i);
       const preview = m.text.split("\n").find((l) => l.trim()) ?? "";
-      li.innerHTML = `<b class="mail-from"></b><span class="mail-when"></span><span class="mail-subj"></span><span class="mail-prev"></span>`;
+      // A native button inside the row, so someone who pauses can open a message with the keyboard too
+      li.innerHTML = `<button type="button" class="mail-open"><b class="mail-from"></b><span class="mail-when"></span><span class="mail-subj"></span><span class="mail-prev"></span></button>`;
       li.querySelector(".mail-from")!.textContent = FROM;
       li.querySelector(".mail-when")!.textContent = ago(m.at);
       li.querySelector(".mail-subj")!.textContent = m.subject;
       li.querySelector(".mail-prev")!.textContent = preview;
-      // A real click works too, when someone pauses and explores
+      // A real click or key press works too, when someone pauses and explores (the button's click
+      // bubbles here, and so does the demo cursor's click on the row)
       li.addEventListener("click", () => this.open(i));
       return li;
     }));
@@ -83,7 +86,11 @@ export class MailWindow {
   open(i: number) {
     const m = this.mails[i];
     if (!m) return;
-    for (const li of this.list.children) li.classList.toggle("on", (li as HTMLElement).dataset.i === String(i));
+    for (const li of this.list.children) {
+      const on = (li as HTMLElement).dataset.i === String(i);
+      li.classList.toggle("on", on);
+      li.querySelector("button")?.setAttribute("aria-pressed", String(on));
+    }
     this.list.children[i]?.classList.remove("unread");
     this.pane.querySelector(".mail-empty")?.remove();
     this.pane.querySelector(".mail-head")?.remove();
