@@ -73,7 +73,7 @@ export const PREVIEW: Show = {
         await s.click({ sel: ".options article:nth-child(2) button", text: "Approve this option" }, 600);
         await s.think("Just not before Saturday. That's our busiest day.");
         await s.type("#cond", "After the Saturday rush.");
-        await s.click({ sel: "dialog[open] button", text: /^Approve$/ }, 1200);
+        await s.click({ sel: "dialog[open] .actions button", text: /^Approve/ }, 1200);
         await s.top();
         await s.think("Written down, condition and all.");
         await s.hover(".decision", 1200);

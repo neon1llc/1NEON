@@ -4,6 +4,20 @@
 
 ## Unreleased
 
+### Added
+- Proposals are issued in numbered revisions, one proposal per project. neon1 issues a revision (the first is 0039-r1), which freezes a copy of everything the proposal shows; every option in it gets an ID such as 0039-r1-B, and the decision names it. Earlier revisions stay readable, marked as replaced, and none can be edited or deleted.
+- Approving restates exactly what's being accepted: the option and its ID, the proposal it's from, the estimate, the timeline, neon1's time, what's paid directly, what's to buy, and the result to check. An option edited after its revision was issued waits for the next revision.
+- A price check replaces expiry: a revision shows when its estimates were checked and when to recheck. After that date approval waits, the client can ask neon1 to refresh, and refreshing issues the next revision.
+- Purchases in Execute, filled in from the approved option's expected purchases and marked with its ID. Each shows its estimate, what was paid and where, who buys it, and its receipt, with a flag when a bought item has no receipt yet. Items neon1 buys need the decision maker's initials, on the approval or afterwards, and are paid back at cost.
+- Download a revision as a Word file. The proposal's ID travels in the file name, a document property, and the header on every page, so a marked-up copy uploaded to Files is recognized ("Is this a revision of Proposal 0039-r1?") and filed under Files → Proposals with the revision it answers.
+- Constraints and assumptions, as their own list in Needs and their own section of the proposal.
+- A request added after a decision asks whether it changes the agreed scope; one that does is flagged for the next revision.
+- Handover steps can be checked and accepted by the decision maker, with a note on what they checked.
+
+### Changed
+- The printed proposal shows the date its revision was issued, which no longer moves when an option is edited or approved, and only the acceptance recorded against that revision. Each printed page carries the proposal's ID and its page number, and a demo proposal says on every page that it's a fictional sample.
+- Maria's walkthrough reads the numbered proposal, sees the approval restate the terms, buys the label printer from her option and attaches the receipt, marks Sam's training done, and accepts the last handover step. The runbook she receives is a full page instead of one line.
+
 ### Fixed
 - A guided walkthrough no longer stops at "One moment…" for someone whose Projects page is set to Timeline. The walkthrough keeps its own List or Timeline choice, last organization, and loading background in memory, so it never reads or changes the visitor's own, and it opens a project from either layout.
 - Before Start (with reduced motion on, or in a tab opened in the background), Back, On, and the chapter list start the walkthrough at the chosen chapter instead of throwing an error.

@@ -13,7 +13,7 @@ async function word(name: string, opts: { prop?: string; header?: string }) {
   if (opts.prop) z.file("docProps/custom.xml", `<Properties xmlns:vt="x"><property fmtid="{x}" pid="2" name="neon1-proposal-id"><vt:lpwstr>${opts.prop}</vt:lpwstr></property></Properties>`);
   if (opts.header) z.file("word/header1.xml", `<w:hdr><w:p><w:r><w:t>${opts.header}</w:t></w:r></w:p></w:hdr>`);
   z.file("word/document.xml", "<w:document/>");
-  return new File([await z.generateAsync({ type: "uint8array" })], name);
+  return new File([await z.generateAsync({ type: "arraybuffer" })], name);
 }
 
 describe("markup recognition", () => {
