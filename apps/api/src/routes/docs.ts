@@ -73,7 +73,8 @@ export function docRoutes(app: App, k: Kit) {
     }
     if (input.itemId) {
       const item = input.projectId ? await repo.getItem(t.id, input.projectId, input.itemId) : undefined;
-      if (!item || item.kind !== "file_request") fail(400, "invalid", "Files can only answer a \"file needed\" item in the same project.");
+      // A file answers a "file needed" item, is a purchase's receipt, or is a markup of a proposal revision
+      if (!item || !["file_request", "purchase", "proposal"].includes(item.kind)) fail(400, "invalid", "Files can only answer a \"file needed\" item, a purchase, or a proposal in the same project.");
     }
     const ts = now();
     const x = DocumentRecord.parse({ ...input, tenantId: t.id, id: newId("d"), key: "", scan: "pending", uploaded: false, version: 1, createdAt: ts, updatedAt: ts, updatedBy: actorId(c) });

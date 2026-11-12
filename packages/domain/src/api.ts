@@ -109,8 +109,18 @@ export const UpdateItemInput = z.object({
 });
 
 
-// Approval pins the option version shown to the approver
-export const ApproveInput = z.object({ version: z.number().int(), conditions: z.string().max(2000).default("") });
+// Approval pins the option version shown to the approver. Initials agree that neon1 buys the items the
+// option lists for neon1 to buy, paid back at cost; they're required only when it lists any
+export const ApproveInput = z.object({ version: z.number().int(), conditions: z.string().max(2000).default(""), initials: z.string().trim().max(8).optional() });
+
+// neon1 issues the next revision of a project's proposal, saying what changed
+export const IssueInput = z.object({ note: z.string().trim().max(1000).default("") });
+
+// A decision maker agrees, by initials, that neon1 buys one item to be paid back at cost
+export const AgreeInput = z.object({ version: z.number().int(), initials: z.string().trim().min(1).max(8) });
+
+// The client accepts a handover step, with an optional note
+export const AcceptInput = z.object({ version: z.number().int(), note: z.string().trim().max(500).default("") });
 
 
 // The signed-in person's own profile

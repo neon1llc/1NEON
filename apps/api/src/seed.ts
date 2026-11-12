@@ -4,6 +4,7 @@
 
 import { CalEvent, DEFAULT_STAGES, Item, formatClientId, newId, rankBetween, type Member, type Project, type Tenant, type User } from "@1neon/domain";
 import type { Repo } from "./store/repo.ts";
+import { issueProposal } from "./proposals.ts";
 
 
 // ISO timestamp `offset` days from now, so demo data always looks recent
@@ -73,12 +74,15 @@ export async function seed(repo: Repo, operatorEmail = "pradeep@neon1.tech") {
   await item(intake, "requirement", "Patients upload once; nothing is retyped", { fields: { priority: "must" } });
   await item(intake, "requirement", "Staff see at a glance what's complete", { fields: { priority: "should" } });
   await item(intake, "option", "A. Tidy the inbox: rules, templates, and a checklist", { status: "proposed", body: "Fastest, cheapest. Keeps email as the system.", fields: { cost: "$900 fixed", hours: "about 5 hours", costScore: 5, qualityScore: 2, effortScore: 5, timeline: "1 week", recommended: false } });
-  await item(intake, "option", "B. Small intake portal on AWS", { status: "proposed", body: "Patients upload once; the office sees status at a glance. Runs in your AWS account.", fields: { cost: "$6,500 fixed", hours: "about 36 hours", outsideCosts: "About $15/mo to AWS, billed to you", result: "A complete intake reaches the patient record without retyping, the same day.", costScore: 3, qualityScore: 5, effortScore: 3, timeline: "4 weeks", recommended: true } });
+  await item(intake, "option", "B. Small intake portal on AWS", { status: "proposed", body: "Patients upload once; the office sees status at a glance. Runs in your AWS account.", fields: { cost: "$6,500 fixed", hours: "about 36 hours", outsideCosts: "About $15/mo to AWS, billed to you", result: "A complete intake reaches the patient record without retyping, the same day.", costScore: 3, qualityScore: 5, effortScore: 3, timeline: "4 weeks", recommended: true, purchases: [{ name: "Document scanner for the front desk", why: "Paper forms patients bring in go straight into the portal", example: "Fujitsu ScanSnap iX1600 or similar", estimate: "$400-$500", buyer: "client" }] } });
   await item(intake, "option", "C. Practice-management add-on", { status: "proposed", body: "Vendor module; less control, monthly per-seat fee.", fields: { cost: "$1,000 fixed", hours: "about 6 hours", outsideCosts: "$240/mo to the vendor", costScore: 3, qualityScore: 3, effortScore: 4, timeline: "2 weeks", recommended: false } });
   await item(intake, "metric", "Intake turnaround", { fields: { category: "performance", unit: "hours", direction: "down", baseline: 62, baselineDate: day(-25).slice(0, 10), target: 4, readings: [] } });
   await item(intake, "metric", "Staff minutes per intake", { fields: { category: "performance", unit: "min", direction: "down", baseline: 24, baselineDate: day(-25).slice(0, 10), target: 8, readings: [] } });
   await item(intake, "file_request", "Upload a blank copy of the current intake form", { assigneeId: dana.id, dueDate: day(-2).slice(0, 10) });
   await item(intake, "handoff", "Accounts are in the client's name", { dueDate: day(20).slice(0, 10) });
+  await item(intake, "constraint", "Changes to the patient record system happen after 6pm", { body: "The front desk uses it all day; any downtime is scheduled after hours." });
+  // The proposal as neon1 issued it, so its options can be approved (Proposal 0039 r1)
+  await issueProposal(repo, acme, intake, { id: pradeep.id, name: pradeep.name });
 
   // Acme: work in progress, at risk
   const backup = await project(acme, "SEC-1", "Backups that restore", "build", "at_risk", "Nightly backups exist but have never been restored.", [{ userId: pradeep.id, role: "lead_engineer" }, { userId: dana.id, role: "tech_contact" }], 9);

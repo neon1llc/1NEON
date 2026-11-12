@@ -203,10 +203,14 @@ export const ItemKind = z.enum([
   "option", // Needs: a proposal option scored on cost, quality, effort
   "decision", // Needs: immutable record of the approved option
   "file_request", // Needs: "please upload X"
+  "constraint", // Needs: a constraint or assumption the work depends on (printed in the proposal)
+  "proposal", // Needs: one issued, frozen revision of the project's proposal (made only by the issue route)
   "task", // Execute
   "milestone", // Execute
   "change", // Execute: change request against the decision
   "update", // Execute: health update
+  "purchase", // Execute: something to buy for the agreed option, with its receipt
+  "signoff", // Execute: an approval needed from outside (landlord, building, a licensed trade)
   "metric", // Observe
   "check", // Observe
   "incident", // Observe
@@ -236,10 +240,14 @@ export const KIND_LAYER: Record<ItemKind, Layer> = {
   option: "needs",
   decision: "needs",
   file_request: "needs",
+  constraint: "needs",
+  proposal: "needs",
   task: "execution",
   milestone: "execution",
   change: "execution",
   update: "execution",
+  purchase: "execution",
+  signoff: "execution",
   metric: "observation",
   check: "observation",
   incident: "observation",
@@ -255,6 +263,10 @@ export const KIND_LAYER: Record<ItemKind, Layer> = {
 export const STATUSES: Partial<Record<ItemKind, readonly string[]>> = {
   option: ["draft", "proposed", "declined"],
   decision: [],
+  // Revisions are issued and replaced only by the proposal routes
+  proposal: [],
+  // To buy (open), bought, installed (done), or returned
+  purchase: ["open", "bought", "done", "returned"],
 };
 // Every other kind is a simple work item
 export const WORK_STATUSES = ["open", "doing", "blocked", "done"] as const;
@@ -297,6 +309,17 @@ export type Item = z.infer<typeof Item>;
 
 
 // Kind-specific fields. Unknown kinds store free-form fields
+/** One expected purchase on an option: what, why, an example, an estimated price, and who buys it */
+export const PurchaseLine = z.object({
+  name: z.string().trim().min(1).max(120),
+  why: z.string().max(300).default(""),
+  example: z.string().max(300).default(""),
+  estimate: z.string().max(80).default(""),
+  buyer: z.enum(["client", "neon1"]).default("client"),
+});
+export type PurchaseLine = z.infer<typeof PurchaseLine>;
+
+
 export const OptionFields = z.object({
   cost: z.string().max(80).default(""),
   costScore: Score.default(3),
@@ -309,7 +332,11 @@ export const OptionFields = z.object({
   hours: z.string().max(80).default(""),
   outsideCosts: z.string().max(160).default(""),
   result: z.string().max(300).default(""),
+  // What the option expects to be bought, each with who buys it (the client, unless agreed otherwise)
+  purchases: z.array(PurchaseLine).max(30).default([]),
 });
+
+
 
 
 // The material terms of an option exactly as approved, copied into the decision at approval time
@@ -325,6 +352,7 @@ export const DecisionTerms = z.object({
   qualityScore: Score.optional(),
   effortScore: Score.optional(),
   recommended: z.boolean().optional(),
+  purchases: z.array(PurchaseLine).max(30).optional(),
 });
 export type DecisionTerms = z.infer<typeof DecisionTerms>;
 
@@ -343,6 +371,11 @@ export const DecisionFields = z.object({
   approverEmail: z.string().max(254).optional(),
   // Earlier decisions on the same project that this one replaces; they stay readable as they were
   supersedes: z.array(id).max(50).optional(),
+  // The issued revision the option was approved from, and its ID there (0039-r2-B)
+  proposalId: id.optional(),
+  code: z.string().max(24).optional(),
+  // The approver's initials agreeing that neon1 buys the listed items, to be paid back at cost
+  initials: z.string().max(8).optional(),
 });
 
 
@@ -366,8 +399,39 @@ export const RequirementFields = z.object({ priority: z.enum(["must", "should", 
 export const UpdateFields = z.object({ health: Health });
 
 
+// Who agreed, by initials, that neon1 buys an item for the client and is paid back at cost
+export const Agreement = z.object({ by: id, name: z.string().max(80), initials: z.string().trim().min(1).max(8), at: isoDate });
+
+
+/** A purchase in Execute: estimated and actual cost, where it was bought, who buys it, and the agreement
+ * when neon1 buys it. The receipt is a file whose itemId is the purchase */
+export const PurchaseFields = z.object({
+  estimate: z.string().max(80).default(""),
+  actual: z.string().max(80).default(""),
+  vendor: z.string().max(120).default(""),
+  why: z.string().max(300).default(""),
+  example: z.string().max(300).default(""),
+  buyer: z.enum(["client", "neon1"]).default("client"),
+  // The option it came from (0039-r2-B), when it came from an approval
+  from: z.string().max(24).optional(),
+  agreed: Agreement.optional(),
+});
+
+
+// A handover step the client accepted, with who, when, and a note
+export const HandoffFields = z.object({
+  accepted: z.object({ by: id, name: z.string().max(80), at: isoDate, note: z.string().max(500).default("") }).optional(),
+});
+
+
+// A request on a decided project says whether it changes what was agreed
+export const RequestScope = z.enum(["yes", "no", "unsure"]);
+
+
 // Which kinds validate their fields, and with which schema
 export const itemFields: Partial<Record<ItemKind, z.ZodType>> = {
+  purchase: PurchaseFields,
+  handoff: HandoffFields,
   option: OptionFields,
   decision: DecisionFields,
   metric: MetricFields,

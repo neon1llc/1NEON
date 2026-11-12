@@ -346,6 +346,7 @@ describe("approvals", () => {
     const p = (await call(OP, "POST", `/t/${s.acme.id}/projects`, { name: "No decider" })).json;
     const path = `/t/${s.acme.id}/projects/${p.id}`;
     const o = await call(OP, "POST", `${path}/items`, { kind: "option", title: "Only option", status: "proposed" });
+    expect((await call(OP, "POST", `${path}/proposals`, {})).status).toBe(201);
     expect((await call(OP, "POST", `${path}/items/${o.json.id}/approve`, { version: 1 })).json.error).toBe("not_decider");
     expect((await call(dana, "POST", `${path}/items/${o.json.id}/approve`, { version: 1 })).json.error).toBe("not_decider");
     expect((await call(raj, "POST", `${path}/items/${o.json.id}/approve`, { version: 1 })).status).toBe(201);

@@ -84,6 +84,8 @@ describe("approved terms", () => {
     const first = await call(s.raj.email, "POST", `${path}/items/${option.id}/approve`, { version: option.version });
     const next = await call(OP, "POST", `${path}/items`, { kind: "option", title: "Revised plan", status: "proposed", fields: { cost: "$2,000" } });
     expect(next.status).toBe(201);
+    // A new option is approved from the next revision, which neon1 issues
+    expect((await call(OP, "POST", `${path}/proposals`, { note: "Adds a revised plan" })).status).toBe(201);
     const second = await call(s.raj.email, "POST", `${path}/items/${next.json.id}/approve`, { version: next.json.version });
     expect(second.status).toBe(201);
     expect(second.json.decision.fields.supersedes).toEqual([first.json.decision.id]);
