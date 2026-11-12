@@ -109,6 +109,15 @@ describe("signed approvals", () => {
     expect((await call(OP, "GET", path)).json.items.some((i: { kind: string }) => i.kind === "invoice")).toBe(true);
   });
 
+  it("tells the client when an invoice is issued, never about neon1's drafts", async () => {
+    const { draft, path } = await approveB();
+    await call(OP, "POST", `${path}/invoices`, { type: "progress", lines: [{ text: "Week one", unitCents: 50_000 }] });
+    const feed = async () => (await call(s.raj.email, "GET", `/t/${s.acme.id}/notifications`)).json.events.map((e: { action: string }) => e.action);
+    expect(await feed()).not.toContain("invoice.drafted");
+    await call(OP, "POST", `${path}/invoices/${draft.id}/issue`, { version: draft.version });
+    expect(await feed()).toContain("invoice.issued");
+  });
+
   it("drafts no deposit when the price isn't fixed", async () => {
     const { opt, path } = await flow();
     const c = opt("C");

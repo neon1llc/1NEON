@@ -258,7 +258,7 @@ export function billingRoutes(app: App, k: Kit, pay: ReturnType<typeof stripeWeb
     if (left <= 0) fail(409, "not_open", "Nothing is owed on this invoice.");
     const t = c.get("tenant");
     const f = InvoiceFields.parse(it.fields);
-    const back = `${cfg.publicUrl}/1NEON/${t.slug}/projects/${p.key}`;
+    const back = `${cfg.publicUrl}/1NEON/o/${t.slug}/projects/${p.key}/execute`;
     const s = await k.d.payments.checkout({
       amountCents: left, invoiceNumber: f.number!, description: `${t.name}, ${p.key} ${p.name}`, email: who(c).user.email,
       successUrl: `${back}?paid=${it.id}`, cancelUrl: `${back}?invoice=${it.id}`,

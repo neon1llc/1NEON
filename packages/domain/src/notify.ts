@@ -25,12 +25,17 @@ export const NOTIFY_GROUPS: NotifyGroup[] = [
   { id: "files", label: "Files", hint: "A file is uploaded or removed", level: "critical", email: true, match: (a) => a.startsWith("doc.") },
   { id: "access", label: "People and access", hint: "Someone is invited, joins, or gets a different access level", level: "critical", email: true, match: (a) => a === "member.invited" || a === "member.joined" || a === "member.updated" },
   { id: "decisions", label: "Decisions and options", hint: "An option is proposed or approved, a proposal is issued, or a refresh is asked for", level: "critical", email: true, match: (a) => a === "decision.approved" || a.startsWith("option.") || a === "proposal.issued" || a === "proposal.refresh_asked" || a === "purchase.agreed" || a === "handoff.accepted" },
+  { id: "billing", label: "Agreements, invoices, and payments", hint: "The service agreement is signed, an invoice is issued or voided, or a payment arrives or fails", level: "critical", email: true, match: (a) => a === "agreement.signed" || a === "invoice.issued" || a === "invoice.voided" || a.startsWith("payment.") },
   { id: "workflow", label: "Workflow and stages", hint: "A project moves stage, or the board's stages change", level: "critical", email: true, match: (a) => a === "project.moved" || a === "org.stages" || a === "project.created" || a === "project.trashed" },
   // Comments come before the item catch-all below, whose pattern would otherwise claim comment.created
   { id: "comments", label: "Comments", hint: "Someone comments on an item", level: "normal", email: false, match: (a) => a === "comment.created" },
   { id: "updates", label: "Updates and items", hint: "Status updates, requests, tasks, measures, calendar events, and other items", level: "normal", email: false, match: (a) => /^[a-z_]+\.(created|updated|deleted)$/.test(a) || a === "project.updated" },
   { id: "signins", label: "Sign-ins", hint: "Someone in the organization signs in", level: "info", email: false, match: (a) => a === "member.signedin" },
 ];
+
+
+/** Actions only neon1 hears about: its own working drafts, which a client sees once issued */
+export const neon1Only = (action: string) => action === "invoice.drafted";
 
 
 /** The group an audit action belongs to; unknown actions count as updates */
