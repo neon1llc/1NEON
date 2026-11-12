@@ -2,6 +2,12 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.4.3 - 2026-11-12
+
+### Changed
+- The privacy, terms, and cookie pages name their Knowledge Center copies as the page for search engines to credit, so a search for neon1 shows the site instead of a portal screen.
+- The portal lists neon1.tech's 192px matrix green icon first, the one search results show.
+
 ## v0.4.2 - 2026-11-12
 
 ### Changed

@@ -34,6 +34,10 @@ describe("headFor", () => {
     for (const p of paths) expect(headFor(p).description.length).toBeGreaterThan(20);
   });
 
+  it("credits the knowledge center's copy of each policy", () => {
+    for (const p of ["privacy", "terms", "cookies"]) expect(headFor(`/1NEON/${p}`).canonical).toBe(`https://neon1.tech/knowledge/policies/${p}/`);
+  });
+
   it("never canonicalizes unrelated routes to the home page", () => {
     for (const p of ["/1NEON/privacy", "/1NEON/o/a/workspace", "/1NEON/demo/"]) expect(headFor(p).canonical ?? "").not.toMatch(/^https:\/\/neon1\.tech\/?$/);
   });
