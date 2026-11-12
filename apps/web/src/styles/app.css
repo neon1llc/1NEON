@@ -450,7 +450,7 @@ html:has(.signin), html:has(.signin) body { background: var(--void); color-schem
 }
 
 /* Plain labels in forms and dialogs */
-form label:not(.card):not(.chip):not(.field):not(.remember):not(.sms-consent):not(.field-label), dialog label { display: block; font: 12px var(--mono); color: var(--muted); margin-bottom: 6px; }
+form label:not(.card):not(.chip):not(.field):not(.remember):not(.sms-consent):not(.field-label):not(.notify-kind), dialog label { display: block; font: 12px var(--mono); color: var(--muted); margin-bottom: 6px; }
 fieldset legend { font: 12px var(--mono); color: var(--muted); }
 .chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
@@ -930,7 +930,7 @@ body:has(.demo-bar) .top { top: var(--demo-h); }
 .bell-empty { padding: 14px; margin: 0; }
 @media (max-width: 640px) { .bell-list { position: fixed; left: 12px; right: 12px; top: 64px; width: auto; } }
 @media (prefers-reduced-motion: reduce) { .bell-btn.breathing { animation: none; background: var(--accent-soft); } }
-/* The profile's notification choices: one row per kind, email and text columns */
+/* The profile's notification choices: one row per kind for email; texts in their own block below */
 .notify { display: grid; gap: 8px; }
 .notify-table { width: 100%; border-collapse: collapse; }
 .notify-table th, .notify-table td { padding: 8px 6px; border-top: 1px solid var(--line); text-align: left; vertical-align: middle; font-weight: 400; }
@@ -943,6 +943,13 @@ body:has(.demo-bar) .top { top: var(--demo-h); }
 /* The yes to texts: a checkbox with the carrier wording beside it */
 .notify .sms-consent { display: grid; font: 13px/1.5 var(--sans, inherit); color: var(--text); letter-spacing: 0; text-transform: none; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg); font-size: 13px; line-height: 1.5; }
 .notify .sms-consent input { width: 18px; height: 18px; min-height: 0; margin-top: 2px; accent-color: var(--accent); }
+/* Text messages: apart from email so nothing in it starts ticked; kinds wrap two across */
+.notify-texts { display: grid; gap: 8px; border: 0; border-top: 1px solid var(--line); padding: 12px 0 0; margin: 4px 0 0; min-width: 0; }
+.notify-texts legend { float: left; width: 100%; padding: 0; margin-bottom: 8px; font: 11px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.notify-text-kinds { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 16px; }
+.notify-kind { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--text); cursor: pointer; }
+.notify-kind.off { color: var(--muted); cursor: default; }
+.notify-text-kinds input { width: 18px; height: 18px; min-height: 0; accent-color: var(--accent); }
 
 /* New project: one measure per card; four across on wide screens, name on its own row on phones */
 .metric-draft { padding: 14px; display: grid; gap: 10px; grid-template-columns: 2fr 1fr 1fr 1fr; align-items: end; }

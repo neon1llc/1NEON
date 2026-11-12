@@ -2,6 +2,11 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## Unreleased
+
+### Changed
+- Text messages have their own block under Notifications on your profile, apart from the email choices. The yes to texts and every kind of text start unticked, and the kinds stay off until you agree to texts. The email column keeps its defaults.
+
 ## v0.4.1 - 2026-11-12
 
 ### Fixed
