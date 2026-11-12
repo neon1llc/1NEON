@@ -8,7 +8,7 @@ import { liveEngine } from "../lib/api.ts";
 import { opening } from "./opening.ts";
 import type { Show } from "./player.ts";
 import { MARIA } from "./seed.ts";
-import { base, finishWork, handOver, KEY, moveTo, planWork, proposeOptions, tid } from "./story.ts";
+import { base, finishWork, handOver, KEY, moveTo, planWork, proposeOptions, signAgreementAsMaria, tid } from "./story.ts";
 
 
 // The project the preview works in, and its pages
@@ -56,7 +56,8 @@ export const PREVIEW: Show = {
       title: "Compare options",
       run: async (s) => {
         await s.say("neon1 answers with three options, each with its cost and tradeoffs");
-        await s.others(proposeOptions, 900, "Pradeep proposed three options");
+        // She signed neon1's service agreement when the bakery joined (the full story shows it)
+        await s.others(async () => { await signAgreementAsMaria(); await proposeOptions(); }, 900, "Pradeep proposed three options");
         await s.top();
         await s.click({ sel: "a, button", text: "Compare options" }, 1000);
         await s.think("A is cheap, but it only fixes the form.");
@@ -73,7 +74,9 @@ export const PREVIEW: Show = {
         await s.click({ sel: ".options article:nth-child(2) button", text: "Approve this option" }, 600);
         await s.think("Just not before Saturday. That's our busiest day.");
         await s.type("#cond", "After the Saturday rush.");
-        await s.click({ sel: "dialog[open] .actions button", text: /^Approve/ }, 1200);
+        await s.type("#approve-sign-name", "Maria Lopez");
+        await s.click("#approve-sign-name ~ .sign-consent input", 400);
+        await s.click({ sel: "dialog[open] .actions button", text: /^Sign and approve/ }, 1200);
         await s.top();
         await s.think("Written down, condition and all.");
         await s.hover(".decision", 1200);

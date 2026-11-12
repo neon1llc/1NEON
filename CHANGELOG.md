@@ -2,6 +2,11 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.5.2 - 2026-11-12
+
+### Fixed
+- The two-minute walkthrough at /1NEON/live plays to the end again. Approving now needs a typed signature and a signed service agreement, and the short version stopped at the approval; Maria now signs both, as in the full story.
+
 ## v0.5.1 - 2026-11-12
 
 ### Changed

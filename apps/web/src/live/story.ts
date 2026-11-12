@@ -89,6 +89,14 @@ export async function proposeOptions() {
   await moveTo("decide");
 }
 
+/** Maria signs neon1's service agreement through the API, for the short preview, which skips reading it */
+export async function signAgreementAsMaria() {
+  const t = await tid();
+  const e = await engine();
+  const a = await e.actAs<{ edition: string; hash: string; signed?: unknown }>(MARIA, `/t/${t}/agreement`);
+  if (!a.signed) await e.actAs(MARIA, `/t/${t}/agreement/sign`, "POST", { edition: a.edition, hash: a.hash, typedName: "Maria Lopez", consent: true });
+}
+
 /** The plan: a milestone, three tasks, and a first update */
 export async function planWork() {
   await add("milestone", "Staff trial starts", { dueDate: new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 10) });
