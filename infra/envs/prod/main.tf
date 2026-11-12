@@ -50,6 +50,13 @@ module "storage" {
 }
 
 
+# Locked copies of signed and billing records (Object Lock, seven years)
+module "records" {
+  source = "../../modules/records"
+  name   = "neon1-1neon-records-prod"
+}
+
+
 # SES sending from notify.neon1.tech
 module "mail" {
   source  = "../../modules/mail"
@@ -68,6 +75,8 @@ module "api" {
   table_name            = module.data.name
   docs_bucket           = module.storage.bucket
   docs_bucket_arn       = module.storage.bucket_arn
+  records_bucket        = module.records.bucket
+  records_bucket_arn    = module.records.bucket_arn
   public_url            = local.public_url
   auth_domain           = local.auth_domain
   mail_from             = module.mail.from
