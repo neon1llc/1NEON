@@ -306,7 +306,13 @@ function SignIn() {
       <div className="panel glass">
         <Wordmark />
         {/* Who this is for, before anyone types: clients, by invitation */}
-        {!PICKER && (
+        {/* Who this is for, worded and sized the same on the real sign-in and the demo's picker */}
+        {PICKER ? (
+          <>
+            <h2 className="signin-h">Interactive demo</h2>
+            <p className="signin-lead">A working copy of 1NEON with made-up clients. Everything you do stays in this browser.</p>
+          </>
+        ) : (
           <>
             <h2 className="signin-h">Client portal</h2>
             <p className="signin-lead">For neon1 clients. Access is by invitation.</p>
@@ -318,13 +324,11 @@ function SignIn() {
         {/* The demo: no accounts, just pick who to be */}
         {PICKER && (
           <div className="dev demo-pick" aria-label="Demo people">
-            <p className="fine">A working copy of 1NEON with made-up clients. Everything you do stays in this browser.</p>
             <TabOnly />
             <p className="eyebrow">Try it as</p>
             {PEOPLE.map(([e, name, role]) => (
               <button key={e} onClick={() => pick(e)}><b>{name}</b><span>{role}</span></button>
             ))}
-            <p className="fine"><a href="/1NEON/live">Or watch the guided walkthrough</a></p>
           </div>
         )}
         {/* Step 1: the email */}
@@ -371,7 +375,12 @@ function SignIn() {
           <Link to="/faqs">FAQs</Link> · <Link to="/cookies">Cookies</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
         </p>
         {/* Not a client yet: the sample and the demo are one click away, with no sign-in to attempt.
-            Kept out of the demo, which is already one of them */}
+            The demo, already one of them, offers the guided walkthrough in the same place instead */}
+        {PICKER && (
+          <nav className="signin-more" aria-label="Another way to see it">
+            <a href="/1NEON/live">Or watch the guided walkthrough</a>
+          </nav>
+        )}
         {!IN_DEMO && (
           <nav className="signin-more" aria-label="Without an account">
             <a href="/1NEON/example">Read a sample project</a>
