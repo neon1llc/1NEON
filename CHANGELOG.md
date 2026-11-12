@@ -8,6 +8,9 @@
 - In the interactive demo, Switch person starts the next person at their own home, instead of on a page from an organization they can't open.
 - In a paused walkthrough, the messages in Maria's pretend inbox are buttons, so they open from the keyboard as well as with a click.
 
+### Changed
+- Help says how someone who has lost every second step gets back in: an email from the account's address, then a call to a phone number already on record and, where there is one, another admin's written OK, before anything is removed.
+
 ## v0.4.2 - 2026-11-12
 
 ### Changed
