@@ -14,6 +14,7 @@ import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, ConflictDialog, Dialog, Empty, Health, HEALTH_LABEL, LayerBadge, LAYERS, layerHint, layerName, layerProgress, OnionProgress, Trend, ago, dateLabel, daysSince, layerFromSlug, layerSlug, useToast } from "../components/ui.tsx";
 import { api, DEMO, HttpError } from "../lib/api.ts";
 import { firstYear, money, parseCost, type Recurring } from "../lib/cost.ts";
+import { handoverSummary } from "../lib/handover.ts";
 import { numberProblem, optionalNumber } from "../lib/measures.ts";
 import { problem, useMembers, useProject, useProjects, useRefresh, useSubmit } from "../lib/hooks.ts";
 import { aimBetween } from "../lib/motion.ts";
@@ -148,13 +149,26 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
     refresh();
   };
   // Closed ends a project; Reopen puts it back a stage, from where it moves anywhere like any project
-  if (closed) return (
-    <div className="next-step" data-tour="next-step" role="status">
-      <span className="eyebrow">Closed</span>
-      <p>This project is closed. {canWrite ? `Reopen it to pick the work back up in ${back?.name ?? "an earlier stage"}.` : "Nothing more is planned."}</p>
-      {canWrite && back && <button className="btn btn-primary btn-sm" onClick={() => void moveTo(back, "reopened in")}>Reopen</button>}
-    </div>
-  );
+  // A closed project leads with the short version of its handover, the line a client forwards on
+  if (closed) {
+    const h = handoverSummary(items, names);
+    const [doneSteps, allSteps] = h.handoff;
+    return (
+      <div className="next-step handover" data-tour="next-step" role="status">
+        <span className="eyebrow">{h.empty ? "Closed" : "Handed over"}</span>
+        {!h.empty && (
+          <dl className="handover-list">
+            {(h.agreed || h.changes.length > 0) && <><dt>What changed</dt><dd>{h.agreed && <b>{h.agreed}</b>}{h.agreed && h.changes.length > 0 && ". "}{h.changes.join(", ")}{h.changes.length > 0 && "."}</dd></>}
+            {h.results.length > 0 && <><dt>The result</dt><dd>{h.results.map((r, n) => <span key={r.title}>{n > 0 && "; "}{r.title}: {r.before && r.now ? <>{r.before} to <b>{r.now}</b></> : <b>{r.now ?? r.before}</b>}{r.target && ` (target ${r.target}${r.reached ? ", reached" : ""})`}</span>)}.</dd></>}
+            {h.owners.length > 0 && <><dt>Who owns what</dt><dd>{h.owners.map((o, n) => <span key={o.title}>{n > 0 && "; "}{o.title}: {o.owner ?? "no owner named yet"}</span>)}.</dd></>}
+            {allSteps > 0 && <><dt>Handoff checklist</dt><dd>{doneSteps} of {allSteps} done.</dd></>}
+          </dl>
+        )}
+        <p>{h.empty ? "This project is closed. " : ""}{canWrite ? `Reopen it to pick the work back up in ${back?.name ?? "an earlier stage"}.` : h.empty ? "Nothing more is planned." : "The full handover is under Normalize."}</p>
+        {canWrite && back && <button className="btn btn-primary btn-sm" onClick={() => void moveTo(back, "reopened in")}>Reopen</button>}
+      </div>
+    );
+  }
   // Once an option is approved, the others stop asking for a decision. The one named is the current
   // agreement (the decision nothing later replaced), never simply the first approved option (AUTH-P06)
   const approved = currentDecision(items).option;
