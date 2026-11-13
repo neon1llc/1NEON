@@ -27,7 +27,7 @@ export async function issueProposal(repo: Repo, t: Pick<Tenant, "id" | "name" | 
   await repo.table.write([
     repo.itemOp(issued, { create: true }),
     ...(old ? [repo.itemOp({ ...old, status: "superseded", version: old.version + 1, updatedAt: ts, updatedBy: by.id }, { version: old.version })] : []),
-    repo.auditOp({ tenantId: p.tenantId, actorId: by.id, action: "proposal.issued", target: issued.id, summary: `${p.key}: issued Proposal ${proposalRef(number, rev)}${note ? `: ${note}` : ""}` }),
+    repo.auditOp({ tenantId: p.tenantId, actorId: by.id, action: "proposal.issued", target: issued.id, summary: `${p.key}: issued Proposal ${proposalRef(number, rev)}${note ? `: ${note}` : ""}` }, ts),
   ]);
   return { issued };
 }

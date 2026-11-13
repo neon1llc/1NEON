@@ -2,7 +2,7 @@
 // sample clients.
 
 
-import { AGREEMENT_EDITION, AGREEMENT_TEXT, CalEvent, InvoiceFields, alignPrice, canonical, depositLines, finalLines, invoiceNumber, invoiceTotal, DEFAULT_STAGES, Item, formatClientId, newId, rankBetween, sha256Hex, signature, type Member, type Project, type Tenant, type User } from "@1neon/domain";
+import { AGREEMENT_EDITION, AGREEMENT_TEXT, CalEvent, InvoiceFields, alignPrice, assessed, canonical, depositLines, finalLines, invoiceNumber, invoiceTotal, DEFAULT_STAGES, Item, formatClientId, newId, rankBetween, sha256Hex, signature, type Member, type Project, type Tenant, type User } from "@1neon/domain";
 import type { Repo } from "./store/repo.ts";
 import { issueProposal } from "./proposals.ts";
 
@@ -58,11 +58,13 @@ export async function seed(repo: Repo, operatorEmail = "pradeep@neon1.tech") {
 
   let rank = "";
   // Project and item helpers with ranks appended in creation order
-  const project = async (t: Tenant, key: string, name: string, stageId: string, health: Project["health"], summary: string, people: Project["people"], daysInStage: number) => {
+  const project = async (t: Tenant, key: string, name: string, stageId: string, health: Project["health"], summary: string, people: Project["people"], daysInStage: number, assessedDaysAgo = daysInStage) => {
     rank = rankBetween(rank, "");
-    const p: Project = { tenantId: t.id, id: newId("p"), key, name, summary, outcome: "", template: "blank", stageId, stageEnteredAt: day(-daysInStage), health, rank, people, flags: [], archived: false, version: 1, createdAt: t0, updatedAt: day(-daysInStage), updatedBy: pradeep.id, targetDate: day(30).slice(0, 10) };
+    // Made about four days before each stage it has passed, so the activity record reads in order
+    const made = day(-Math.min(30, daysInStage + 4 * Math.max(0, DEFAULT_STAGES.findIndex((g) => g.id === stageId))));
+    const p: Project = { tenantId: t.id, id: newId("p"), key, name, summary, outcome: "", template: "blank", stageId, stageEnteredAt: day(-daysInStage), health, rank, people, flags: [], archived: false, version: 1, createdAt: made, updatedAt: day(-daysInStage), updatedBy: pradeep.id, targetDate: day(30).slice(0, 10), ...assessed(health, pradeep.id, day(-assessedDaysAgo)) };
     await repo.saveProject(p, { create: true });
-    await repo.table.write([repo.auditOp({ tenantId: t.id, actorId: pradeep.id, action: "project.created", target: p.id, summary: `Created ${key} ${name}` })]);
+    await repo.table.write([repo.auditOp({ tenantId: t.id, actorId: pradeep.id, action: "project.created", target: p.id, summary: `Created ${key} ${name}` }, made)]);
     return p;
   };
   let irank = "";
@@ -92,10 +94,10 @@ export async function seed(repo: Repo, operatorEmail = "pradeep@neon1.tech") {
   await item(intake, "handoff", "Accounts are in the client's name", { dueDate: day(20).slice(0, 10) });
   await item(intake, "constraint", "Changes to the patient record system happen after 6pm", { body: "The front desk uses it all day; any downtime is scheduled after hours." });
   // The proposal as neon1 issued it, so its options can be approved (Proposal 0039 r1)
-  await issueProposal(repo, acme, intake, { id: pradeep.id, name: pradeep.name });
+  await issueProposal(repo, acme, intake, { id: pradeep.id, name: pradeep.name }, "", new Date(intake.stageEnteredAt));
 
   // Acme: work in progress, at risk
-  const backup = await project(acme, "SEC-1", "Backups that restore", "build", "at_risk", "Nightly backups exist but have never been restored.", [{ userId: pradeep.id, role: "lead_engineer" }, { userId: dana.id, role: "tech_contact" }], 9);
+  const backup = await project(acme, "SEC-1", "Backups that restore", "build", "at_risk", "Nightly backups exist but have never been restored.", [{ userId: pradeep.id, role: "lead_engineer" }, { userId: dana.id, role: "tech_contact" }], 9, 0);
   await item(backup, "task", "Inventory what's backed up today", { status: "done" });
   await item(backup, "task", "Restore last night's backup to a test machine", { status: "doing", assigneeId: pradeep.id, dueDate: day(3).slice(0, 10) });
   await item(backup, "milestone", "Weekly restore test running on its own", { dueDate: day(12).slice(0, 10) });
