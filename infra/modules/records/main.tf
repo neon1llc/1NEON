@@ -9,6 +9,11 @@ variable "retain_years" {
   type    = number
   default = 7
 }
+# Dev only: a lock in days instead of years, so test records don't outlive the test
+variable "retain_days" {
+  type    = number
+  default = null
+}
 
 
 # Object Lock can only be turned on when a bucket is created; never force-destroy
@@ -59,7 +64,8 @@ resource "aws_s3_bucket_object_lock_configuration" "records" {
   rule {
     default_retention {
       mode  = "GOVERNANCE"
-      years = var.retain_years
+      years = var.retain_days == null ? var.retain_years : null
+      days  = var.retain_days
     }
   }
   depends_on = [aws_s3_bucket_versioning.records]

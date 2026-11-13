@@ -2,6 +2,11 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.8.0 - 2026-11-13
+
+- `infra/envs/dev`: a dev backend for dev.neon1.tech/1NEON with its own Cognito pool (auth-dev.neon1.tech), table, and buckets; no texts, no malware scan, and a one-day lock on test records. The `dev` workflow ships the API and app there; `dev-sync` keeps the `dev` branch following main.
+- Modules take a `boundary` (api, storage) and `retain_days` (records); production keeps its values. Sign-in code emails link to the environment's own portal, and contact form mail sent from dev says "[dev]" in its subject.
+
 ## v0.7.1 - 2026-11-13
 
 ### Fixed
