@@ -16,6 +16,7 @@
 
 ### Changed
 - Maria's bakery, in every walkthrough and the sample project, is re-estimated to match the Knowledge Center's proposal: account setup and discovery follow-up, training for each person, and two weeks of go-live support are now listed. Her chosen option is 22 to 28 hours ($2,200 to $2,800 at $100 an hour, a $1,100 deposit); the work took 24.5 hours, and the final invoice comes to $1,350.
+- The privacy policy (edition 2.2, November 13) says which records a deletion request can't remove: signatures, issued invoices, and payments stay locked for seven years, and the rest is deleted with a written note of what remains.
 - Proposals, previews, invoices, and documents open in a new tab.
 - Money boxes show a $ sign, the deposit box a % sign; new invoice lines come filled in from the approved option and can be changed or added to, with a running total.
 - Forms and dialogs have even spacing between fields and buttons; date boxes keep their width on phones.
