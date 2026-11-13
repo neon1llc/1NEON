@@ -13,7 +13,7 @@ export const DEFAULT_STAGES: Stage[] = [
   { id: "decide", name: "Decide", layer: "needs", exit: "An option approved", hidden: false },
   { id: "build", name: "Build", layer: "execution", exit: "All milestone tasks done", wipLimit: 3, hidden: false },
   { id: "verify", name: "Verify", layer: "observation", exit: "Checks pass, after metrics recorded", hidden: false },
-  { id: "handover", name: "Hand over", layer: "next", exit: "Handoff checklist signed off", hidden: false },
+  { id: "handover", name: "Hand over", layer: "next", exit: "Handover accepted", hidden: false },
   { id: "care", name: "Care", layer: "next", exit: "Ongoing care, or closed", hidden: false },
   { id: "closed", name: "Closed", layer: "next", exit: "", hidden: false },
 ];

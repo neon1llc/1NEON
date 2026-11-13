@@ -46,7 +46,7 @@ const KIND_LABEL: Record<ItemKind, [string, string]> = {
   metric: ["Measure", "Measures"],
   check: ["Check", "Checks"],
   incident: ["Incident", "Incidents"],
-  handoff: ["Handoff step", "Handoff checklist"],
+  handoff: ["Handover step", "Handover checklist"],
   runbook: ["Runbook", "Runbooks"],
   training: ["Training", "Training"],
   care: ["Care item", "Care plan"],
@@ -171,7 +171,7 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
             {(h.agreed || h.changes.length > 0) && <><dt>What changed</dt><dd>{h.agreed && <b>{h.agreed}</b>}{h.agreed && h.changes.length > 0 && ". "}{h.changes.join(", ")}{h.changes.length > 0 && "."}</dd></>}
             {h.results.length > 0 && <><dt>The result</dt><dd>{h.results.map((r, n) => <span key={r.title}>{n > 0 && "; "}{r.title}: {r.before && r.now ? <>{r.before} to <b>{r.now}</b></> : <b>{r.now ?? r.before}</b>}{r.target && ` (target ${r.target}${r.reached ? ", reached" : ""})`}</span>)}.</dd></>}
             {h.owners.length > 0 && <><dt>Who owns what</dt><dd>{h.owners.map((o, n) => <span key={o.title}>{n > 0 && "; "}{o.title}: {o.owner ?? "no owner named yet"}</span>)}.</dd></>}
-            {allSteps > 0 && <><dt>Handoff checklist</dt><dd>{doneSteps} of {allSteps} done.</dd></>}
+            {allSteps > 0 && <><dt>Handover checklist</dt><dd>{doneSteps} of {allSteps} done.</dd></>}
           </dl>
         )}
         <p>{h.empty ? "This project is closed. " : ""}{canWrite ? `Reopen it to pick the work back up in ${back?.name ?? "an earlier stage"}.` : h.empty ? "Nothing more is planned." : "The full handover is under Normalize."}</p>
@@ -1311,7 +1311,9 @@ function Accept({ item, path, project }: { item: Item; path: string; project: Pr
   const accepted = f.success ? f.data.accepted : undefined;
   if (accepted) return <p className="accepted-note">Accepted by {accepted.name}, {dateLabel(accepted.at.slice(0, 10))}{accepted.note ? `: ${accepted.note}` : ""}{accepted.signature ? `, signed "${accepted.signature.typedName}"` : ""}</p>;
   const decider = canApprove({ userId: me.user.id, operator: me.operator, strongSession: false }, access, project.people, isOwnOrg(org.slug)).ok;
-  if (!decider) return null;
+  // A step already ticked waits for the one signature under the list; this accepts a step that isn't
+  // done yet, on its own, which also marks it done
+  if (!decider || item.status === "done") return null;
   const accept = async () => {
     try {
       await api(`${path}/items/${item.id}/accept`, { method: "POST", body: { version: item.version, note, signature: { typedName: sign.typedName.trim(), consent: sign.consent } } });
@@ -1331,7 +1333,7 @@ function Accept({ item, path, project }: { item: Item; path: string; project: Pr
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
       </div>
     </form>
-  ) : <button type="button" className="chip" onClick={() => setOpen(true)}>{item.status === "done" ? "Accept with your signature" : "Check it and accept"}</button>;
+  ) : <button type="button" className="chip" onClick={() => setOpen(true)}>Check it and accept</button>;
 }
 
 
