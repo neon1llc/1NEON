@@ -5,10 +5,11 @@
 
 
 import { liveEngine } from "../lib/api.ts";
+import { MEASURES, MONEY, PROJECT as BAKERY, TASKS } from "../lib/bakery.ts";
 import { opening } from "./opening.ts";
 import type { Show } from "./player.ts";
 import { MARIA } from "./seed.ts";
-import { base, finishWork, handOver, KEY, moveTo, planWork, proposeOptions, signAgreementAsMaria, tid } from "./story.ts";
+import { base, dryRun, finishWork, handOver, KEY, listenNotes, moveTo, planWork, proposeOptions, signAgreementAsMaria, tid } from "./story.ts";
 
 
 // The project the preview works in, and its pages
@@ -18,7 +19,11 @@ const PROJECT = `${base}/projects/${KEY}`;
 /** Maria's project, made quietly before she signs in (she set it up earlier), so the walk leads to it */
 async function startProject() {
   const engine = (await liveEngine())!;
-  await engine.actAs(MARIA, `/t/${await tid()}/projects`, "POST", { name: "Orders without retyping", template: "workflow_automation", idempotencyKey: "live-preview-project" });
+  await engine.actAs(MARIA, `/t/${await tid()}/projects`, "POST", {
+    name: BAKERY.name, template: "workflow_automation", summary: BAKERY.today, outcome: BAKERY.outcome, example: BAKERY.example,
+    metrics: [{ title: MEASURES[0].title, unit: MEASURES[0].unit, baseline: MEASURES[0].baseline, target: MEASURES[0].target }],
+    idempotencyKey: "live-preview-project",
+  });
 }
 
 
@@ -34,12 +39,12 @@ export const PREVIEW: Show = {
   length: "about two minutes",
   intro: {
     text: [
-      "Maria owns a fictional bakery. Every night her team retypes about 40 orders from email and voicemail into a spreadsheet, and she has asked Pradeep at neon1 for help.",
-      "In about two minutes you'll watch her sign in, ask for what she needs, compare three options, approve one, see the work, and take the handover. Her thoughts appear beside the cursor, and a line at the bottom says what's happening.",
+      "Maria owns a fictional bakery. Every night she and Sam retype about 40 orders from email, voicemail, and Instagram into a spreadsheet, and she has asked Pradeep at neon1 for help.",
+      "In about two minutes you'll watch her sign in, ask for what she needs, compare three priced options, approve one, see the work and its hours, and take the handover. Her thoughts appear beside the cursor, and a line at the bottom says what's happening.",
     ],
   },
   end: "That's the short version.",
-  recap: "Maria asked for help in one sentence, compared three options with their estimates, signed for one, saw the work finished, and took over the accounts and the runbook. The full story shows every step in between.",
+  recap: "Maria asked for help in one sentence, compared three options with the hours behind each price, signed for one, saw the work finished hour by hour, and took over the accounts and the runbook. The full story shows every step in between, including both invoices.",
   sections: [
     // She comes in the front door: why she's here, the emailed code, and the walk to the project's Needs
     { ...IN, run: async (s) => { await s.others(startProject, 0); await IN.run(s); } },
@@ -62,15 +67,20 @@ export const PREVIEW: Show = {
       id: "p-compare",
       title: "Compare options",
       run: async (s) => {
-        await s.say("neon1 answers with three options, each with its cost and tradeoffs");
-        // She signed neon1's service agreement when the bakery joined (the full story shows it)
-        await s.others(async () => { await signAgreementAsMaria(); await proposeOptions(); }, 900, "Pradeep proposed three options");
+        await s.say("neon1 listens first, then answers with three options, each with its price and tradeoffs");
+        // She signed neon1's service agreement when the bakery joined, and Pradeep wrote up their
+        // first call (the full story shows both)
+        await s.others(async () => { await signAgreementAsMaria(); await listenNotes(); await proposeOptions(); }, 900, "Pradeep proposed three options");
         await s.top();
         await s.click({ sel: "a, button", text: "Compare options" }, 1000);
-        await s.think("A is cheap, but it only fixes the form.");
+        await s.think("A is the cheapest, but it only fixes the form.");
         await s.hover({ sel: ".options article", text: "A. Quick fix" }, 900);
-        await s.think("B reads the emails too. That's the real time saver.");
+        await s.think("B reads the emails and voicemails too. That's the real time saver.");
         await s.hover({ sel: ".options article", text: "B. Solid setup" }, 900);
+        await s.say("A price is never a bare number: it opens to the hours behind it and when she pays");
+        await s.click(".options article:nth-child(2) .basis summary", 800);
+        await s.think(`${MONEY.range}, an estimate. I pay for the hours he works, and never more than ${MONEY.high} unless I agree first.`);
+        await s.hover(".options article:nth-child(2) .basis-table", 1500);
       },
     },
     {
@@ -94,12 +104,12 @@ export const PREVIEW: Show = {
       title: "See progress",
       run: async (s) => {
         await s.say("The work shows up as it happens, with updates she can read in a minute");
-        await s.others(async () => { await moveTo("build"); await planWork(); await finishWork(); }, 700, "Pradeep finished three tasks");
+        await s.others(async () => { await moveTo("build"); await planWork(); await finishWork(); }, 700, "Pradeep finished four tasks");
         await s.click({ sel: "nav.tabs a", text: "Execute" }, 900);
-        await s.think("Pradeep posted the plan, and an update.");
-        await s.wait(900);
-        await s.think("All three tasks are done already.");
-        await s.hover({ sel: ".item", text: "Daily summary at 7pm" }, 900);
+        await s.think("Pradeep posted the plan, and four of the five tasks are done.");
+        await s.hover({ sel: ".item", text: TASKS.summary }, 900);
+        await s.think(`${MONEY.loggedAfterBuild} logged so far, each with what it was for.`);
+        await s.hover("#hours .hours-table", 1300);
       },
     },
     {
@@ -107,7 +117,7 @@ export const PREVIEW: Show = {
       title: "Receive the handover",
       run: async (s) => {
         await s.say("At handover, the accounts and the know-how become hers");
-        await s.others(async () => { await moveTo("verify"); await handOver(); }, 700, "Pradeep uploaded the runbook");
+        await s.others(async () => { await moveTo("verify"); await dryRun(); await handOver(); }, 700, "Pradeep uploaded the runbook");
         await s.click({ sel: "nav.tabs a", text: "Normalize" }, 900);
         await s.think("The accounts are in the bakery's name. Check.");
         await s.click('input[aria-label="Done: Accounts are in the client\'s name"]', 500);
