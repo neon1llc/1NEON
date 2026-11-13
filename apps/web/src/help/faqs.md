@@ -196,10 +196,10 @@ neon1's terms for all work with your organization: how work is agreed, paying, o
 Email [hello@neon1.tech](mailto:hello@neon1.tech) with what happened and when. neon1 is one person working planned hours, with no 24/7 or emergency response, so for something that can't wait, such as a fraud on your bank account or an outage your business can't run without, contact the provider responsible first. Report a security problem in the portal itself to [security@neon1.tech](mailto:security@neon1.tech).
 
 ### Can we get a copy of our data?
-Yes. There's no export button, so ask at [hello@neon1.tech](mailto:hello@neon1.tech) and I'll send your organization's data in a common format.
+Yes, any time, without asking me. An admin of your organization opens **Settings** and chooses **Download everything** under Your data. It's one zip file: every project's records, decisions and signatures, proposals, invoices, payments, and handover steps as JSON and CSV (spreadsheets open the CSV files), plus every uploaded file as it was uploaded. A README in the zip says what each file holds.
 
 ### What happens to our data when the work ends?
-It's kept as the record of our work together, so either of us can refer back to it, unless your organization asks me to delete it. Your organization can stop using 1NEON at any time and ask for an export first. The [privacy policy](/1NEON/privacy) has the details, including how long backups and audit records last.
+It's kept as the record of our work together, so either of us can refer back to it, unless your organization asks me to delete it. Your organization can stop using 1NEON at any time, and can download everything from Settings first. The [privacy policy](/1NEON/privacy) has the details, including how long backups and audit records last.
 
 ### Who can I contact?
 Email [hello@neon1.tech](mailto:hello@neon1.tech).
