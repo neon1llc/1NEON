@@ -103,12 +103,13 @@ export class MailWindow {
     head.querySelector(".mail-to")!.textContent = `to ${m.to}`;
     this.pane.prepend(head);
     // Our own template's HTML; links don't navigate (the demo follows them itself). The page's
-    // policy blocks inline style attributes, so each is moved onto the element through the
-    // style object instead, which the policy allows, and the email looks as it would in a mail app
-    const doc = new DOMParser().parseFromString(m.html, "text/html");
-    const styled = [...doc.body.querySelectorAll<HTMLElement>("[style]")].map((el) => {
-      const css = el.getAttribute("style") ?? "";
-      el.removeAttribute("style");
+    // policy refuses inline style attributes, and refuses them as the HTML is read, so each one is
+    // read under another name and then set through the style object, which the policy allows. The
+    // email looks as it would in a mail app, and the browser has nothing to refuse
+    const doc = new DOMParser().parseFromString(m.html.replace(/(<[^>]*?\s)style=(?=["'])/g, "$1data-css="), "text/html");
+    const styled = [...doc.body.querySelectorAll<HTMLElement>("[data-css]")].map((el) => {
+      const css = el.getAttribute("data-css") ?? "";
+      el.removeAttribute("data-css");
       return [el, css] as const;
     });
     this.body.replaceChildren(...doc.body.childNodes);

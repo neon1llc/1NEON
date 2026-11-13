@@ -59,6 +59,10 @@ const APP = join(ROOT, "apps/web/dist/1NEON");
 const SITE_DIR = process.env.NEON1_SITE_DIR;
 const SITE = process.env.NEON1_SITE ?? "https://neon1.tech";
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".json": "application/json", ".woff2": "font/woff2", ".ico": "image/x-icon", ".txt": "text/plain", ".webp": "image/webp" };
+// The content policy neon1.tech sends with every page, so anything it would refuse there (an inline
+// style, a script from elsewhere) is refused here too and fails the run as a console error. Images
+// may also come from neon1.tech itself, which is "self" there: the emails in the story link their logo by its full address
+const POLICY = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://neon1.tech; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 const isFile = async (p) => { try { return (await stat(p)).isFile(); } catch { return false; } };
 // Shared site files fetched once from neon1.tech when there's no local checkout
 const fetched = new Map();
@@ -67,7 +71,7 @@ const fetched = new Map();
 const server = createServer(async (req, res) => {
   try {
     const path = decodeURIComponent(new URL(req.url, "http://x").pathname);
-    const send = (body, type, code = 200) => { res.writeHead(code, { "content-type": type, "cache-control": "no-store" }); res.end(body); };
+    const send = (body, type, code = 200) => { res.writeHead(code, { "content-type": type, "cache-control": "no-store", ...(type.startsWith("text/html") ? { "content-security-policy": POLICY } : {}) }); res.end(body); };
     if (path.startsWith("/1NEON")) {
       const rel = normalize(path.replace(/^\/1NEON\/?/, ""));
       const file = !rel.startsWith("..") && (await isFile(join(APP, rel))) ? join(APP, rel) : join(APP, "index.html");
