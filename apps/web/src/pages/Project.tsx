@@ -190,6 +190,9 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
   const unsigned = handover.filter((i) => !i.fields.accepted);
   const deciders = p.people.filter((x) => x.role === "decision_maker").map((x) => names.get(x.userId) ?? "the decision maker");
   // Moving on past Decide needs an approved option (or a reason, given on the board)
+  // neon1 runs the stages of a client's project: Next step offers the move to neon1 (and to anyone in
+  // neon1's own organization), and tells a client who has the work
+  const drives = canWrite && (me.operator || isOwnOrg(org.slug));
   const gated = Boolean(ahead) && decideAt >= 0 && at <= decideAt && org.stages.indexOf(ahead!) > decideAt && !approved;
   const nextName = ahead?.name;
   // The most pressing step first: a decision, then files, then the caller's own work, then the stage
@@ -239,18 +242,21 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
     action = { to: `${base}/${layerSlug(KIND_LAYER[mine[0]!.kind])}#item-${mine[0]!.id}`, label: "Open" };
   } else if (approved && decideAt >= 0 && at <= decideAt && ahead) {
     // The decision is made, so Decide is done: the step is moving on
-    text = <><b>{approved.title}</b> is approved. {canWrite ? <>Next, move the project to <b>{nextName}</b>.</> : <>Next, neon1 moves the project to <b>{nextName}</b>.</>}</>;
-    if (canWrite) move = ahead;
+    text = <><b>{approved.title}</b> is approved. {drives ? <>Next, move the project to <b>{nextName}</b>.</> : <>Next, neon1 moves the project to <b>{nextName}</b>.</>}</>;
+    if (drives) move = ahead;
   } else if (me.operator && canWrite && !options.length && at >= 0 && decideAt >= 0 && at <= decideAt && at >= decideAt - 1) {
     text = <>Add options for the client to compare and approve.</>;
     action = { to: `${base}/needs#options`, label: "Add options" };
   } else if (me.operator && canWrite && !approved && options.length && !proposed.length && at <= decideAt) {
     text = <>Share an option with the client so they can approve it.</>;
     action = { to: `${base}/needs#options`, label: "Open options" };
+  } else if (stage?.exit && !drives && !me.operator) {
+    // A client reads where the work stands and who has it; nothing here is theirs to do
+    text = <><b>{stage.name}</b> is with neon1. It's done when: {stage.exit.charAt(0).toLowerCase() + stage.exit.slice(1).replace(/\.$/, "")}.{ahead && !gated ? <> Then neon1 moves the project to <b>{nextName}</b>.</> : ""} Nothing needs you right now.</>;
   } else if (stage?.exit) {
-    text = <>To finish <b>{stage.name}</b>: {stage.exit.charAt(0).toLowerCase() + stage.exit.slice(1).replace(/\.$/, "")}.{canWrite && ahead && !gated ? <> When it is, move it to <b>{nextName}</b>.</> : ""}</>;
-    if (canWrite && !gated) move = ahead;
-  } else if (ahead && canWrite && !gated) {
+    text = <>To finish <b>{stage.name}</b>: {stage.exit.charAt(0).toLowerCase() + stage.exit.slice(1).replace(/\.$/, "")}.{drives && ahead && !gated ? <> When it is, move it to <b>{nextName}</b>.</> : ""}</>;
+    if (drives && !gated) move = ahead;
+  } else if (ahead && drives && !gated) {
     text = <>When <b>{stage?.name ?? "this stage"}</b> is done, move the project to <b>{nextName}</b>.</>;
     move = ahead;
   } else {

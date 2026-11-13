@@ -24,6 +24,7 @@
 - Maple Street Bakery, the fictional client in every walkthrough and on the sample page, is rebuilt as one consistent example: a team of eight taking orders by email, voicemail, and Instagram; limits found before any option was written; three options priced as estimates with the hours behind each; a dry run on a past week of real orders; 21 hours logged against an estimate of 20 to 24; and a deposit and a final invoice that add up. Every figure is illustrative.
 - The interactive demo offers an estimate beside a fixed price to choose from, and its project in progress shows hours, a paid deposit, and an open invoice worked out from those hours.
 - The full story is 14 chapters and says about 13 minutes.
+- **Next step** tells a client who has the work: "Build is with neon1. It's done when: all milestone tasks done. Then neon1 moves the project to Verify. Nothing needs you right now." It used to tell the client to move the project themselves. Moving a stage from Next step is offered to neon1.
 - "Handoff" reads "handover" everywhere, and a finished step no longer offers its own signature beside the one that accepts them all.
 - Notices about payments name the payment page as their source, where they used to say "Someone".
 - Progress counts skip records: hours, invoices, payments, decisions, and updates are never counted as work to finish.
