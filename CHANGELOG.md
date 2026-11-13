@@ -2,6 +2,15 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.10.0 - 2026-11-13
+
+### Added
+- **Download everything.** An organization's admins can download a copy of all of it from Settings, any time, without asking neon1: one zip with every project's records, decisions and signatures, proposals, invoices, payments, and handover steps as JSON and CSV, every uploaded file as uploaded, and a README saying what each file holds.
+
+### Changed
+- Maria's bakery, in every walkthrough and the sample project, is re-estimated to match the Knowledge Center's proposal: account setup and discovery follow-up, training for each person, and two weeks of go-live support are now listed. Her chosen option is 22 to 28 hours ($2,200 to $2,800 at $100 an hour, a $1,100 deposit); the work took 24.5 hours, and the final invoice comes to $1,350.
+- The privacy policy (edition 2.2, November 13) says which records a deletion request can't remove: signatures, issued invoices, and payments stay locked for seven years, and the rest is deleted with a written note of what remains.
+
 ## v0.9.0 - 2026-11-13
 
 ### Added

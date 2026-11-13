@@ -6,7 +6,7 @@
 // uploaded files go in under their project, byte for byte. README.txt says what each file holds.
 
 
-import { fileState, InvoiceFields, invoiceTotal, KIND_LAYER, OptionFields, PaymentFields, revisions, type DocumentRecord, type Item, type Project, type Tenant } from "@1neon/domain";
+import { fileState, InvoiceFields, invoiceTotal, KIND_LAYER, PaymentFields, revisions, type DocumentRecord, type Item, type Project, type Tenant } from "@1neon/domain";
 import { api, openable } from "./api.ts";
 import { csv } from "./csv.ts";
 import type { MemberRow } from "./types.ts";
@@ -70,8 +70,8 @@ export async function exportOrganization(org: Tenant, say: Progress): Promise<vo
   const all = details.flatMap((d) => d.items.map((i) => ({ i, key: d.project.key })));
   zip.file("decisions.csv", csv(all.filter(({ i }) => i.kind === "decision").map(({ i, key }) => {
     const f = i.fields as { code?: string; approverName?: string; approvedAt?: string; reason?: string; signature?: { typedName?: string }; supersedes?: string[]; terms?: Record<string, unknown> };
-    return { project: key, option: i.title.replace(/^Approved: /, ""), code: f.code ?? "", approvedBy: f.approverName ?? "", approvedAt: f.approvedAt ?? i.createdAt, signedAs: f.signature?.typedName ?? "", reason: f.reason ?? "", replacesEarlier: f.supersedes?.length ? "yes" : "", price: (f.terms as { cost?: string } | undefined)?.cost ?? "", depositPercent: OptionFields.partial().safeParse(f.terms ?? {}).data?.depositPercent ?? "" };
-  }), ["project", "option", "code", "approvedBy", "approvedAt", "signedAs", "reason", "replacesEarlier", "price", "depositPercent"]));
+    return { project: key, option: i.title.replace(/^Approved: /, ""), code: f.code ?? "", approvedBy: f.approverName ?? "", approvedAt: f.approvedAt ?? i.createdAt, signedAs: f.signature?.typedName ?? "", reason: f.reason ?? "", replacesEarlier: f.supersedes?.length ? "yes" : "", price: (f.terms as { cost?: string } | undefined)?.cost ?? "" };
+  }), ["project", "option", "code", "approvedBy", "approvedAt", "signedAs", "reason", "replacesEarlier", "price"]));
   zip.file("invoices.csv", csv(all.filter(({ i }) => i.kind === "invoice" && i.status !== "draft").map(({ i, key }) => {
     const f = InvoiceFields.safeParse(i.fields).data;
     return { project: key, number: f?.number ?? "", type: f?.type ?? "", status: i.status, issuedAt: f?.issuedAt ?? "", dueDate: f?.dueDate ?? "", total: f ? dollars(invoiceTotal(f)) : "", lines: f?.lines.map((l) => `${l.text}: ${dollars(Math.round(l.qty * l.unitCents))}`).join("; ") ?? "", note: f?.note ?? "", voided: f?.voided ? `${f.voided.at} by ${f.voided.name}: ${f.voided.reason}` : "" };
