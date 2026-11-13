@@ -2,6 +2,14 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.7.1 - 2026-11-13
+
+### Fixed
+- The emails shown in a walkthrough no longer make the browser log dozens of refused styles. Nothing looked wrong on screen: the styles were applied a moment later, as intended, but each one was first refused by the site's content policy as the email was read.
+
+### Changed
+- The walkthrough check that gates every release now applies the same content policy neon1.tech sends, so anything the live site would refuse fails the check before a release.
+
 ## v0.7.0 - 2026-11-13
 
 ### Added
