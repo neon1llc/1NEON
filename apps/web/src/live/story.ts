@@ -7,6 +7,7 @@ import { liveEngine } from "../lib/api.ts";
 import type { Section, Show, Stage } from "./player.ts";
 import { signInWithCode, walkTo } from "./opening.ts";
 import { MARIA, PRADEEP } from "./seed.ts";
+import { FULL_LENGTH } from "./where.ts";
 
 
 // The bakery's organization, and the project once it exists
@@ -646,7 +647,7 @@ export const FULL: Show = {
   id: "project",
   title: "The full story",
   blurb: "A whole project, from a first sign-in to ongoing care",
-  length: "about 8 minutes",
+  length: FULL_LENGTH,
   intro: {
     heading: "Meet Maria",
     text: [

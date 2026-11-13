@@ -15,10 +15,15 @@ import { Legal } from "./pages/Legal.tsx";
 import { NotFound } from "./pages/NotFound.tsx";
 import { BASE_PATH, DEMO, devUser, LIVE } from "./lib/api.ts";
 import { applyHead, headFor } from "./lib/head.ts";
+import { quietSkippedTransitions } from "./lib/motion.ts";
 import { setCache, setNavigate } from "./lib/nav.ts";
 import { offline } from "./lib/reads.ts";
 import { Example } from "./pages/Example.tsx";
 import "./styles/app.css";
+
+
+// Quick tab changes cut a slide short; that is expected, never an error
+quietSkippedTransitions();
 
 
 // A walkthrough moves through many pages on its own. Each move replaces the address instead of adding

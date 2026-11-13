@@ -10,7 +10,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { Player, View } from "./player.ts";
 import { SHORTS } from "./shorts.ts";
-import { PROJECT } from "./where.ts";
+import { FULL_LENGTH, PROJECT } from "./where.ts";
 import "./live.css";
 
 
@@ -219,7 +219,7 @@ export function LiveBar({ player }: { player: Player }) {
           {show.recap && <p>{show.recap}</p>}
           <div className="live-card-acts">
             {short
-              ? <a className="live-btn primary" data-first href="/1NEON/live?play=full">Watch the full story<small>about 8 minutes</small></a>
+              ? <a className="live-btn primary" data-first href="/1NEON/live?play=full">Watch the full story<small>{FULL_LENGTH}</small></a>
               : <a className="live-btn primary" data-first href="/1NEON/demo/">Try it yourself<small>the same portal, in your hands</small></a>}
             {short && <a className="live-btn" href="/1NEON/demo/">Try it yourself</a>}
             <button className="live-btn" onClick={() => player.toggle()}><RotateCcw size={14} aria-hidden="true" />Watch again</button>
@@ -265,7 +265,7 @@ export function LiveBar({ player }: { player: Player }) {
         </ol>
         {(short || SHORTS.length > 0) && <p className="live-list-h">{short ? "Other walkthroughs" : "Short walkthroughs"}</p>}
         <ul>
-          {short && <li><a href="/1NEON/live?play=full"><span className="n">▸</span><span>The full story<small>A whole project, from a first sign-in to ongoing care · about 8 minutes</small></span></a></li>}
+          {short && <li><a href="/1NEON/live?play=full"><span className="n">▸</span><span>The full story<small>A whole project, from a first sign-in to ongoing care · {FULL_LENGTH}</small></span></a></li>}
           {SHORTS.filter((s) => s.id !== show.id).map((s) => (
             <li key={s.id}><a href={`/1NEON/live?play=${s.id}`}><span className="n">▸</span><span>{s.title}<small>{s.blurb}{s.length ? ` · ${s.length}` : ""}</small></span></a></li>
           ))}

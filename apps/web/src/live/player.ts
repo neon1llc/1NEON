@@ -39,7 +39,8 @@ export interface Show {
   intro?: { heading?: string; text: string[] };
   /** One or two sentences under the end card's heading: what just happened, in plain words */
   recap?: string;
-  /** How long it takes at the default speed, said before it starts ("about 1½ minutes") */
+  /** How long it takes at the default speed, said before it starts ("about two minutes"). The browser
+   * check times every walkthrough and fails when this is far from the truth (scripts/walkthroughs.mjs) */
   length?: string;
 }
 
@@ -402,7 +403,7 @@ export class Player {
     if (sec?.why) {
       this.prep = project.slice(0, at);
       this.show = {
-        id: PROJECT, title: sec.title, blurb: "One part of the story, on its own", length: "about a minute",
+        id: PROJECT, title: sec.title, blurb: "One part of the story, on its own", length: "a minute or two",
         intro: { text: [
           `One part of a longer story, on its own: “${sec.title}”. Maria owns a fictional bakery, and Pradeep at neon1 is helping her stop retyping orders every night.`,
           "The story up to this point is set up first, out of sight, which takes a few seconds. Then she signs in and does this one thing.",
@@ -507,6 +508,14 @@ export class Player {
     // Clicks in the portal while paused mean someone explored; note it for resuming
     document.addEventListener("pointerdown", (e) => {
       if (this.view.paused && (e.target as Element).closest("#root")) { this.touched = true; this.autoPaused = false; }
+    }, true);
+    // Keys explore too: Escape closing a dialog the story had open, or typing into a field or pressing
+    // a button in the portal. Moving focus with Tab changes nothing, so it doesn't count
+    document.addEventListener("keydown", (e) => {
+      if (!this.view.paused || !e.isTrusted || ["Tab", "Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
+      const el = e.target instanceof Element ? e.target : null;
+      const acted = e.key === "Escape" ? Boolean(topDialog()) : Boolean(el?.closest("#root") && el.closest("input, textarea, select, button, a[href], summary, [contenteditable]"));
+      if (acted) { this.touched = true; this.autoPaused = false; }
     }, true);
     const engine = await liveEngine();
     if (!engine) return;

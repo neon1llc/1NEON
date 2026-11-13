@@ -93,6 +93,7 @@ const invite: Show = {
   title: "Join from an invitation",
   blurb: "From the invite email to a first sign-in",
   intro: { text: ["Maria owns a fictional bakery, and Pradeep at neon1 has invited her to its organization in 1NEON. Watch her open the invitation email, sign in with a code and no password, and take her first look around."] },
+  length: "about a minute",
   end: "Invited to signed in, with no password at all.",
   sections: [
     {
@@ -183,6 +184,7 @@ const passkey: Show = {
   title: "Add a passkey",
   blurb: "Your fingerprint or face, for confirming and signing in",
   intro: { text: ["A passkey signs you in with your fingerprint, your face, or your device's PIN instead of a code. Watch Maria, who owns a fictional bakery, add one, use it to confirm an admin action, and sign in with it."] },
+  length: "about two minutes",
   end: "A passkey: no codes to wait for, and nothing to phish.",
   sections: [
     opening("passkey-in", "Maria opens 1NEON to add a passkey", "Pradeep said a passkey makes signing in and confirming things quicker. Let me sign in and add one."),
@@ -257,6 +259,7 @@ const authenticator: Show = {
   title: "Add an authenticator app",
   blurb: "A 6-digit code from an app on your phone",
   intro: { text: ["An authenticator app shows a fresh 6-digit code every 30 seconds. Watch Maria, who owns a fictional bakery, scan 1NEON's code with her phone, then use the app to confirm it's her."] },
+  length: "about two minutes",
   end: "An authenticator app: a fresh code every 30 seconds, even offline.",
   sections: [
     opening("totp-in", "Maria opens 1NEON to add her authenticator app", "I already use an authenticator app on my phone. Let me sign in and add 1NEON to it."),
@@ -338,6 +341,7 @@ const texts: Show = {
   title: "Texts and text codes",
   blurb: "Notices by text, and a texted code to confirm it's you",
   intro: { text: ["1NEON can text the notices you choose, and text a code when it needs to confirm it's you. Watch Maria, who owns a fictional bakery, add her number, agree to texts, and pick what reaches her."] },
+  length: "about two minutes",
   end: "Texts for what matters to her, and a texted code whenever 1NEON asks.",
   sections: [
     opening("texts-in", "Maria opens 1NEON to get notices by text", "I'm on my feet all day. Texts would reach me faster than email. Let me sign in and set them up."),
@@ -438,7 +442,7 @@ const calendar: Show = {
   title: "Plan around time off",
   blurb: "Leave, office days, and a monthly call on Home's calendar",
   intro: { text: ["Home's calendar shows project dates beside the team's own: days off, office days, and regular calls. Watch Maria, who owns a fictional bakery, add two days away and a monthly check-in."] },
-  length: "about a minute",
+  length: "about a minute and a half",
   end: "On the calendar, where neon1 and the team plan around it.",
   sections: [
     opening("calendar-in", "Maria opens 1NEON to add her days off", "I'm away at the flour mill for two days, and Pradeep wants a monthly check-in. Let me put both on the calendar."),

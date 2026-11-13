@@ -45,6 +45,8 @@ const workers = Number(arg("workers", "4"));
 const verbose = process.argv.includes("--verbose");
 // How long one walkthrough may take at double speed before it counts as stuck
 const LIMIT = Number(arg("limit", "600")) * 1000;
+// Every run plays at double speed, the fastest a visitor can pick
+const SPEED = 2;
 // A failed run gets this many more tries. On CI's shared machines one retry keeps a slow moment from
 // blocking a release; a run that only passes on a retry is still named in the output
 const RETRIES = Number(arg("retries", process.env.CI ? "1" : "0"));
@@ -101,12 +103,24 @@ const state = (page) => page.evaluate(() => {
   return {
     title: text(".live-title"),
     line: text(".live-sub.on"),
+    eye,
     card: !eye ? "" : eye.startsWith("The end") ? "end" : eye.startsWith("Stopped") ? "failed" : "intro",
     paused: Boolean(document.querySelector('.live-play[aria-label="Play"]')),
     chapter: Number(/^(\d+)\//.exec(text(".live-title"))?.[1] ?? 0),
     of: Number(/^\d+\/(\d+)/.exec(text(".live-title"))?.[1] ?? 0),
   };
-}).catch(() => ({ title: "", line: "", card: "", paused: false, chapter: 0, of: 0 }));
+}).catch(() => ({ title: "", line: "", eye: "", card: "", paused: false, chapter: 0, of: 0 }));
+
+// The intro card says how long the walkthrough takes ("about two minutes"). Read as seconds, with the
+// range that still counts as true: 40% either way, or the two ends of "a minute or two"
+const WORDS = { a: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+function statedLength(eye) {
+  if (/a minute or two/.test(eye)) return { said: "a minute or two", low: 40, high: 160 };
+  const m = /about (a|one|two|three|four|five|six|seven|eight|nine|ten|\d+) minutes?( and a half)?/.exec(eye);
+  if (!m) return undefined;
+  const sec = ((WORDS[m[1]] ?? Number(m[1])) + (m[2] ? 0.5 : 0)) * 60;
+  return { said: m[0], low: sec * 0.6, high: sec * 1.4 };
+}
 
 /** Wait until `test(state)` holds; a stumble card or the time limit fails the run */
 async function until(page, test, what, limit = LIMIT) {
@@ -130,9 +144,16 @@ const press = (page, label) => page.locator(".live-card .live-btn", { hasText: l
 const SCENARIOS = {
   /** Press Start and watch it to the end */
   async play(page) {
-    await until(page, (s) => s.card === "intro", "the intro card", 20_000);
+    const intro = await until(page, (s) => s.card === "intro", "the intro card", 20_000);
     await press(page, "Start");
+    // The clock starts once the first chapter is on screen: setting up an FAQ chapter isn't playing time
+    await until(page, (s) => s.chapter >= 1, "chapter 1");
+    const t0 = Date.now();
     await until(page, (s) => s.card === "end", "the end card");
+    // Played at double speed, so the time at the default speed is twice what it took here
+    const took = ((Date.now() - t0) / 1000) * SPEED;
+    const stated = statedLength(intro.eye);
+    if (stated && (took < stated.low || took > stated.high)) throw new Error(`says it takes "${stated.said}" but took ${Math.round(took)} seconds at the default speed; correct its length`);
   },
 
   /** Skip ahead a chapter at a time as soon as each begins, then step back through every one, then on to the end */
@@ -251,7 +272,7 @@ const retried = [];
 async function run({ show, size, scenario }, tries = RETRIES) {
   const name = `${show} · ${size} · ${scenario}`;
   const ctx = await browser.newContext({ viewport: SIZES[size], ignoreHTTPSErrors: true, hasTouch: ["phone", "small", "landscape", "tablet"].includes(size) });
-  await ctx.addInitScript(() => { try { localStorage.setItem("1neon.liveSpeed", "2:2"); } catch { /* blocked */ } });
+  await ctx.addInitScript((speed) => { try { localStorage.setItem("1neon.liveSpeed", `2:${speed}`); } catch { /* blocked */ } }, SPEED);
   const page = await ctx.newPage();
   const problems = [];
   // The player warns ("live: …") when a step had no visible way to happen; errors are errors
