@@ -3,7 +3,7 @@
 // (number, lines, due date, and the hash that fixes them), what has been paid, and what is left.
 
 
-import { InvoiceFields, PaymentFields, balanceOf, invoiceState, invoiceTotal, money, todayIn, type PaymentMethod } from "@1neon/domain";
+import { InvoiceFields, PaymentFields, balanceOf, currentDecision, hoursText, invoiceState, invoiceTotal, money, priceOf, todayIn, type PaymentMethod, type PriceTerms } from "@1neon/domain";
 import { Printer } from "lucide-react";
 import { useEffect } from "react";
 import { Link, useParams } from "react-router";
@@ -53,6 +53,12 @@ export function InvoicePage() {
   const payments = items.filter((i) => i.kind === "payment" && i.fields.invoiceId === it.id).map((i) => PaymentFields.parse(i.fields));
   const credits = items.filter((i) => i.kind === "invoice" && i.status !== "void" && i.status !== "draft" && i.fields.appliesTo === it.id).map((i) => InvoiceFields.parse(i.fields));
   const reduces = f.appliesTo ? items.find((i) => i.id === f.appliesTo) : undefined;
+  // The hours this invoice bills, entry by entry: the ones stamped with it once issued; on a draft
+  // for an hourly estimate, the ones not billed yet, which issuing will stamp
+  const hourly = priceOf((currentDecision(items).decision?.fields.terms ?? {}) as PriceTerms)?.kind === "estimate";
+  const hours = items
+    .filter((i) => i.kind === "time" && (it.status === "draft" ? hourly && (f.type === "final" || f.type === "progress") && !i.fields.invoiceId : i.fields.invoiceId === it.id))
+    .sort((a, b) => String(a.fields.date).localeCompare(String(b.fields.date)) || a.createdAt.localeCompare(b.createdAt));
   return (
     <>
       <div className="pp-tools">
@@ -110,6 +116,20 @@ export function InvoicePage() {
           </tfoot>
         </table>
         {f.note && <p>{f.note}</p>}
+
+        {/* An invoice for hours lists each one, so the quantity above can be checked line by line */}
+        {hours.length > 0 && (
+          <section className="pp-section">
+            <h2 className="pp-bar">Hours on this invoice</h2>
+            <table className="pp-hours inv-hours">
+              <thead><tr><th>Date</th><th>Work done</th><th>Hours</th></tr></thead>
+              <tbody>
+                {hours.map((h) => <tr key={h.id}><td>{longDate(String(h.fields.date))}</td><td>{h.title}</td><td>{Number(Number(h.fields.hours).toFixed(2))}</td></tr>)}
+                <tr className="total"><td colSpan={2}>Total</td><td>{hoursText(hours.reduce((n, h) => n + Number(h.fields.hours || 0), 0))}</td></tr>
+              </tbody>
+            </table>
+          </section>
+        )}
 
         {f.type !== "credit" && left > 0 && (
           <section className="pp-section">

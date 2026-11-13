@@ -205,6 +205,69 @@ describe("invoices", () => {
 });
 
 
+describe("an hourly estimate", () => {
+  /** Option C repriced as an estimate (20 to 24 hours at $175), issued in the next revision, and approved */
+  async function approveEstimate() {
+    const { opt, path } = await flow();
+    const c = opt("C");
+    const r = await call(OP, "PATCH", `${path}/items/${c.id}`, { version: c.version, fields: { pricing: "estimate", rateCents: 17_500, hoursLow: 20, hoursHigh: 24, cost: "typed by hand", basis: [{ work: "Order form", hours: 3 }, { work: "Everything else", hours: 19 }] } });
+    // The written cost and hours follow the numbers
+    expect(r.json.fields).toMatchObject({ cost: "$3,500 to $4,200 estimate", hours: "20 to 24 hours" });
+    await call(OP, "POST", `${path}/proposals`, {});
+    const fresh = (await flow()).opt("C");
+    const ok = await call(s.raj.email, "POST", `${path}/items/${fresh.id}/approve`, { version: fresh.version, signature: SIGN });
+    expect(ok.status).toBe(201);
+    return { path, decision: ok.json.decision };
+  }
+  const log = (as: string, path: string, hours: number, title = "Order form and list") => call(as, "POST", `${path}/items`, { kind: "time", title, fields: { date: "2026-11-12", hours } });
+
+  it("keeps the numbers in the signed terms, and drafts a deposit of half the low end", async () => {
+    const { decision } = await approveEstimate();
+    expect(decision.fields.terms).toMatchObject({ pricing: "estimate", rateCents: 17_500, hoursLow: 20, hoursHigh: 24, cost: "$3,500 to $4,200 estimate", basis: [{ work: "Order form", hours: 3 }, { work: "Everything else", hours: 19 }] });
+    const draft = (await flow()).items.find((i) => i.kind === "invoice")!;
+    expect(draft).toMatchObject({ status: "draft", fields: { type: "deposit", lines: [{ unitCents: 175_000 }] } });
+  });
+
+  it("lets only neon1 log hours, in quarter hours, and never counts them as open work", async () => {
+    const { path } = await approveEstimate();
+    expect((await log(s.raj.email, path, 2)).json.error).toBe("neon1_only");
+    expect((await log(OP, path, 2.1)).status).toBe(400);
+    const made = await log(OP, path, 2.5);
+    expect(made.status).toBe(201);
+    expect(made.json).toMatchObject({ kind: "time", status: "done", fields: { hours: 2.5, date: "2026-11-12" } });
+    // The client reads them, and can't change or remove them
+    expect((await call(s.raj.email, "PATCH", `${path}/items/${made.json.id}`, { version: 1, fields: { hours: 1 } })).json.error).toBe("neon1_only");
+    expect((await call(s.raj.email, "DELETE", `${path}/items/${made.json.id}?version=1`)).json.error).toBe("neon1_only");
+  });
+
+  it("bills the hours worked less the deposit, and locks billed hours once the invoice is issued", async () => {
+    const { path } = await approveEstimate();
+    const dep = (await flow()).items.find((i) => i.kind === "invoice")!;
+    await call(OP, "POST", `${path}/invoices/${dep.id}/issue`, { version: dep.version });
+    const a = await log(OP, path, 12.5);
+    await log(OP, path, 8.5, "Runbook and walkthrough");
+    // Before issue, an entry can still be corrected
+    expect((await call(OP, "PATCH", `${path}/items/${a.json.id}`, { version: 1, title: "Order form, list, and email reader" })).status).toBe(200);
+    // The last handover step accepted drafts the final invoice: 21 hours at $175, less the $1,750 deposit
+    const h = (await flow()).items.find((i) => i.kind === "handoff")!;
+    await call(s.raj.email, "POST", `${path}/items/${h.id}/accept`, { version: h.version, signature: SIGN });
+    const final = (await flow()).items.find((i) => i.kind === "invoice" && i.fields.type === "final")!;
+    expect(final.fields.lines).toMatchObject([{ qty: 21, unitCents: 17_500 }, { qty: 1, unitCents: -175_000 }]);
+    const issued = await call(OP, "POST", `${path}/invoices/${final.id}/issue`, { version: final.version });
+    expect(issued.status).toBe(200);
+    const hours = (await flow()).items.filter((i) => i.kind === "time");
+    expect(hours.every((x) => x.fields.invoiceId === final.id)).toBe(true);
+    const locked = hours[0]!;
+    expect((await call(OP, "PATCH", `${path}/items/${locked.id}`, { version: locked.version, fields: { hours: 1 } })).json.error).toBe("immutable");
+    expect((await call(OP, "DELETE", `${path}/items/${locked.id}?version=${locked.version}`)).json.error).toBe("immutable");
+    // Hours logged afterwards are new work: a progress invoice asks only for those
+    await log(OP, path, 1);
+    const more = await call(OP, "POST", `${path}/invoices`, { type: "progress" });
+    expect(more.json.fields.lines).toMatchObject([{ qty: 22, unitCents: 17_500 }, { unitCents: -367_500 }]);
+  });
+});
+
+
 describe("paying online", () => {
   it("is off without Stripe, and points people to the other ways to pay", async () => {
     await start(false);

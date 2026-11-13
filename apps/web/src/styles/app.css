@@ -1229,6 +1229,15 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
 .pp-option h3 { margin: 6px 0 6px; font-size: 16px; font-weight: 700; color: var(--pp-ink); }
 .pp-tag { margin-left: 8px; padding: 1px 7px; border: 1px solid var(--pp-green); border-radius: 999px; color: var(--pp-green); font-size: 11px; font-weight: 600; vertical-align: middle; }
 .pp-terms { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13.5px; }
+/* The work behind an option's hours, as a narrow table */
+.pp-basis { margin: 8px 0 12px; break-inside: avoid; }
+.pp-hours { width: 100%; max-width: 560px; border-collapse: collapse; margin: 4px 0 8px; font-size: 13.5px; }
+.pp-hours th, .pp-hours td { border: 1px solid var(--pp-line); padding: 5px 8px; text-align: left; vertical-align: top; }
+.pp-hours thead th { background: #eef6f0; color: var(--pp-green); font-weight: 600; }
+.pp-hours td:last-child, .pp-hours th:last-child { text-align: right; white-space: nowrap; }
+.pp-hours .total td { font-weight: 700; }
+.inv-hours { max-width: none; }
+.inv-hours td:first-child { white-space: nowrap; }
 .pp-muted, .pp-small { color: var(--pp-muted); }
 .pp-small { font-size: 12.5px; }
 .pp-accepted, .pp-sign { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--pp-line); }
@@ -1261,7 +1270,7 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
   .pp-tools, .pp-state { display: none; }
   .proposal.pp-faded { filter: none; opacity: 1; }
   .pp-note { max-width: none; margin: 0 0 10px; border-left: 3px solid #b26b00; background: none; }
-  .pp-bar, .pp-facts th, .pp-costs thead th, .pp-duties thead th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pp-bar, .pp-facts th, .pp-costs thead th, .pp-duties thead th, .pp-hours thead th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
 
@@ -1293,6 +1302,42 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
 .sign-card { margin-top: 24px; display: grid; gap: 8px; }
 .accept-form { display: grid; gap: 8px; margin-top: 6px; max-width: 520px; }
 .notice.ok { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+/* How a price adds up: closed to one line on an option card, open in the approval */
+.option-why { margin: 0 0 8px; }
+.basis { margin: 0 0 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.basis > summary { cursor: pointer; font-size: 13px; color: var(--accent); width: max-content; max-width: 100%; }
+.basis > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.basis p { margin: 8px 0; }
+.basis-table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+.basis-table th { text-align: left; font-weight: 400; padding: 3px 10px 3px 0; vertical-align: top; }
+.basis-table td { text-align: right; white-space: nowrap; padding: 3px 0; vertical-align: top; font-family: var(--mono); font-size: 12px; }
+.basis-table tr + tr th, .basis-table tr + tr td { border-top: 1px solid var(--line); }
+.basis-table .total th, .basis-table .total td { font-weight: 600; border-top: 1.5px solid var(--line-strong); }
+.basis-h { margin: 10px 0 2px; font: 11px var(--mono); letter-spacing: .04em; color: var(--muted); }
+.basis-pay { margin: 0; padding-left: 18px; }
+/* Hours on an estimate: where the total stands against the range, then every entry */
+.hours-at { display: grid; gap: 8px; margin-bottom: 10px; max-width: 72ch; }
+.hours-bar { position: relative; height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.hours-bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 99px; }
+.hours-bar b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); opacity: .55; }
+.hours-table { width: 100%; border-collapse: collapse; margin: 4px 0 10px; }
+.hours-table th { text-align: left; font: 11px var(--mono); color: var(--muted); font-weight: 400; padding: 4px 10px 4px 0; border-bottom: 1px solid var(--line-strong); }
+.hours-table td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.hours-table .num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+.hours-table .nowrap { white-space: nowrap; }
+.hours-table td:last-child, .hours-table th:last-child { padding-right: 0; text-align: right; }
+.hours-add { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+.hours-add label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.hours-add .grow { flex: 1 1 240px; }
+.hours-add input[type="number"] { max-width: 96px; }
+@media (max-width: 560px) {
+  /* On a phone each entry stacks: date and hours on one line, the work under them */
+  .hours-table thead { display: none; }
+  .hours-table tr { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .hours-table td { border: 0; padding: 0; }
+  .hours-table td:nth-child(2) { grid-column: 1 / -1; order: 3; }
+  .hours-table td:last-child { grid-column: 1 / -1; order: 4; text-align: left; }
+}
 /* An invoice row: number, type, and state on one line, amounts and payments under it */
 .invoice-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .invoice-head .title { font-weight: 600; }

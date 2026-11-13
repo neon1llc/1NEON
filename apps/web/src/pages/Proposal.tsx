@@ -5,7 +5,7 @@
 // draft (?draft=1) built from the project's records the same way Issue freezes them.
 
 
-import { buildSnapshot, currentDecision, DecisionFields, priceCheckDue, proposalRef, revisions, todayIn, type Item, type ProposalFields, type ProposalSnapshot } from "@1neon/domain";
+import { buildSnapshot, currentDecision, DecisionFields, hoursRange, hoursText, paymentPlan, priceCheckDue, priceMeaning, priceOf, proposalRef, revisions, todayIn, type Item, type ProposalFields, type ProposalSnapshot } from "@1neon/domain";
 import { FileText, Printer } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
@@ -181,7 +181,7 @@ function Proposal({ snapshot: s, rev, latestRev, decided, inForce, timeZone, slu
       <table className="pp-facts">
         <tbody>
           <tr><th>Prepared for</th><td>{s.preparedFor ? `${s.preparedFor.name}${s.preparedFor.title ? `, ${s.preparedFor.title}` : ""}` : s.orgName}</td><th>Prepared by</th><td>Pradeep Tathineni, neon1</td></tr>
-          <tr><th>Organization</th><td>{s.orgName}</td><th>Estimates checked</th><td>{rev ? `${longDate(rev.issuedAt)}; recheck after ${longDate(rev.checkBy)}` : "when issued"}</td></tr>
+          <tr><th>Organization</th><td>{s.orgName}</td><th>Prices checked</th><td>{rev ? `${longDate(rev.issuedAt)}; recheck after ${longDate(rev.checkBy)}` : "when issued"}</td></tr>
           <tr><th>Contact</th><td>{s.preparedFor?.email ?? "—"}</td><th>Wanted by</th><td>{s.project.targetDate ? longDate(s.project.targetDate) : "—"}</td></tr>
         </tbody>
       </table>
@@ -228,6 +228,8 @@ function Proposal({ snapshot: s, rev, latestRev, decided, inForce, timeZone, slu
       <Section title="Options">
         {s.options.map((o) => {
           const f = o.fields;
+          const price = priceOf(f);
+          const basis = f.basis ?? [];
           return (
             <div key={o.id} className="pp-option">
               <h3><span className="pp-code">{o.code}</span> {o.title}{f.recommended && <span className="pp-tag">recommended</span>}</h3>
@@ -236,9 +238,27 @@ function Proposal({ snapshot: s, rev, latestRev, decided, inForce, timeZone, slu
               <p className="pp-terms">
                 {f.hours && <span><b>neon1's time:</b> {f.hours}</span>}
                 {f.timeline && <span><b>Timeline:</b> {f.timeline}</span>}
-                {f.cost && <span><b>Estimate:</b> {f.cost}</span>}
+                {f.cost && <span><b>Price:</b> {f.cost}</span>}
                 {f.outsideCosts && <span><b>Paid directly by you:</b> {f.outsideCosts}</span>}
               </p>
+              {f.why && <p><b>{f.recommended ? "Why I recommend it" : "When to pick it"}:</b> {f.why}</p>}
+              {/* The price, opened up: what kind it is, the work behind the hours, and when it's paid */}
+              {price && (
+                <div className="pp-basis">
+                  <p className="pp-sub">How the price adds up</p>
+                  <p>{priceMeaning(price)}</p>
+                  {basis.length > 0 && (
+                    <table className="pp-hours">
+                      <thead><tr><th>Work</th><th>Expected</th></tr></thead>
+                      <tbody>
+                        {basis.map((b, i) => <tr key={i}><td>{b.work}</td><td>{hoursText(b.hours)}</td></tr>)}
+                        <tr className="total"><td>Total{price.kind === "estimate" && price.hoursLow !== price.hoursHigh ? `, within a range of ${hoursRange(price)}` : ""}</td><td>{hoursText(basis.reduce((n, b) => n + b.hours, 0))}</td></tr>
+                      </tbody>
+                    </table>
+                  )}
+                  <p><b>When you pay:</b> {paymentPlan(price).join("; ")}.</p>
+                </div>
+              )}
               {f.purchases.length > 0 && (
                 <>
                   <p className="pp-sub">Expected purchases</p>
@@ -250,14 +270,14 @@ function Proposal({ snapshot: s, rev, latestRev, decided, inForce, timeZone, slu
         })}
       </Section>
 
-      <Section title="Cost estimates">
+      <Section title="Costs">
         <table className="pp-costs">
-          <thead><tr><th>Option</th><th>neon1's time</th><th>Timeline</th><th>Estimate</th><th>Paid directly by you</th></tr></thead>
+          <thead><tr><th>Option</th><th>neon1's time</th><th>Timeline</th><th>Price</th><th>Paid directly by you</th></tr></thead>
           <tbody>
             {s.options.map((o) => <tr key={o.id}><td><span className="pp-code">{o.code}</span> {o.title}</td><td>{o.fields.hours || "—"}</td><td>{o.fields.timeline || "—"}</td><td>{o.fields.cost || "—"}</td><td>{o.fields.outsideCosts || "None"}</td></tr>)}
           </tbody>
         </table>
-        <p className="pp-small">Estimates are for the work described. Accounts and subscriptions are in your name and billed to you directly, so nothing is marked up and nothing is lost if we stop working together. Items to buy are bought by you, unless you agree with your initials that neon1 buys them; those are paid back at cost, with the receipt.</p>
+        <p className="pp-small">Prices are for the work described. A fixed price is the whole price for that work. An estimate is billed for the hours worked, at the rate shown, and never above its high end unless you approve a change first; every hour is listed in 1NEON as it's logged. Accounts and subscriptions are in your name and billed to you directly, so nothing is marked up and nothing is lost if we stop working together. Items to buy are bought by you, unless you agree with your initials that neon1 buys them; those are paid back at cost, with the receipt.</p>
       </Section>
 
       {/* Shared and individual responsibilities, in the "You will / I will" pairs of neon1's proposals */}
@@ -277,8 +297,8 @@ function Proposal({ snapshot: s, rev, latestRev, decided, inForce, timeZone, slu
 
       <Section title="Comments and agreement">
         <ul className="pp-list">
-          <li>{rev ? <>Estimates were checked on {longDate(rev.issuedAt)}. After {longDate(rev.checkBy)}, ask neon1 to refresh them before choosing; refreshing issues the next revision.</> : "Estimates are checked when this proposal is issued, and rechecked after 30 days."}</li>
-          <li>Choosing an option, by signing below or approving it in 1NEON, accepts that option's scope and estimate, and what each of us will do. It isn't a bill. Work begins under our service agreement, signed once before any paid work, which covers payment, ownership, confidentiality, and how either of us can end the work.</li>
+          <li>{rev ? <>Prices were checked on {longDate(rev.issuedAt)}. After {longDate(rev.checkBy)}, ask neon1 to refresh them before choosing; refreshing issues the next revision.</> : "Prices are checked when this proposal is issued, and rechecked after 30 days."}</li>
+          <li>Choosing an option, by signing below or approving it in 1NEON, accepts that option's scope and price, and what each of us will do. It isn't a bill. Work begins under our service agreement, signed once before any paid work, which covers payment, ownership, confidentiality, and how either of us can end the work.</li>
           <li>Neither of us adds work or cost without a written change, which becomes the next revision of this proposal.</li>
           <li>For questions or changes, reply in 1NEON, upload a marked-up copy of this document, write to hello@neon1.tech, or call +1 424-326-3661.</li>
         </ul>

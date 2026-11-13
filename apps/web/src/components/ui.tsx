@@ -2,7 +2,7 @@
 // layer badges, toasts, the are-you-sure dialog, conflict dialog.
 
 
-import { LAYER_LETTER, LAYER_NAMES, type Health as HealthT, type Layer } from "@1neon/domain";
+import { LAYER_LETTER, LAYER_NAMES, RECORD_KINDS, type Health as HealthT, type Layer } from "@1neon/domain";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
 
@@ -97,8 +97,9 @@ export function layerProgress(items: { kind: string; status: string }[], layerOf
   const options = items.filter((i) => i.kind === "option");
   for (const i of items) {
     const l = layerOf(i.kind);
-    // Records (decisions, updates, revisions, constraints) aren't work to finish; options count once below
-    if (!l || ["decision", "update", "option", "proposal", "constraint"].includes(i.kind)) continue;
+    // Records (decisions, updates, revisions, constraints, invoices, payments, hours) aren't work to
+    // finish; options count once below
+    if (!l || i.kind === "option" || RECORD_KINDS.has(i.kind)) continue;
     out[l][1]++;
     if (i.status === "done" || (i.kind === "purchase" && i.status === "returned")) out[l][0]++;
   }

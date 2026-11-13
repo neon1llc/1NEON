@@ -149,35 +149,132 @@ export function invoiceState(invoice: Rec, items: Rec[], today: string): "draft"
 }
 
 
+// --- Prices ----------------------------------------------------------------------------------
+// An option's price is one of two kinds, and every invoice suggestion follows from which. A fixed
+// price is one amount. An estimate is hours at a rate, with a low and a high end: the client pays for
+// the hours worked, and never above the high end unless a change is approved first.
+
+/** What a price is read from: an option's fields, or the terms copied into a decision */
+export type PriceTerms = { cost?: string; pricing?: "fixed" | "estimate"; rateCents?: number; hoursLow?: number; hoursHigh?: number };
+
+/** A price invoices can be worked out from */
+export type Price =
+  | { kind: "fixed"; totalCents: number }
+  | { kind: "estimate"; rateCents: number; hoursLow: number; hoursHigh: number; lowCents: number; highCents: number };
+
+/** The price in numbers, or undefined when it's only words ("depends on seats") */
+export function priceOf(t: PriceTerms): Price | undefined {
+  if (t.pricing === "estimate") {
+    if (!t.rateCents || !t.hoursHigh) return undefined;
+    const low = Math.min(t.hoursLow ?? t.hoursHigh, t.hoursHigh);
+    return { kind: "estimate", rateCents: t.rateCents, hoursLow: low, hoursHigh: t.hoursHigh, lowCents: Math.round(low * t.rateCents), highCents: Math.round(t.hoursHigh * t.rateCents) };
+  }
+  // Options written before prices had a kind say it in words: "$6,500 fixed"
+  if (t.pricing === "fixed" || /fixed/i.test(t.cost ?? "")) {
+    const total = parseMoney(t.cost ?? "");
+    return total ? { kind: "fixed", totalCents: total } : undefined;
+  }
+  return undefined;
+}
+
+/** 350000 → "$3,500"; cents show only when there are some ("$3,762.50") */
+export const dollars = (cents: number) => (cents % 100 === 0 ? money(cents).slice(0, -3) : money(cents));
+/** 21 → "21 hours", 1 → "1 hour", 2.5 → "2.5 hours" */
+export const hoursText = (h: number) => `${Number(h.toFixed(2))} ${h === 1 ? "hour" : "hours"}`;
+/** "20 to 24 hours", or "7 hours" when the two ends are the same */
+export const hoursRange = (p: Extract<Price, { kind: "estimate" }>) => (p.hoursLow === p.hoursHigh ? hoursText(p.hoursHigh) : `${Number(p.hoursLow.toFixed(2))} to ${hoursText(p.hoursHigh)}`);
+
+/** The price as one line: "$3,500 to $4,200 estimate" or "$1,700 fixed". Written into an option's
+ * cost, so every place that prints the cost says the same thing */
+export function priceLine(p: Price): string {
+  if (p.kind === "fixed") return `${dollars(p.totalCents)} fixed`;
+  return p.lowCents === p.highCents ? `${dollars(p.highCents)} estimate` : `${dollars(p.lowCents)} to ${dollars(p.highCents)} estimate`;
+}
+
+/** An option's fields with its written cost and hours brought in line with its numbers, so an
+ * estimate's range is never typed one way and calculated another */
+export function alignPrice<T extends PriceTerms & { hours?: string }>(f: T): T {
+  const p = f.pricing === "estimate" ? priceOf(f) : undefined;
+  return p?.kind === "estimate" ? { ...f, cost: priceLine(p), hours: hoursRange(p) } : f;
+}
+
+/** What the kind of price means for the person paying, in a sentence or two */
+export function priceMeaning(p: Price): string {
+  if (p.kind === "fixed") return "A fixed price. It changes only if you approve a change to the work.";
+  return `An estimate. You pay for the hours worked at ${dollars(p.rateCents)} an hour, and each hour is listed in the project as it's logged. The total can't pass ${dollars(p.highCents)} unless you approve a change first.`;
+}
+
+/** When the money is due, as short lines: the deposit at approval, and the rest at handover */
+export function paymentPlan(p: Price, percent = DEPOSIT_PERCENT): string[] {
+  if (p.kind === "fixed") {
+    const first = Math.round((p.totalCents * percent) / 100);
+    return [`${money(first)} when you approve (${percent}% deposit)`, `${money(p.totalCents - first)} when you accept the handover`];
+  }
+  const first = Math.round((p.lowCents * percent) / 100);
+  return [`${money(first)} when you approve (${percent}% of the low end, as a deposit)`, "The rest when you accept the handover: the hours worked, less the deposit"];
+}
+
+/** Every hour logged on the project */
+export const hoursLogged = (items: Rec[]) => items.filter((i) => i.kind === "time").reduce((s, i) => s + (Number(i.fields.hours) || 0), 0);
+
+/**
+ * Where an hourly estimate stands: hours logged, the hours that can be billed (never past the high
+ * end), and what they come to. Undefined for a fixed price, which doesn't depend on hours
+ */
+export function hoursStanding(terms: PriceTerms, items: Rec[]) {
+  const price = priceOf(terms);
+  if (price?.kind !== "estimate") return undefined;
+  const logged = hoursLogged(items);
+  const billable = Math.min(logged, price.hoursHigh);
+  return { price, logged, billable, over: logged - billable, earnedCents: Math.round(billable * price.rateCents) };
+}
+
+
 // --- Suggested lines ------------------------------------------------------------------------
 
-/** The share of a fixed price asked up front when an option is approved */
+/** The share asked up front when an option is approved: of a fixed price, or of an estimate's low end */
 export const DEPOSIT_PERCENT = 50;
 
 type Decision = { id: string; title: string; fields: Record<string, unknown> };
+type Terms = PriceTerms & { title?: string };
 
-/** A deposit line for an approved option with a dollar price; none when the price has no amount */
+// "0039-r1-B Solid setup": the option's ID in the proposal, then its name
+const named = (d: Decision) => `${typeof d.fields.code === "string" ? `${d.fields.code} ` : ""}${((d.fields.terms ?? {}) as Terms).title ?? d.title}`;
+// What earlier invoices already asked for on this decision (deposit and progress lines name it)
+const billedOn = (d: Decision, items: Rec[]) => items
+  .filter((i) => i.kind === "invoice" && i.status !== "void" && i.fields.type !== "credit" && i.fields.type !== "reimbursement")
+  .flatMap((i) => InvoiceFields.parse(i.fields).lines)
+  .filter((l) => l.ref === d.id)
+  .reduce((s, l) => s + lineCents(l), 0);
+
+/** A deposit line for an approved option with a price in numbers; none when the price is only words */
 export function depositLines(d: Decision, percent = DEPOSIT_PERCENT): InvoiceLine[] {
-  const terms = (d.fields.terms ?? {}) as { title?: string; cost?: string };
-  const code = typeof d.fields.code === "string" ? `${d.fields.code} ` : "";
-  const total = parseMoney(terms.cost ?? "");
-  if (!total) return [];
-  return [{ text: `${percent}% deposit on ${code}${terms.title ?? d.title}`.slice(0, 200), qty: 1, unitCents: Math.round((total * percent) / 100), ref: d.id }];
+  const price = priceOf((d.fields.terms ?? {}) as Terms);
+  if (!price) return [];
+  if (price.kind === "fixed") return [{ text: `${percent}% deposit on ${named(d)}`.slice(0, 200), qty: 1, unitCents: Math.round((price.totalCents * percent) / 100), ref: d.id }];
+  return [{ text: `Deposit on ${named(d)}: ${percent}% of the estimate's low end (${dollars(price.lowCents)})`.slice(0, 200), qty: 1, unitCents: Math.round((price.lowCents * percent) / 100), ref: d.id }];
 }
 
-/** The rest of an approved option's price, after earlier deposit and progress lines for it */
+/**
+ * What is owed on an approved option now, after earlier deposit and progress lines for it. A fixed
+ * price: the rest of the price. An estimate: the hours logged at the rate (never past the high end),
+ * less what was already invoiced; hours past the high end are shown, at no charge
+ */
 export function finalLines(d: Decision, items: Rec[]): InvoiceLine[] {
-  const terms = (d.fields.terms ?? {}) as { title?: string; cost?: string };
-  const total = parseMoney(terms.cost ?? "");
-  if (!total) return [];
-  const billed = items
-    .filter((i) => i.kind === "invoice" && i.status !== "void" && i.fields.type !== "credit" && i.fields.type !== "reimbursement")
-    .flatMap((i) => InvoiceFields.parse(i.fields).lines)
-    .filter((l) => l.ref === d.id)
-    .reduce((s, l) => s + lineCents(l), 0);
-  const left = total - billed;
-  const code = typeof d.fields.code === "string" ? `${d.fields.code} ` : "";
-  return left > 0 ? [{ text: `Balance on ${code}${terms.title ?? d.title}`.slice(0, 200), qty: 1, unitCents: left, ref: d.id }] : [];
+  const terms = (d.fields.terms ?? {}) as Terms;
+  const price = priceOf(terms);
+  if (!price) return [];
+  const billed = billedOn(d, items);
+  if (price.kind === "fixed") {
+    const left = price.totalCents - billed;
+    return left > 0 ? [{ text: `Balance on ${named(d)}`.slice(0, 200), qty: 1, unitCents: left, ref: d.id }] : [];
+  }
+  const at = hoursStanding(terms, items)!;
+  if (at.earnedCents - billed <= 0) return [];
+  const lines: InvoiceLine[] = [{ text: `${hoursText(at.billable)} on ${named(d)} at ${dollars(price.rateCents)} an hour`.slice(0, 200), qty: at.billable, unitCents: price.rateCents, ref: d.id }];
+  if (at.over > 0) lines.push({ text: `${hoursText(at.over)} past the estimate's high end, not billed`, qty: at.over, unitCents: 0, ref: d.id });
+  if (billed > 0) lines.push({ text: `Less what earlier invoices asked for on ${named(d)}`.slice(0, 200), qty: 1, unitCents: -billed, ref: d.id });
+  return lines;
 }
 
 /** Items neon1 bought for the client, at the receipt's cost, not yet on any invoice */

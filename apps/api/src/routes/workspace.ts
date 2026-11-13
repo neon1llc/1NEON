@@ -2,7 +2,7 @@
 // its workflow stages, the workspace landing, Coming up, Insights, and the audit trail.
 
 
-import { Stage, canApprove, changeRecord, occurrences, stageChanges, dateIn, isClosed, isOwnOrg, metricReached, mondayOf, plusDays, todayIn, type Tenant } from "@1neon/domain";
+import { RECORD_KINDS, Stage, canApprove, changeRecord, occurrences, stageChanges, dateIn, isClosed, isOwnOrg, metricReached, mondayOf, plusDays, todayIn, type Tenant } from "@1neon/domain";
 import { z } from "zod";
 import { actorId, body, fail, need, now, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
@@ -85,7 +85,7 @@ export function workspaceRoutes(app: App, k: Kit) {
     const today = todayIn(t.timeZone, new Date(now()));
     const glance = [];
     for (const p of live) {
-      const work = (await repo.listItems(t.id, p.id)).filter((i) => !["update", "decision", "metric", "proposal", "constraint"].includes(i.kind));
+      const work = (await repo.listItems(t.id, p.id)).filter((i) => i.kind !== "metric" && !RECORD_KINDS.has(i.kind));
       const openWork = work.filter((i) => !["done", "approved", "declined", "returned"].includes(i.status));
       const next = openWork.filter((i) => i.dueDate && i.dueDate >= today).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!))[0];
       const st = stageName.get(p.stageId);
@@ -190,6 +190,8 @@ export function workspaceRoutes(app: App, k: Kit) {
           if (opt) decisionDays.push((Date.parse(String(i.fields.approvedAt)) - Date.parse(opt)) / 864e5);
           continue;
         }
+        // Invoices, payments, hours, and other records are not work, so they are neither open nor finished
+        if (RECORD_KINDS.has(i.kind)) continue;
         if (i.status === "done") {
           // Finished means the recorded completion time, never the last edit (updatedAt moves on edits)
           if (!i.completedAt) {
@@ -200,7 +202,7 @@ export function workspaceRoutes(app: App, k: Kit) {
           const wk = week(doneOn);
           doneByWeek.set(wk, (doneByWeek.get(wk) ?? 0) + 1);
           if (i.dueDate) (doneOn <= i.dueDate ? onTime++ : late++);
-        } else if (i.kind !== "update" && i.status !== "approved") {
+        } else if (i.status !== "approved") {
           open++;
           if (i.dueDate && i.dueDate < today) overdue++;
         }

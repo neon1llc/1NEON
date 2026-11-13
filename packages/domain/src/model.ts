@@ -235,6 +235,7 @@ export const ItemKind = z.enum([
   "purchase", // Execute: something to buy for the agreed option, with its receipt
   "invoice", // Execute: a bill for the work or purchases (made and issued only by the invoice routes)
   "payment", // Execute: money received against one invoice (Stripe or recorded by hand)
+  "time", // Execute: hours neon1 worked on the agreed option, with the date and what was done
   "signoff", // Execute: an approval needed from outside (landlord, building, a licensed trade)
   "metric", // Observe
   "check", // Observe
@@ -274,6 +275,7 @@ export const KIND_LAYER: Record<ItemKind, Layer> = {
   purchase: "execution",
   invoice: "execution",
   payment: "execution",
+  time: "execution",
   signoff: "execution",
   metric: "observation",
   check: "observation",
@@ -284,6 +286,13 @@ export const KIND_LAYER: Record<ItemKind, Layer> = {
   care: "next",
   retro: "next",
 };
+
+
+/**
+ * Kinds that are records, not work to finish: decisions, updates, proposal revisions, constraints,
+ * invoices, payments, and hours. They never count toward progress, open work, or what's overdue
+ */
+export const RECORD_KINDS: ReadonlySet<string> = new Set<ItemKind>(["decision", "update", "proposal", "constraint", "invoice", "payment", "time"]);
 
 
 /** Statuses a person may set on each kind; "approved" comes only from the approve route */
@@ -297,6 +306,8 @@ export const STATUSES: Partial<Record<ItemKind, readonly string[]>> = {
   // Invoices and payments change only through the billing routes
   invoice: [],
   payment: [],
+  // Logged hours are a record of work done: there or not, with no status to move
+  time: [],
 };
 // Every other kind is a simple work item
 export const WORK_STATUSES = ["open", "doing", "blocked", "done"] as const;
@@ -350,6 +361,29 @@ export const PurchaseLine = z.object({
 export type PurchaseLine = z.infer<typeof PurchaseLine>;
 
 
+/** One line of where an option's hours go: a piece of the work and the hours it should take */
+export const BasisLine = z.object({ work: z.string().trim().min(1).max(160), hours: z.number().min(0).max(1000) });
+export type BasisLine = z.infer<typeof BasisLine>;
+
+/**
+ * How an option's price works. "fixed": one price, which changes only with an approved change.
+ * "estimate": billed for the hours worked at the stated rate, expected to land between a low and a
+ * high number of hours, and never above the high end unless a change is approved first
+ */
+export const Pricing = z.enum(["fixed", "estimate"]);
+export type Pricing = z.infer<typeof Pricing>;
+
+// The numbers behind a price, shared by an option and the terms copied into its decision
+const priceFields = {
+  pricing: Pricing.optional(),
+  // The hourly rate in cents, and the expected hours from low to high (an estimate needs all three)
+  rateCents: z.number().int().min(0).max(10_000_00).optional(),
+  hoursLow: z.number().min(0).max(10_000).optional(),
+  hoursHigh: z.number().min(0).max(10_000).optional(),
+  // Where the hours go, piece by piece, so the price can be checked against the work
+  basis: z.array(BasisLine).max(40).optional(),
+};
+
 export const OptionFields = z.object({
   cost: z.string().max(80).default(""),
   costScore: Score.default(3),
@@ -364,6 +398,9 @@ export const OptionFields = z.object({
   result: z.string().max(300).default(""),
   // What the option expects to be bought, each with who buys it (the client, unless agreed otherwise)
   purchases: z.array(PurchaseLine).max(30).default([]),
+  ...priceFields,
+  // Why neon1 recommends this option, or when it's the right one to pick, in a sentence or two
+  why: z.string().max(400).default(""),
 });
 
 
@@ -383,6 +420,7 @@ export const DecisionTerms = z.object({
   effortScore: Score.optional(),
   recommended: z.boolean().optional(),
   purchases: z.array(PurchaseLine).max(30).optional(),
+  ...priceFields,
 });
 export type DecisionTerms = z.infer<typeof DecisionTerms>;
 
@@ -452,6 +490,17 @@ export const PurchaseFields = z.object({
 });
 
 
+/** Hours neon1 worked on one day; the item's title says what was done. `invoiceId` is set when an
+ * issued invoice bills them, after which the entry is a record and no longer changes */
+export const TimeFields = z.object({
+  date: z.string().date(),
+  // Quarter hours, up to a full day
+  hours: z.number().positive().max(24).refine((h) => Number.isInteger(h * 4), "Use quarter hours, such as 1.25 or 2.5."),
+  invoiceId: id.optional(),
+});
+export type TimeFields = z.infer<typeof TimeFields>;
+
+
 // A handover step the client accepted, with who, when, and a note
 export const HandoffFields = z.object({
   accepted: z.object({ by: id, name: z.string().max(80), at: isoDate, note: z.string().max(500).default(""), signature: Signature.optional() }).optional(),
@@ -465,6 +514,7 @@ export const RequestScope = z.enum(["yes", "no", "unsure"]);
 // Which kinds validate their fields, and with which schema
 export const itemFields: Partial<Record<ItemKind, z.ZodType>> = {
   purchase: PurchaseFields,
+  time: TimeFields,
   handoff: HandoffFields,
   option: OptionFields,
   decision: DecisionFields,

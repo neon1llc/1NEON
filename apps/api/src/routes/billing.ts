@@ -6,7 +6,7 @@
 
 import {
   AGREEMENT_EDITION, AGREEMENT_TEXT, CreateInvoiceInput, IssueInvoiceInput, Item, InvoiceFields, PaymentFields, RecordPaymentInput, SignAgreementInput, UpdateInvoiceInput, VoidInvoiceInput,
-  balanceOf, canonical, depositLines, finalLines, invoiceNumber, invoiceTotal, isOwnOrg, money, newId, plusDays, proposalNumber, reimbursementLines, revisions, sha256Hex, signature, todayIn,
+  balanceOf, canonical, depositLines, finalLines, priceOf, type PriceTerms, invoiceNumber, invoiceTotal, isOwnOrg, money, newId, plusDays, proposalNumber, reimbursementLines, revisions, sha256Hex, signature, todayIn,
   type Project, type Tenant,
 } from "@1neon/domain";
 import type { Context } from "hono";
@@ -155,7 +155,7 @@ export function billingRoutes(app: App, k: Kit, pay: ReturnType<typeof stripeWeb
       const target = items.find((i) => i.id === input.appliesTo && i.kind === "invoice");
       if (!target || target.status === "draft" || target.status === "void" || target.fields.type === "credit") fail(400, "invalid", "A credit reduces one issued invoice. Choose which.");
     }
-    const suggested = input.type === "deposit" ? (decision ? depositLines(decision) : []) : input.type === "final" ? (decision ? finalLines(decision, items) : []) : input.type === "reimbursement" ? reimbursementLines(items) : [];
+    const suggested = input.type === "deposit" ? (decision ? depositLines(decision) : []) : input.type === "final" || input.type === "progress" ? (decision ? finalLines(decision, items) : []) : input.type === "reimbursement" ? reimbursementLines(items) : [];
     const lines = input.lines ?? suggested;
     if (!lines.length) fail(400, "no_lines", "There's nothing to bill yet. Add a line with what it's for and the amount.");
     const ts = now();
@@ -208,7 +208,13 @@ export function billingRoutes(app: App, k: Kit, pay: ReturnType<typeof stripeWeb
     });
     issued.hash = await sha256Hex(canonical({ ...issued, hash: undefined, total: invoiceTotal(issued) }));
     const next: Item = { ...it, title: `${issued.type === "credit" ? "Credit" : "Invoice"} ${issued.number}`, status: "issued", fields: issued, version: it.version + 1, updatedAt: ts, updatedBy: actorId(c) };
-    await repo.table.write([repo.itemOp(next, { version: it.version }), repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: "invoice.issued", target: it.id, summary: `${p.key}: issued ${issued.number} for ${money(invoiceTotal(issued))}, due ${new Date(`${issued.dueDate}T00:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })}` })]);
+    // Hours this invoice bills are a record from here on: each is marked with the invoice, and stays
+    // as logged (an invoice for the work bills every hour logged so far, less what was asked before)
+    const agreed = currentDecision(items);
+    const billsHours = (issued.type === "final" || issued.type === "progress") && Boolean(agreed) && priceOf((agreed!.fields.terms ?? {}) as PriceTerms)?.kind === "estimate";
+    const hours = billsHours ? items.filter((i) => i.kind === "time" && !i.fields.invoiceId).slice(0, 90) : [];
+    const stamped = hours.map((h) => repo.itemOp({ ...h, fields: { ...h.fields, invoiceId: it.id }, version: h.version + 1, updatedAt: ts, updatedBy: actorId(c) }, { version: h.version }));
+    await repo.table.write([repo.itemOp(next, { version: it.version }), ...stamped, repo.auditOp({ tenantId: p.tenantId, actorId: actorId(c), action: "invoice.issued", target: it.id, summary: `${p.key}: issued ${issued.number} for ${money(invoiceTotal(issued))}, due ${new Date(`${issued.dueDate}T00:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })}` })]);
     await keep(k, `t/${p.tenantId}/p/${p.id}/invoices/${issued.number}.json`, next);
     return c.json(next);
   });
