@@ -240,12 +240,16 @@ type Terms = PriceTerms & { title?: string };
 
 // "0039-r1-B Solid setup": the option's ID in the proposal, then its name
 const named = (d: Decision) => `${typeof d.fields.code === "string" ? `${d.fields.code} ` : ""}${((d.fields.terms ?? {}) as Terms).title ?? d.title}`;
-// What earlier invoices already asked for on this decision (deposit and progress lines name it)
-const billedOn = (d: Decision, items: Rec[]) => items
+// The earlier invoices for this decision's work (deposit and progress lines name it), oldest first
+const earlier = (d: Decision, items: Rec[]) => items
   .filter((i) => i.kind === "invoice" && i.status !== "void" && i.fields.type !== "credit" && i.fields.type !== "reimbursement")
-  .flatMap((i) => InvoiceFields.parse(i.fields).lines)
-  .filter((l) => l.ref === d.id)
-  .reduce((s, l) => s + lineCents(l), 0);
+  .map((i) => InvoiceFields.parse(i.fields))
+  .filter((f) => f.lines.some((l) => l.ref === d.id))
+  .sort((a, b) => String(a.issuedAt ?? "~").localeCompare(String(b.issuedAt ?? "~")));
+// What those invoices already asked for
+const billedOn = (d: Decision, items: Rec[]) => earlier(d, items).flatMap((f) => f.lines).filter((l) => l.ref === d.id).reduce((s, l) => s + lineCents(l), 0);
+// "INV-0039-01 and INV-0039-02": the earlier invoices by number, so the subtraction can be checked
+const listed = (names: string[]) => (names.length > 2 ? `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}` : names.join(" and "));
 
 /** A deposit line for an approved option with a price in numbers; none when the price is only words */
 export function depositLines(d: Decision, percent = DEPOSIT_PERCENT): InvoiceLine[] {
@@ -273,7 +277,8 @@ export function finalLines(d: Decision, items: Rec[]): InvoiceLine[] {
   if (at.earnedCents - billed <= 0) return [];
   const lines: InvoiceLine[] = [{ text: `${hoursText(at.billable)} on ${named(d)} at ${dollars(price.rateCents)} an hour`.slice(0, 200), qty: at.billable, unitCents: price.rateCents, ref: d.id }];
   if (at.over > 0) lines.push({ text: `${hoursText(at.over)} past the estimate's high end, not billed`, qty: at.over, unitCents: 0, ref: d.id });
-  if (billed > 0) lines.push({ text: `Less what earlier invoices asked for on ${named(d)}`.slice(0, 200), qty: 1, unitCents: -billed, ref: d.id });
+  const numbers = earlier(d, items).flatMap((f) => (f.number ? [f.number] : []));
+  if (billed > 0) lines.push({ text: (numbers.length ? `Less ${listed(numbers)}, invoiced earlier for this work` : "Less what was invoiced earlier for this work").slice(0, 200), qty: 1, unitCents: -billed, ref: d.id });
   return lines;
 }
 

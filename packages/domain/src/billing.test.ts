@@ -89,12 +89,12 @@ describe("suggested lines", () => {
   it("asks half of an estimate's low end up front, then the hours worked less that", () => {
     const dep = depositLines(e);
     expect(dep).toEqual([{ text: "Deposit on 0039-r1-B B. Solid setup: 50% of the estimate's low end ($3,500)", qty: 1, unitCents: 175_000, ref: "d3" }]);
-    const paid = inv("i1", "paid", { type: "deposit", lines: dep });
+    const paid = inv("i1", "paid", { type: "deposit", lines: dep, number: "INV-0039-01", issuedAt: "2026-10-01T12:00:00.000Z" });
     // 21 hours logged: 21 x $175 = $3,675, less the $1,750 deposit
     const lines = finalLines(e, [paid, time("t1", 12.5), time("t2", 8.5)]);
     expect(lines).toEqual([
       { text: "21 hours on 0039-r1-B B. Solid setup at $175 an hour", qty: 21, unitCents: 17_500, ref: "d3" },
-      { text: "Less what earlier invoices asked for on 0039-r1-B B. Solid setup", qty: 1, unitCents: -175_000, ref: "d3" },
+      { text: "Less INV-0039-01, invoiced earlier for this work", qty: 1, unitCents: -175_000, ref: "d3" },
     ]);
     expect(invoiceTotal({ type: "final", taxCents: 0, lines })).toBe(192_500);
     // Once that final invoice exists, nothing more is owed for the same hours

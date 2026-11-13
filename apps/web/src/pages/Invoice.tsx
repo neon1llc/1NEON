@@ -3,7 +3,7 @@
 // (number, lines, due date, and the hash that fixes them), what has been paid, and what is left.
 
 
-import { InvoiceFields, PaymentFields, balanceOf, currentDecision, hoursText, invoiceState, invoiceTotal, money, priceOf, todayIn, type PaymentMethod, type PriceTerms } from "@1neon/domain";
+import { InvoiceFields, PaymentFields, balanceOf, currentDecision, hoursText, invoiceState, invoiceTotal, money, priceOf, todayIn, type Item, type PaymentMethod, type PriceTerms } from "@1neon/domain";
 import { Printer } from "lucide-react";
 import { useEffect } from "react";
 import { Link, useParams } from "react-router";
@@ -56,9 +56,15 @@ export function InvoicePage() {
   // The hours this invoice bills, entry by entry: the ones stamped with it once issued; on a draft
   // for an hourly estimate, the ones not billed yet, which issuing will stamp
   const hourly = priceOf((currentDecision(items).decision?.fields.terms ?? {}) as PriceTerms)?.kind === "estimate";
+  const forHours = hourly && (f.type === "final" || f.type === "progress");
+  const mine = (i: Item) => (it.status === "draft" ? forHours && !i.fields.invoiceId : i.fields.invoiceId === it.id);
+  // Its hours line counts every hour so far and subtracts earlier invoices, so hours those invoices
+  // listed are shown again, marked with the invoice they were on, and the total matches the line
+  const before = new Map(items.filter((i) => i.kind === "invoice" && i.id !== it.id && i.status !== "draft" && i.status !== "void" && (it.status === "draft" || String(i.fields.issuedAt ?? "") < String(f.issuedAt ?? ""))).map((i) => [i.id, String(i.fields.number ?? "")]));
   const hours = items
-    .filter((i) => i.kind === "time" && (it.status === "draft" ? hourly && (f.type === "final" || f.type === "progress") && !i.fields.invoiceId : i.fields.invoiceId === it.id))
+    .filter((i) => i.kind === "time" && (mine(i) || (forHours && before.has(String(i.fields.invoiceId)))))
     .sort((a, b) => String(a.fields.date).localeCompare(String(b.fields.date)) || a.createdAt.localeCompare(b.createdAt));
+  const carried = hours.some((h) => !mine(h));
   return (
     <>
       <div className="pp-tools">
@@ -70,7 +76,7 @@ export function InvoicePage() {
       {it.status === "draft" && <p className="pp-state" role="status">Draft, only neon1 sees it. Issuing numbers it and shows it to the client.</p>}
       {state === "void" && <p className="pp-state warn" role="status">Void{f.voided ? `: ${f.voided.reason}` : ""}. Nothing is owed on it.</p>}
       <article className={`proposal invoice${state === "void" ? " pp-faded" : ""}`} aria-labelledby="inv-h1">
-        {DEMO && <p className="pp-note">{FICTIONAL}</p>}
+        {DEMO && <p className="pp-note">{FICTIONAL.replace("proposal", "invoice").replace("Not an offer", "Not a bill")}</p>}
         {/* Letterhead: neon1 left, the invoice's number and dates right */}
         <header className="pp-head">
           <div className="pp-mark">
@@ -120,11 +126,11 @@ export function InvoicePage() {
         {/* An invoice for hours lists each one, so the quantity above can be checked line by line */}
         {hours.length > 0 && (
           <section className="pp-section">
-            <h2 className="pp-bar">Hours on this invoice</h2>
+            <h2 className="pp-bar">{carried ? "Hours through this invoice" : "Hours on this invoice"}</h2>
             <table className="pp-hours inv-hours">
               <thead><tr><th>Date</th><th>Work done</th><th>Hours</th></tr></thead>
               <tbody>
-                {hours.map((h) => <tr key={h.id}><td>{longDate(String(h.fields.date))}</td><td>{h.title}</td><td>{Number(Number(h.fields.hours).toFixed(2))}</td></tr>)}
+                {hours.map((h) => <tr key={h.id}><td>{longDate(String(h.fields.date))}</td><td>{h.title}{!mine(h) && <small> (listed on {before.get(String(h.fields.invoiceId))})</small>}</td><td>{Number(Number(h.fields.hours).toFixed(2))}</td></tr>)}
                 <tr className="total"><td colSpan={2}>Total</td><td>{hoursText(hours.reduce((n, h) => n + Number(h.fields.hours || 0), 0))}</td></tr>
               </tbody>
             </table>

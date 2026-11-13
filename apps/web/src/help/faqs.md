@@ -75,10 +75,10 @@ Charts made from your organization's own data: open and overdue work, how often 
 neon1's options for a project are issued together as a numbered proposal, such as 0039-r1, and each option in it gets its own ID, such as 0039-r1-B. Issuing a revision freezes a copy of everything it shows, so what you approve is exactly what you read. If the options change, neon1 issues the next revision (0039-r2); earlier ones stay readable, marked as replaced. Each revision also shows when its prices were checked; after the recheck date, approval waits until neon1 refreshes it. [Watch it](/1NEON/live?play=propose).
 
 ### How do I approve an option?
-Open the project's **Needs** layer, compare the options, and choose **Approve this option**. You can add conditions, such as "only after 6pm". Then type your full name and tick the box to sign; your typed name is your signature. The approval is recorded with your signature, your name, the time, and a copy of the option's terms (its ID, title, description, price, hours, timeline, outside costs, and anything to buy) exactly as you saw them. Before you sign, the approval lists those terms again, so you know what you're accepting. Options come from neon1; to ask for a change, comment on the option or send a marked-up copy of the proposal. [Watch it](/1NEON/live?play=decide).
+Open the project's **Needs** layer, compare the options, and choose **Approve this option**. You can add conditions, such as "only after 6pm". Then type your full name and tick the box to sign; your typed name is your signature. The approval is recorded with your signature, your name, the time, and a copy of the option's terms (its ID, title, description, price and whether it's fixed or an estimate, hours, rate, timeline, outside costs, and anything to buy) exactly as you saw them. Before you sign, the approval lists those terms again, so you know what you're accepting. Options come from neon1; to ask for a change, comment on the option or send a marked-up copy of the proposal. [Watch it](/1NEON/live?play=decide).
 
 ### Can I download the proposal?
-Yes. Under the options, choose **Read the proposal**. It puts the discovery, the goals, the constraints, every option with what's in and out, the hours and prices, what to buy, what each of us will do, and the agreement on one page. Use **Print or save as PDF** to keep a copy, or **Download Word** for a copy you can mark up. Every page carries the proposal's number and revision, such as 0039-r1. Signing your approval in 1NEON counts the same as signing it on paper. [Watch it](/1NEON/live?play=decide).
+Yes. Under the options, choose **Read the proposal**. It puts the discovery, the goals, the constraints, every option with what's in and out, how each price adds up, when you'd pay, what to buy, what each of us will do, and the agreement on one page. Use **Print or save as PDF** to keep a copy, or **Download Word** for a copy you can mark up. Every page carries the proposal's number and revision, such as 0039-r1. Signing your approval in 1NEON counts the same as signing it on paper. [Watch it](/1NEON/live?play=decide).
 
 ### How do I suggest changes to a proposal?
 Comment on an option, or download the proposal as a Word file, mark it up with tracked changes or comments, and upload it to the project's **Files**. 1NEON recognizes the proposal from its number and asks "Is this a revision of Proposal 0039-r1?"; choose **Yes** and it's filed under **Files**, then **Proposals**, beside that revision. neon1 answers with the next revision, which you approve from as usual. [Watch it](/1NEON/live?play=decide).
@@ -99,10 +99,10 @@ Not edited. Once approved, neither the decision nor the option it came from can 
 An approval records that your organization agreed to that option as shown: its scope, cost, and timeline, plus any conditions you added. Both sides can rely on that record. It works alongside your signed agreement with neon1, which governs the paid work.
 
 ### How do I accept a handover step?
-On the project's **Normalize** layer, steps that need your sign-off show **Check it and accept**. Note what you checked if you like, type your full name, and tick the box to sign. The acceptance is recorded with your signature and can't be edited afterwards. When the last step is accepted, neon1 prepares the final invoice. [Watch it](/1NEON/live?play=handover).
+On the project's **Normalize** layer, steps that need your sign-off show **Check it and accept**. Note what you checked if you like, type your full name, and tick the box to sign. The acceptance is recorded with your signature and can't be edited afterwards. When the last step is accepted, neon1 prepares the final invoice. Watch [the handover](/1NEON/live?play=handover) and [the final invoice](/1NEON/live?play=final).
 
 ### What do Cost, Quality, and Effort mean?
-They're neon1's assessment of each option, from 1 to 5, where more filled dots is always better. **Cost** is the total cost. **Quality** is how fully it meets the requirements you agreed. **Effort** is your team's effort to adopt and run it. Each option also lists one-time and recurring charges apart, with a first-year total when it has both; the written price on the option is what you'd agree to. Figures in the demo and the walkthrough are illustrative. [Watch it](/1NEON/live?play=propose).
+They're neon1's assessment of each option, from 1 to 5, where more filled dots is always better. **Cost** is the total cost. **Quality** is how fully it meets the requirements you agreed. **Effort** is your team's effort to adopt and run it. Each option also lists one-time and recurring charges apart, with a first-year total when it has both; the written price on the option is what you'd agree to, and **How this adds up** under it shows the hours behind it and when you'd pay. Figures in the demo and the walkthrough are illustrative. [Watch it](/1NEON/live?play=propose).
 
 ## Files
 
@@ -154,6 +154,15 @@ An admin of your organization. Admins invite people and change their access. If 
 
 ## Invoices and paying
 
+### Is a price fixed or an estimate?
+The option says which, and **How this adds up** under its price shows the work behind it, line by line. A fixed price is the whole price for the work described; it changes only if you approve a change to the work. An estimate is a range: the hours neon1 expects the work to take, at the hourly rate the option states. You pay for the hours worked, each one listed in the project as it's logged, and the total never passes the high end unless you approve a change first. If the work takes fewer hours, you pay for fewer. [Watch it](/1NEON/live?play=decide).
+
+### Where do I see the hours worked?
+Under the project's **Execute** layer, in **Hours**. Each entry has its date, what the time went to, and how long it took, in quarter hours. Above them, a bar shows the hours logged against the estimate and what they come to so far. Once hours are on an invoice they're marked with its number and stay as billed, and the invoice lists them again, so the total can be checked against the work. On a fixed price, hours are a record of the work, not a bill. [Watch it](/1NEON/live?play=build).
+
+### What if the work needs more hours than the estimate?
+The high end is the most you pay for the work you approved. Hours past it are listed and not billed. If the work itself has to change, neon1 says so before reaching the high end and issues a revision of the proposal with the new work and its price, and nothing is added until you approve it. If the work takes fewer hours than a deposit covered, neon1 refunds the difference and records it as a credit against that invoice.
+
 ### Where are invoices and payments?
 Under the project's **Execute** layer, in **Invoices**, with what's paid and what's left on each. When one is ready or overdue, **Next step** at the top of the project says so and links to it. Each invoice opens on neon1's letterhead with its number, lines, due date, and how to pay, ready to print or save as a PDF. [Watch it](/1NEON/live?play=pay).
 
@@ -161,7 +170,7 @@ Under the project's **Execute** layer, in **Invoices**, with what's paid and wha
 Choose **Pay** on the invoice. Stripe's secure page opens, where you pay by bank transfer (ACH, preferred) or card; 1NEON never sees your bank or card details. A card payment shows as paid within a minute, and a bank transfer once it clears, usually in a few business days. You can also pay by check, Zelle, or wire, with the invoice number in the memo, and neon1 records it when it arrives. [Watch it](/1NEON/live?play=pay).
 
 ### When are invoices sent?
-As the option you approved says. For a fixed price, half is invoiced when you approve, as a deposit, and the rest when you accept the handover. Items neon1 buys for you are billed at cost with the receipt, and a care plan is billed monthly. Invoices are due in 15 days unless the option says otherwise, and each one emails whoever is set to get billing notices. [Watch it](/1NEON/live?play=pay).
+As the option you approved says, under **When you pay**. Half of a fixed price, or half of an estimate's low end, is invoiced when you approve, as a deposit. The rest is invoiced when you accept the handover: the remainder of a fixed price, or the hours worked less the deposit for an estimate, with those hours listed on the invoice. Items neon1 buys for you are billed at cost with the receipt, and a care plan is billed monthly. Invoices are due in 15 days unless the option says otherwise, and each one emails whoever is set to get billing notices. Watch [the deposit](/1NEON/live?play=pay) and [the final invoice](/1NEON/live?play=final).
 
 ### Can an invoice be changed?
 Not once it's issued. An issued invoice is numbered and kept exactly as issued. A mistake is fixed with a credit that reduces it, or by voiding it with a reason, and both stay on record. An invoice that has a payment can't be voided.
