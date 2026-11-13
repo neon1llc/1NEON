@@ -1,0 +1,87 @@
+# .github/workflows/dev.yml - Ship a branch to the 1NEON dev backend behind dev.neon1.tech/1NEON. Pushes to
+# the dev branch ship on their own; any other branch ships with a manual run. Dev has its own pool, table,
+# and buckets (infra/envs/dev), so nothing here reaches production or client data. Builds and typechecks
+# only; the full tests and walkthroughs stay on the way to main (deploy.yml). Never tagged.
+
+name: dev
+
+on:
+  push:
+    branches: [dev]
+    paths: ["apps/**", "packages/**", "package.json", "package-lock.json", "tsconfig.base.json", ".github/workflows/dev.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One dev backend, so one ship at a time; a newer one replaces a queued one
+concurrency:
+  group: dev-1neon
+  cancel-in-progress: false
+
+env:
+  APP_BUCKET: neon1-1neon-app-dev
+  FUNCTION_PREFIX: 1neon-dev
+
+jobs:
+  dev:
+    runs-on: ubuntu-latest
+    # Quiet until the dev deploy role exists (neon1-aws-infrastructure github/dev.tf)
+    if: vars.AWS_DEV_DEPLOY_ROLE_ARN != ''
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEV_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # The dev distribution, read from what site-dev publishes
+      - name: Find dev.neon1.tech
+        run: |
+          id=$(aws ssm get-parameter --name /neon1-site/dev/distribution_id --query Parameter.Value --output text 2>/dev/null || true)
+          echo "DISTRIBUTION_ID=$id" >> "$GITHUB_ENV"
+
+      # API first, as in production
+      - name: Ship Lambda functions
+        working-directory: apps/api/dist
+        run: |
+          for fn in api auth-triggers; do
+            name="$FUNCTION_PREFIX-${fn/auth-triggers/auth-trigger}"
+            (cd "$fn" && zip -q -r "../$fn.zip" . -x '*.map')
+            aws lambda update-function-code --function-name "$name" --zip-file "fileb://$fn.zip" >/dev/null
+            aws lambda wait function-updated-v2 --function-name "$name"
+            echo "shipped $name"
+          done
+
+      - name: Upload the web app
+        working-directory: apps/web/dist
+        run: |
+          aws s3 sync 1NEON "s3://$APP_BUCKET/1NEON" --exclude '*.map' --exclude index.html --exclude arrive.js \
+            --cache-control 'public, max-age=31536000, immutable'
+          aws s3 cp 1NEON/index.html "s3://$APP_BUCKET/1NEON/index.html" \
+            --cache-control 'no-cache' --content-type 'text/html; charset=utf-8'
+          aws s3 cp 1NEON/arrive.js "s3://$APP_BUCKET/1NEON/arrive.js" \
+            --cache-control 'no-cache' --content-type 'text/javascript; charset=utf-8'
+
+      - name: Invalidate dev's app files
+        if: env.DISTRIBUTION_ID != ''
+        run: aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths '/1NEON/*' >/dev/null
+
+      - name: Where to look
+        run: |
+          echo "### On dev: https://dev.neon1.tech/1NEON/ (${GITHUB_SHA::7})" >> "$GITHUB_STEP_SUMMARY"

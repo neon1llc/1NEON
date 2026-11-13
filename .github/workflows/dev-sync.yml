@@ -1,0 +1,57 @@
+# .github/workflows/dev-sync.yml - Keep the dev branch following main. After each push to main, main is
+# merged into dev and the dev backend is rebuilt from the result, so a fix that went straight to main shows
+# on dev too. A merge that conflicts stops here and says so; nothing is forced.
+
+name: dev-sync
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Merge, never rebase or force: dev's own history stays as it was
+      - name: Merge main into dev
+        id: merge
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git ls-remote --exit-code --heads origin dev >/dev/null; then
+            git push origin "origin/main:refs/heads/dev"
+            echo "dev branch created from main"
+          else
+            git checkout -q -B dev origin/dev
+            if git merge-base --is-ancestor origin/main dev; then echo "dev already has main"; echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+            if ! git merge --no-edit -m "Merge main into dev" origin/main; then
+              git merge --abort
+              echo "::error::main and dev conflict; merge main into dev by hand"
+              echo "### main and dev conflict: merge main into dev by hand" >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            git push origin dev
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      # A push made with this workflow's token starts no workflows, so the dev deploy is asked for directly
+      - name: Rebuild the dev backend
+        if: steps.merge.outputs.changed == 'true' && vars.AWS_DEV_DEPLOY_ROLE_ARN != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run dev.yml --ref dev

@@ -40,6 +40,12 @@ variable "neo_monthly_usd" {
 }
 # Where locked copies of signed and billing records go
 variable "records_bucket" { type = string }
+
+# The permission ceiling on both function roles (neon1-aws-infrastructure github/); dev has its own
+variable "boundary" {
+  type    = string
+  default = "neon1-boundary-1neon"
+}
 variable "records_bucket_arn" { type = string }
 variable "log_retention_days" {
   type    = number
@@ -89,7 +95,7 @@ resource "aws_iam_role" "api" {
   name               = "${var.name}-api"
   assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
   # The ceiling set in neon1-aws-infrastructure; this stack can't create or change the role without it
-  permissions_boundary = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/neon1-boundary-1neon"
+  permissions_boundary = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/${var.boundary}"
 }
 
 
@@ -98,7 +104,7 @@ resource "aws_iam_role" "trigger" {
   name               = "${var.name}-auth-trigger"
   assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
   # The ceiling set in neon1-aws-infrastructure; this stack can't create or change the role without it
-  permissions_boundary = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/neon1-boundary-1neon"
+  permissions_boundary = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/${var.boundary}"
 }
 
 
@@ -147,10 +153,14 @@ data "aws_iam_policy_document" "api" {
     actions   = ["cognito-idp:AdminGetUser", "cognito-idp:AdminCreateUser", "cognito-idp:AdminDisableUser", "cognito-idp:AdminEnableUser", "cognito-idp:AdminUserGlobalSignOut"]
     resources = [var.user_pool_arn]
   }
-  statement {
-    sid       = "Texts"
-    actions   = ["sms-voice:SendTextMessage"]
-    resources = [var.sms_number_arn]
+  # Texts only where there's a number (dev has none)
+  dynamic "statement" {
+    for_each = var.sms_number_arn == "" ? [] : [var.sms_number_arn]
+    content {
+      sid       = "Texts"
+      actions   = ["sms-voice:SendTextMessage"]
+      resources = [statement.value]
+    }
   }
   statement {
     sid       = "Mail"
@@ -297,7 +307,7 @@ resource "aws_lambda_function" "trigger" {
   filename      = data.archive_file.trigger_placeholder.output_path
 
   environment {
-    variables = { TABLE_NAME = var.table_name }
+    variables = { TABLE_NAME = var.table_name, PUBLIC_URL = var.public_url }
   }
 
   logging_config {
