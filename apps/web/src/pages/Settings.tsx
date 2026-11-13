@@ -7,6 +7,7 @@ import { Link } from "react-router";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { LayerBadge, LAYERS, layerName, useToast } from "../components/ui.tsx";
 import { api } from "../lib/api.ts";
+import { exportOrganization } from "../lib/export.ts";
 import { problem } from "../lib/hooks.ts";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -102,6 +103,40 @@ export function Settings() {
         </div>
       )}
       {error && <p className="notice" role="alert">{error}</p>}
+      {/* The organization's own copy of everything, any time, without asking neon1 */}
+      <h2 className="section-h">Your data</h2>
+      <ExportData />
     </>
+  );
+}
+
+
+/** Download everything in the organization as one zip: records as JSON and CSV, files as uploaded.
+ * Admins only, since it holds every project and every person */
+function ExportData() {
+  const { org, canAdmin } = useOrg();
+  const toast = useToast();
+  const [said, setSaid] = useState("");
+  const [busy, setBusy] = useState(false);
+  if (!canAdmin) return <p className="muted small">An admin of {org.name} can download a copy of everything here at any time.</p>;
+  const run = async () => {
+    setBusy(true);
+    try {
+      await exportOrganization(org, setSaid);
+      setSaid("Downloaded. README.txt in the zip says what each file holds.");
+    } catch (e) {
+      setSaid("");
+      toast(`The export stopped: ${problem(e)}`);
+    }
+    setBusy(false);
+  };
+  return (
+    <div className="card" style={{ display: "grid", gap: 10, maxWidth: 620 }}>
+      <p className="small" style={{ margin: 0 }}>A copy of everything in {org.name}, as one zip file: every project's records, decisions and signatures, proposals, invoices and payments, and handover steps as JSON and CSV (spreadsheets open the CSV files), plus every uploaded file as it was uploaded.</p>
+      <div className="actions" style={{ marginTop: 0 }}>
+        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void run()}>{busy ? "Preparing…" : "Download everything"}</button>
+        {said && <span className="small muted" role="status">{said}</span>}
+      </div>
+    </div>
   );
 }
