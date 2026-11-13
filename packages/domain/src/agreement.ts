@@ -4,7 +4,7 @@
 
 
 /** The edition clients sign now; a new edition is signed again before the next approval */
-export const AGREEMENT_EDITION = "1.1";
+export const AGREEMENT_EDITION = "2.0";
 
 
 /** The agreement's text (Markdown). Changing a word here means a new edition above */
