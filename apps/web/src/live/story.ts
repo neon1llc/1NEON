@@ -4,9 +4,10 @@
 
 
 import { liveEngine } from "../lib/api.ts";
-import type { Section, Stage } from "./player.ts";
+import type { Section, Show, Stage } from "./player.ts";
 import { signInWithCode, walkTo } from "./opening.ts";
 import { MARIA, PRADEEP } from "./seed.ts";
+import { FULL_LENGTH } from "./where.ts";
 
 
 // The bakery's organization, and the project once it exists
@@ -179,10 +180,6 @@ export async function handOver() {
 }
 
 
-// Phones show a bottom tab bar instead of the side menu; some steps take the phone's way
-const phone = () => innerWidth <= 640;
-
-
 /** A file waiting on the "desktop" at the bottom left, ready to drag into the page */
 function deskFile(name: string) {
   const el = document.createElement("div");
@@ -208,47 +205,9 @@ async function dropFile(s: Stage, target: Parameters<Stage["click"]>[0], name: s
 }
 
 
-/** The primer card before the story: who's who, what's coming, and how to steer. Removed by the caller */
-function primer() {
-  const el = document.createElement("section");
-  el.className = "live-primer live-prop";
-  el.setAttribute("aria-label", "Before it starts");
-  const h = document.createElement("h2");
-  h.textContent = "Meet Maria";
-  el.append(h);
-  for (const t of [
-    "Maria owns Maple Street Bakery. Every night her team retypes about 40 orders from email and voicemail into a spreadsheet. Pradeep at neon1 has invited her to 1NEON, the portal where they'll fix that together.",
-    "You'll watch her sign in with a code from her email, set up her alerts, invite her team, start a project, sign for the option she chooses, follow the work, pay the deposit, and take the handover. Her thoughts appear beside the cursor.",
-    "Everything here is made up and stays in this browser. The bar above pauses it, steps between parts, and changes the speed.",
-  ]) {
-    const p = document.createElement("p");
-    p.textContent = t;
-    el.append(p);
-  }
-  document.body.append(el);
-  // Props start see-through and fade in once marked on
-  requestAnimationFrame(() => el.classList.add("on"));
-  return el;
-}
-
-
 /** The sections, in order. Titles are what the Back and Next buttons say. Captions (say) narrate in
  * the bar; thoughts (think) are Maria's own, beside the cursor, at each look and move */
 export const STORY: Section[] = [
-  {
-    id: "primer",
-    title: "Meet Maria",
-    run: async (s) => {
-      const card = primer();
-      try {
-        await s.say("Before it starts: who's who, and what you'll see");
-        // Long enough to read all three short paragraphs at the default speed
-        await s.wait(card.textContent!.length * 22);
-      } finally {
-        card.remove();
-      }
-    },
-  },
   {
     id: "signin",
     title: "Sign in",
@@ -313,8 +272,7 @@ export const STORY: Section[] = [
     run: async (s) => {
       await s.say("She invites Sam, who runs the counter, as an editor");
       await s.think("Sam should see this too. He handles the orders.");
-      if (phone()) await s.go(`${base}/people`);
-      else await s.go(`${base}/people`, "People");
+      await s.go(`${base}/people`, "People");
       await s.click({ sel: "button", text: "Invite people" });
       await s.type("#emails", "sam@maplestreetbakery.example", 300);
       await s.think("Editor, so he can add things but not manage people.");
@@ -478,15 +436,17 @@ export const STORY: Section[] = [
       await s.think("It's numbered, 0039-r1, and each option has its own ID. Approving in 1NEON counts as choosing.");
       await s.click({ sel: "a", text: "Back to options" }, 1200);
       await s.say("First, once, she signs neon1's service agreement for the bakery");
-      await s.think("He said there's one agreement that covers everything. Let me read it first.");
-      await s.go(`${base}/agreement`, "Service agreement");
+      await s.think("It says to sign the service agreement first. One agreement covers every project.");
+      await s.click({ sel: ".agreement-needed a", text: "Read and sign it" }, 1200);
+      await s.think("Let me actually read it before I sign anything.");
       await s.scroll(900, 1400);
       await s.think("Purchases at cost, invoices due in 15 days, my data stays mine. Fair.");
       await s.scroll(1600, 1200);
       await s.type("#agreement-sign-name", "Maria Lopez");
       await s.click("#agreement-sign-name ~ .sign-consent input", 400);
       await s.click({ sel: ".sign-card button", text: /^Sign for/ }, 1400);
-      await s.go(`${base}/projects/${KEY}/needs#options`, "Options");
+      await s.think("Signed, and it kept a copy. Back to the options.");
+      await s.click({ sel: "a.agreement-back", text: "Back to your options" }, 1200);
       await s.say("She approves the recommended one, with a condition, and signs it");
       await s.think("B it is. Pradeep recommends it too.");
       await s.click({ sel: ".options article:nth-child(2) button", text: "Approve this option" }, 700);
@@ -581,7 +541,9 @@ export const STORY: Section[] = [
         for (const m of items.filter((i) => i.kind === "metric")) {
           const at = (n: number) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
           // Templates' measures may have no numbers yet; give them a plausible start and goal
-          const baseline = Number(m.fields.baseline ?? 0) || 60, target = Number(m.fields.target ?? 0) || 10;
+          // (a zero she typed is a real number, so only a missing one is filled in)
+          const num = (v: unknown, or: number) => (typeof v === "number" && Number.isFinite(v) ? v : or);
+          const baseline = num(m.fields.baseline, 60), target = num(m.fields.target, 10);
           const readings = [{ at: at(10), value: baseline * 0.6, note: "" }, { at: at(5), value: baseline * 0.3, note: "" }, { at: at(1), value: Math.max(target * 0.6, 1), note: "" }];
           await as(`/t/${t}/projects/${p.id}/items/${m.id}`, "PATCH", { version: m.version, fields: { ...m.fields, baseline, target, readings } });
         }
@@ -678,3 +640,22 @@ export const STORY: Section[] = [
     },
   },
 ];
+
+
+/** The full story as a show: the card before Start introduces Maria, and the end card says what happened */
+export const FULL: Show = {
+  id: "project",
+  title: "The full story",
+  blurb: "A whole project, from a first sign-in to ongoing care",
+  length: FULL_LENGTH,
+  intro: {
+    heading: "Meet Maria",
+    text: [
+      "Maria owns Maple Street Bakery. Every night her team retypes about 40 orders from email and voicemail into a spreadsheet. Pradeep at neon1 has invited her to 1NEON, the portal where they'll fix that together.",
+      "You'll watch her sign in with a code from her email, set up her alerts, invite her team, start a project, sign for the option she chooses, follow the work, pay the deposit, and take the handover. Her thoughts appear beside the cursor, and a line at the bottom says what's happening.",
+    ],
+  },
+  end: "That's a whole project, start to finish.",
+  recap: "Maria asked for help, compared three options, signed for one, followed the work, paid two invoices, measured the result, and took over the accounts and the runbook. Every step is on record in one place.",
+  sections: STORY,
+};

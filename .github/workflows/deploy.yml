@@ -1,5 +1,5 @@
 # .github/workflows/deploy.yml - One release per commit on main: every gate passes first, then a single locked job applies Terraform and ships the API and web app from the artifact the gates built.
-# Nothing touches AWS until the secret scan, app checks, Terraform checks, and production build have all passed on this
+# Nothing touches AWS until the secret scan, app checks, walkthrough check, Terraform checks, and production build have all passed on this
 # commit. Off until AWS_DEPLOY_ROLE_ARN is set; Terraform also needs AWS_TERRAFORM_ROLE_ARN or an explicit skip
 # (see infra/README.md).
 
@@ -106,6 +106,37 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # Every guided walkthrough, played in a real browser on a desktop and a phone screen, has to reach
+  # its end card before anything ships
+  walkthroughs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      # Actions are pinned to commit SHAs; the checkout keeps no token
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      # The web build, then Chromium for the Playwright version in the lockfile
+      - run: npm ci
+      - run: npm run build --workspace @1neon/web
+      - run: npx playwright install --with-deps chromium
+      - run: npm run walkthroughs
+
+      # A failed run leaves a screenshot of where it stopped
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: walkthrough-failures
+          path: walkthrough-failure-*.png
+          if-no-files-found: ignore
+          retention-days: 14
+
   # ---- Release: one job, so one lock covers Terraform and the app together ----
 
   # Runs only after every gate passed on this same commit. The release group is shared by every run
@@ -114,7 +145,7 @@ jobs:
   # the newest main commit contains the older one.) Skipped until the deploy role exists; id-token
   # lets the job assume the roles
   release:
-    needs: [secrets, gate]
+    needs: [secrets, gate, walkthroughs]
     if: vars.AWS_DEPLOY_ROLE_ARN != ''
     runs-on: ubuntu-latest
     permissions:

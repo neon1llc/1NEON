@@ -1,6 +1,6 @@
 # Cookies and browser storage
 
-*Last updated November 10, 2026.*
+*Last updated November 13, 2026.* This update adds one item the guided walkthrough saves in your tab, so its Exit returns you to the answer you opened it from.
 
 Neither neon1.tech nor the 1NEON portal uses analytics, advertising, or tracking of any kind.
 
@@ -49,6 +49,7 @@ The interactive demo (neon1.tech/1NEON/demo) and the guided walkthrough (neon1.t
 | `1neon.devUser` (local storage) | Interactive demo: which sample person you chose to be | Until you clear it |
 | `1neon.liveUser` (local storage) | Guided walkthrough: which fictional person is signed in on screen | Until you clear it; the walkthrough resets it on every load |
 | `1neon.live` (session storage) | Guided walkthrough: the chapter playing, so a reload picks up there (from fresh data) | Until the tab closes |
+| `1neon.liveFrom` (session storage) | Guided walkthrough: the page and answer you opened it from, so Exit takes you back there | Until the tab closes |
 | `1neon.liveSpeed` (local storage) | The walkthrough speed you picked | Until you clear it |
 
 If I ever add optional cookies or storage, such as analytics, I'll update this notice and ask for your consent first.

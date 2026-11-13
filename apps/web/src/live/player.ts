@@ -4,10 +4,11 @@
 // section list cut cleanly, and a stumble recovers on its own before it ever asks for a choice.
 
 
-import { devUser, liveEngine } from "../lib/api.ts";
+import { BASE_PATH, devUser, liveEngine } from "../lib/api.ts";
 import { clearCache, navigate, refreshAll, REWIND } from "../lib/nav.ts";
 import { clearStep, session } from "../lib/signin.ts";
 import { endTour } from "../components/Help.tsx";
+import { keepAwake } from "./awake.ts";
 import { opening } from "./opening.ts";
 import { SHORTS } from "./shorts.ts";
 import { PLAY, PROJECT, remember } from "./where.ts";
@@ -33,9 +34,14 @@ export interface Show {
   /** Who is signed in at the start ("" for the sign-in screen), and the page it starts on */
   who?: string;
   path?: string;
-  /** Said when it ends */
+  /** Said when it ends, as the end card's heading */
   end?: string;
-  /** How long it takes at the default speed, said before it starts ("about 1½ minutes") */
+  /** The card shown before Start: a heading (the show's title when left out) and a few short paragraphs */
+  intro?: { heading?: string; text: string[] };
+  /** One or two sentences under the end card's heading: what just happened, in plain words */
+  recap?: string;
+  /** How long it takes at the default speed, said before it starts ("about two minutes"). The browser
+   * check times every walkthrough and fails when this is far from the truth (scripts/walkthroughs.mjs) */
   length?: string;
 }
 
@@ -43,13 +49,20 @@ export interface Show {
 export interface View {
   index: number;
   title: string;
+  /** The narration for what's on screen now, shown as a line at the bottom, like a film's subtitles */
   caption: string;
+  /** The player's own state in words, shown in the bar ("Paused…", "Skipping ahead…"); empty while it plays */
+  note: string;
   progress: number;
   paused: boolean;
   skipping: boolean;
+  /** How far the setup behind the loading screen has come, from 0 to 1 (only while `skipping`) */
+  loading: number;
   done: boolean;
-  /** Not started yet: waiting on Start (reduced motion, or a tab opened in the background) */
+  /** Not started yet: the intro card is up, waiting on Start */
   idle: boolean;
+  /** Stopped on a step it couldn't play, after trying again twice; the bar offers ways on */
+  failed: boolean;
 }
 
 
@@ -206,6 +219,8 @@ class Thought {
   private w = 0;
   private h = 0;
   private barBottom = 0;
+  // The top of the narration line at the bottom of the screen, when one is showing
+  private floor = innerHeight;
   private on = false;
   constructor(who: string) {
     this.el = document.createElement("div");
@@ -223,6 +238,8 @@ class Thought {
     this.w = r.width;
     this.h = r.height;
     this.barBottom = document.querySelector(".live-bar")?.getBoundingClientRect().bottom ?? 0;
+    const sub = document.querySelector(".live-sub.on")?.getBoundingClientRect();
+    this.floor = sub && sub.height ? sub.top : innerHeight;
   }
   /** Show a new thought; it fades in, and the old one is gone */
   say(text: string, x: number, y: number) {
@@ -247,8 +264,9 @@ class Thought {
     let left = x + 22, top = y + 30, below = true;
     // Slide left as the cursor nears the right edge, never past the left one
     left = Math.max(m, Math.min(left, innerWidth - m - this.w));
-    // No room below: sit above the cursor instead, unless that runs under the controls
-    if (top + this.h > innerHeight - m && y - 14 - this.h > this.barBottom + m) { top = y - 14 - this.h; below = false; }
+    // No room below (the screen's edge, or the narration line): sit above the cursor instead, unless
+    // that runs under the controls
+    if (top + this.h > this.floor - m && y - 14 - this.h > this.barBottom + m) { top = y - 14 - this.h; below = false; }
     // The two small circles lead from the bubble back toward the cursor tip
     const tail = Math.max(14, Math.min(this.w - 18, x - left + 6));
     this.el.style.transform = `translate(${left}px, ${top}px)`;
@@ -268,8 +286,9 @@ class Thought {
 class Cursor {
   readonly el: HTMLDivElement;
   readonly thought: Thought;
-  x = innerWidth / 2;
-  y = innerHeight / 2;
+  // She starts low and to the right, clear of the sign-in card in the middle and anything over it
+  x = Math.round(innerWidth * 0.8);
+  y = Math.round(innerHeight * 0.72);
   constructor() {
     this.el = document.createElement("div");
     this.el.className = "live-cursor";
@@ -366,12 +385,16 @@ export class Player {
   fast = false;
   // Set once playing begins; before that the portal stays as it loaded
   private started = false;
+  // Set once any section has run: until then the page is exactly the first section's start, so there
+  // is nothing to put back and the first play begins without redrawing the page
+  private dirty = false;
   // The field typed into last, which Enter submits (focus can't land in the inert portal)
   private typed?: HTMLElement;
 
-  constructor(project: Section[]) {
+  constructor(full: Show) {
+    const project = full.sections;
     const short = SHORTS.find((s) => s.id === PLAY.show);
-    this.show = short ?? { id: PROJECT, title: "The full story", blurb: "A whole project, from a first sign-in to ongoing care", length: "about 8 minutes", sections: project, end: "That's a whole project, start to finish." };
+    this.show = short ?? full;
     // A link from the FAQs names one chapter: it plays on its own, start to finish. Maria signs in with
     // her reason for coming, walks to the page, does that one thing, and the walkthrough ends there.
     // The story before it (what that chapter needs in place) is set up out of sight first, so nothing
@@ -381,14 +404,24 @@ export class Player {
     if (sec?.why) {
       this.prep = project.slice(0, at);
       this.show = {
-        id: PROJECT, title: sec.title, blurb: "One part of the story, on its own", length: "about a minute",
+        id: PROJECT, title: sec.title, blurb: "One part of the story, on its own", length: "a minute or two",
+        intro: { text: [
+          `One part of a longer story, on its own: “${sec.title}”. Maria owns a fictional bakery, and Pradeep at neon1 is helping her stop retyping orders every night.`,
+          "The story up to this point is set up first, out of sight, which takes a few seconds. Then she signs in and does this one thing.",
+        ] },
         sections: [{ id: `${sec.id}-in`, title: "Sign in", run: (st) => opening(`${sec.id}-in`, "Maria opens 1NEON and signs in", sec.why!, this.prepPath).run(st) }, sec],
-        end: `That was "${sec.title}". The full story, in the menu above, plays every step from start to finish.`,
+        end: `That was “${sec.title}”.`,
+        recap: "It's one chapter of the full story, which plays every step of a project from the first sign-in to ongoing care.",
       };
     }
     // A section named in the link (or saved by a refresh) starts there, catching up on the way
     this.first = this.prep ? 0 : Math.max(0, this.show.sections.findIndex((s) => s.id === PLAY.at));
-    this.view = { index: this.first, title: this.sections[this.first]!.title, caption: "", progress: 0, paused: false, skipping: false, done: false, idle: true };
+    this.view = { index: this.first, title: this.sections[this.first]!.title, caption: "", note: "", progress: 0, paused: false, skipping: false, loading: 0, done: false, idle: true, failed: false };
+  }
+
+  /** The chapter a refresh came back to, when it isn't the first: the intro card offers to carry on there */
+  get resumeAt() {
+    return this.prep || this.first === 0 ? undefined : this.first;
   }
 
   /** Playing one chapter of the story on its own (a link from the FAQs) */
@@ -439,6 +472,8 @@ export class Player {
     // Moving on its own: the portal underneath goes inert; paused or done, it's live again
     const now = this.started && !this.view.paused && !this.view.done;
     if (now !== playing) { playing = now; isolate(); }
+    // A phone's screen stays lit while the story moves; on the cards, paused, or stopped, it may dim
+    keepAwake(now && !this.view.idle && !this.view.failed);
     for (const fn of this.listeners) fn(this.view);
   }
 
@@ -460,7 +495,7 @@ export class Player {
       clearTimeout(back);
       if (this.view.paused || this.view.done || this.view.idle) return;
       this.autoPaused = true;
-      this.emit({ paused: true, caption: "Paused while this tab was in the background" });
+      this.emit({ paused: true, note: "Paused while this tab was in the background" });
     };
     const returned = () => {
       clearTimeout(back);
@@ -477,6 +512,14 @@ export class Player {
     document.addEventListener("pointerdown", (e) => {
       if (this.view.paused && (e.target as Element).closest("#root")) { this.touched = true; this.autoPaused = false; }
     }, true);
+    // Keys explore too: Escape closing a dialog the story had open, or typing into a field or pressing
+    // a button in the portal. Moving focus with Tab changes nothing, so it doesn't count
+    document.addEventListener("keydown", (e) => {
+      if (!this.view.paused || !e.isTrusted || ["Tab", "Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
+      const el = e.target instanceof Element ? e.target : null;
+      const acted = e.key === "Escape" ? Boolean(topDialog()) : Boolean(el?.closest("#root") && el.closest("input, textarea, select, button, a[href], summary, [contenteditable]"));
+      if (acted) { this.touched = true; this.autoPaused = false; }
+    }, true);
     const engine = await liveEngine();
     if (!engine) return;
     // The address may be anywhere (a refresh deep in the story); the first section always starts
@@ -489,7 +532,7 @@ export class Player {
   }
   pause() {
     this.autoPaused = false;
-    this.emit({ paused: true });
+    this.emit({ paused: true, note: "Paused. The page is yours to try; Play picks this chapter up again." });
   }
   resume() {
     this.autoPaused = false;
@@ -497,7 +540,7 @@ export class Player {
     // Finished, or the page was changed by hand while paused: play this section again from its start
     if (this.view.done) return void this.goTo(0);
     if (this.touched) { this.touched = false; return void this.goTo(this.view.index); }
-    this.emit({ paused: false });
+    this.emit({ paused: false, note: "" });
   }
   /** Change the speed; it applies from the next movement */
   setSpeed(v: number) {
@@ -526,7 +569,7 @@ export class Player {
     if (!this.snaps.has(0)) return void this.start(i);
     // A jump by hand shows its destination at once (title, Back and On labels, the covering panel), so
     // the bar never offers the old chapter's neighbours while the new one is being set up
-    if (!auto) this.emit({ index: i, title: this.sections[i]!.title, caption: "Getting this chapter ready…", progress: 0, skipping: true, done: false, paused: false });
+    if (!auto) this.emit({ index: i, title: this.sections[i]!.title, caption: "", note: "", progress: 0, skipping: false, done: false, paused: false, failed: false });
     this.token.cut = true;
     const token = (this.token = { cut: false });
     const prev = this.running;
@@ -552,8 +595,13 @@ export class Player {
         await this.restore(this.snaps.get(0)!);
         this.fast = true;
         this.cursor?.hide(true);
-        this.emit({ skipping: true, paused: false, done: false, index: 0, title: this.sections[0]!.title, caption: "Setting up the bakery's project so far…", progress: 0 });
-        for (const sec of this.prep) await sec.run(this.stage(token));
+        this.emit({ skipping: true, loading: 0, paused: false, done: false, index: 0, title: this.sections[0]!.title, caption: "", note: "Setting up the story so far…", progress: 0 });
+        // The loading screen's line fills as each earlier chapter is set up
+        for (const [j, sec] of this.prep.entries()) {
+          this.emit({ loading: j / this.prep.length });
+          await sec.run(this.stage(token));
+        }
+        this.emit({ loading: 1 });
         await this.settle();
         this.prepPath = location.pathname.replace(/^\/1NEON\/live/, "") || "/";
         devUser.set("");
@@ -565,26 +613,28 @@ export class Player {
       } catch (e) {
         if (e instanceof Cut || token.cut) return;
         console.error(e);
-        this.emit({ paused: true, skipping: false, caption: "Something went off script. Reload the page to try again." });
+        this.emit({ paused: true, skipping: false, failed: true, caption: "", note: "" });
         return;
       } finally {
         this.fast = false;
         this.cursor?.hide(false);
       }
-      this.emit({ skipping: false, caption: "" });
+      this.emit({ skipping: false, caption: "", note: "" });
     }
     // The nearest saved start at or before i; section 0's always exists
     let from = i;
     while (from > 0 && !this.snaps.has(from)) from--;
     await this.restore(this.snaps.get(from)!);
+    this.cursor?.hide(false);
     try {
-      // Sections between the saved start and the target run fast, cursor hidden
+      // Sections between the saved start and the target run fast, cursor hidden, behind a plain cover
       if (from < i) {
         this.fast = true;
         this.cursor?.hide(true);
-        this.emit({ skipping: true, paused: false, done: false, index: i, title: this.sections[i]!.title, caption: "Skipping ahead to this chapter…", progress: 0 });
+        this.emit({ skipping: true, loading: 0, paused: false, done: false, index: i, title: this.sections[i]!.title, caption: "", note: "Skipping ahead…", progress: 0 });
         for (let k = from; k < i; k++) {
           current = k;
+          this.emit({ loading: (k - from) / (i - from) });
           await this.save(k, engine);
           await this.sections[k]!.run(this.stage(token));
         }
@@ -605,7 +655,7 @@ export class Player {
           navigate("/");
           scrollTo({ top: 0 });
           await sleep(300);
-          this.emit({ skipping: false, caption: "", progress: 0 });
+          this.emit({ skipping: false, caption: "", note: "", progress: 0 });
           await opening(`${this.sections[i]!.id}-in`, "Maria opens 1NEON and signs in", this.sections[i]!.why ?? "Let me sign in to 1NEON.", path).run(this.stage(token));
         }
       }
@@ -617,17 +667,19 @@ export class Player {
         // A single chapter remembers its chapter, so a refresh plays that chapter again; the full story
         // remembers where it is in the story
         remember(this.prep ? { show: PROJECT, at: this.sections[1]!.id, focus: true } : { show: this.show.id as never, at: this.sections[k]!.id });
-        this.emit({ index: k, title: this.sections[k]!.title, caption: "", progress: 0, skipping: false, done: false, paused: false });
+        this.emit({ index: k, title: this.sections[k]!.title, caption: "", note: "", progress: 0, skipping: false, done: false, paused: false, failed: false });
         await this.sections[k]!.run(this.stage(token));
         this.stumbles.delete(k);
         this.est.set(k, this.steps);
         this.emit({ progress: 1 });
         if (k < this.sections.length - 1) await this.stage(token).wait(900);
       }
+      // The end: her last thought has its time, then she steps aside and the end card says what happened
       this.unhover();
-      await sleep(1600);
+      await this.stage(token).wait(1400);
       this.cursor?.thought.clear();
-      this.emit({ done: true, paused: true, caption: this.show.end ?? "That's the whole of it." });
+      this.cursor?.hide(true);
+      this.emit({ done: true, paused: true, caption: "", note: "" });
     } catch (e) {
       // A jump cuts the running section; anything else is a real problem worth seeing in the console
       this.fast = false;
@@ -639,14 +691,17 @@ export class Player {
       const n = (this.stumbles.get(current) ?? 0) + 1;
       this.stumbles.set(current, n);
       if (n === 1) {
-        this.emit({ caption: "One moment…" });
+        this.emit({ caption: "", note: "One moment: playing this part again…" });
         void this.goTo(current, true);
       } else if (n === 2) {
-        this.emit({ caption: "One moment…" });
+        this.emit({ caption: "", note: "One moment: playing this part again…" });
         for (const k of [...this.snaps.keys()]) if (k > 0) this.snaps.delete(k);
         void this.goTo(current, true);
       } else {
-        this.emit({ paused: true, skipping: false, caption: "Something went off script. Pick a section to carry on." });
+        // The card takes over: nothing of Maria's is left floating on top of it
+        this.cursor?.thought.clear();
+        this.cursor?.hide(true);
+        this.emit({ paused: true, skipping: false, failed: true, caption: "", note: "" });
       }
     }
   }
@@ -678,6 +733,12 @@ export class Player {
 
   // Put the data back, then the page, then refetch what's shown
   private async restore(s: { data: unknown; path: string; who: string }) {
+    // The very first play starts on the page exactly as it loaded: nothing to put back, so the page
+    // isn't rebuilt under the visitor's eyes
+    const here = location.pathname.replace(/^\/1NEON\/live/, "") || "/";
+    const pristine = !this.dirty && devUser.get() === s.who && here === s.path.split(/[?#]/)[0];
+    this.dirty = true;
+    if (pristine) return;
     const engine = await liveEngine();
     tidy();
     // A sign-in left partway (a code step, a typed email) or a dialog closed under React would
@@ -721,7 +782,8 @@ export class Player {
       if (!p.fast) p.emit({ progress: Math.min(0.97, p.steps / est) });
     };
     const pause = async (ms: number) => {
-      if (p.fast) return void (await frame());
+      // Setting up out of sight: no need to wait for a painted frame, only for the page to take the step in
+      if (p.fast) return void (await sleep(4));
       const end = p.clock() + p.pace(ms);
       while (p.clock() < end) {
         await tick();
@@ -736,7 +798,7 @@ export class Player {
         const el = find(t);
         if (el) return el;
         if (p.clock() > end) throw new Error(`live: can't find ${typeof t === "function" ? "a target" : JSON.stringify(t)}`);
-        await sleep(60);
+        await sleep(p.fast ? 12 : 60);
       }
     };
     // Glide the cursor to a point; the distance sets the time, within limits. Reduced motion steps there
@@ -957,33 +1019,61 @@ export class Player {
         }
         await pause(400);
       },
-      /** Go somewhere: through a visible menu link when there is one, as a person would */
+      /** Go to one of the menu's pages the way a person does: by its link in the menu, the mini rail, or
+       * a phone's tab bar, opening the menu first when it's tucked away. The link is found by where it
+       * leads (or by its label), so every move between pages is one the visitor sees her make */
       go: async (path: string, label?: string) => {
         step();
-        const where = { sel: ".side a, .tabbar a", text: label ?? "" };
-        let link = label ? find(where) : undefined;
+        const want = BASE_PATH + path.split(/[?#]/)[0];
+        // Already there: nothing to open or click (a menu opened onto its own page would stay open)
+        if (!p.fast && location.pathname === want) return void (await pause(200));
+        // Where it leads comes first; the label only settles it when no link leads there, and it has to be
+        // the link's own name (a layer's hint line can mention "people" without being People)
+        const link = (within: string) => find(() => {
+          const all = [...document.querySelectorAll<HTMLAnchorElement>(`${within} a[href]`)].filter(visible);
+          return all.find((a) => a.pathname === want) ?? (label ? all.find((a) => a.innerText.trim().toLowerCase() === label.toLowerCase()) : undefined);
+        });
+        let a = p.fast ? undefined : link(".side, .tabbar");
         // Not on screen (the menu is tucked away): open it the way she would, from the tab bar's Menu
         // on a phone or the top bar's button otherwise, then pick the link from the full menu
-        if (label && !link && !p.fast) {
+        if (!a && !p.fast) {
           const btn = find(".tabbar .menu-btn") ?? find(".top .menu-btn");
           if (btn) {
-            await reach(btn);
-            await pause(150);
-            p.cursor!.press();
-            btn.click();
-            await pause(450);
-            link = find({ sel: ".side.open a", text: label });
+            // The button toggles: a menu already open (someone explored while paused) is left open
+            if (!find(".side.open")) {
+              await reach(btn);
+              await pause(150);
+              p.cursor!.press();
+              btn.click();
+            }
+            // The menu slides open; on a slow device its links take a moment to be there
+            for (let tries = 0; tries < 8 && !a; tries++) {
+              await pause(300);
+              a = link(".side.open");
+            }
+            // Nothing in the menu leads there: close it again, and say so for whoever keeps the story
+            // (the walkthrough checks fail on this line, so a page without a visible way in gets one)
+            if (!a) {
+              console.warn(`live: no menu link to ${path}`);
+              find(".scrim")?.click();
+              await pause(300);
+            }
           }
         }
-        if (link && !p.fast) {
-          await reach(link);
+        if (a) {
+          await reach(a);
           await pause(150);
           p.cursor!.press();
-          link.click();
+          a.click();
         } else {
           navigate(path);
         }
         await pause(800);
+        // A menu that stayed open over the page she asked for is closed the way she'd close it
+        if (!p.fast && find(".side.open") && find(".scrim")) {
+          find(".scrim")!.click();
+          await pause(300);
+        }
       },
       /** Arrive at an address directly, as following a link from outside the portal would */
       open: async (path: string, after = 600) => {

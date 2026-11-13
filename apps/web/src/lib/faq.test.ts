@@ -34,6 +34,18 @@ describe("faq anchors", () => {
 });
 
 
+describe("faq lengths", () => {
+  // The answer that offers the walkthroughs says the same length their own cards do
+  it("says how long the full story takes, as measured", () => {
+    // Read from the source, since where.ts looks at the page's address when it loads
+    const length = /FULL_LENGTH = "([^"]+)"/.exec(readFileSync(new URL("../live/where.ts", import.meta.url), "utf8"))?.[1];
+    const raw = readFileSync(new URL("../help/faqs.md", import.meta.url), "utf8");
+    expect(length).toBeTruthy();
+    expect(raw).toContain(`the full story takes ${length}.`);
+  });
+});
+
+
 describe("faq search", () => {
   const hits = (query: string) => all.filter((i) => matches(i, query)).map((i) => i.id);
 

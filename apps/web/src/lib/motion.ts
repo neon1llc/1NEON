@@ -11,12 +11,31 @@ export type Way = "next" | "back";
 
 
 // Browsers without view transitions, and people who asked for less motion, get instant changes
-type VT = { finished: Promise<void> };
+type VT = { finished: Promise<void>; ready?: Promise<void> };
+type Doc = Document & { startViewTransition?: (cb: () => void) => VT };
 const start = (): ((cb: () => void) => VT) | undefined => {
-  const d = document as Document & { startViewTransition?: (cb: () => void) => VT };
+  const d = document as Doc;
   if (!d.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
   return d.startViewTransition.bind(d);
 };
+
+
+/**
+ * A transition cut short by the next one (two quick clicks on the tabs) rejects its `ready` promise.
+ * Nothing waits on it, the page still changes, and the browser would report an error nobody can act
+ * on. Called once at startup, this marks that rejection as expected for every transition, the
+ * router's included
+ */
+export function quietSkippedTransitions() {
+  const d = document as Doc;
+  const begin = d.startViewTransition;
+  if (!begin) return;
+  d.startViewTransition = ((cb: () => void) => {
+    const t = begin.call(d, cb);
+    t.ready?.catch(() => undefined);
+    return t;
+  }) as typeof d.startViewTransition;
+}
 
 
 /** Mark the direction for the CSS, cleared once the transition ends */

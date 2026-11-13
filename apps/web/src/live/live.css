@@ -1,6 +1,7 @@
 /* apps/web/src/live/live.css - /1NEON/live's own layer over the portal: the controls bar, the
-   section menu, the cursor and Maria's thoughts, the notes from the other side, and the pretend
-   windows the short demos use. Dark and green like the site, so it never reads as part of the portal. */
+   chapter menu, the card before Start and the one at the end, the narration line, the cursor and
+   Maria's thoughts, the notes from the other side, and the pretend windows the short demos use.
+   Dark and green like the site, so it never reads as part of the portal. */
 
 
 /* --- Tokens for the live layer -------------------------------------------------
@@ -51,7 +52,8 @@
 .live-now { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; text-align: left; min-width: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; padding: 3px 8px; border-radius: 8px; }
 .live-now:hover, .live-now[aria-expanded="true"] { background: rgba(108, 255, 168, .08); }
 .live-title { color: var(--live-hi); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.live-cap { grid-column: 1; color: var(--live-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--sans, inherit); font-size: 12px; }
+/* The player's own state (paused, skipping ahead), under the chapter's name; absent while it plays */
+.live-note { grid-column: 1; color: var(--live-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--sans, inherit); font-size: 12px; }
 .live-caret { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: #2e7d32; filter: drop-shadow(0 0 4px rgba(108, 255, 168, .5)); transition: transform .25s ease; }
 .live-now[aria-expanded="true"] .live-caret { transform: rotate(180deg); }
 
@@ -73,8 +75,8 @@
   .live-speed { padding: 0 8px; }
   .live-speed-pop { left: -60px; transform: none; }
   .live-speed-pop input { width: 120px; }
-  /* Room for the caption to wrap to a second line rather than cut off mid-word */
-  .live-cap { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; line-height: 1.3; }
+  /* Room for the note to wrap to a second line rather than cut off mid-word */
+  .live-note { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; line-height: 1.3; }
 }
 
 
@@ -102,12 +104,68 @@ body:has(.live-bar) .top { top: var(--demo-h); }
 body:has(.live-bar) #root { cursor: default; }
 /* While playing, the portal takes no clicks; no hint follows the mouse around */
 .live-shield { position: fixed; inset: var(--demo-h) 0 0 0; z-index: 2147483639; cursor: default; }
-/* The setup cover: opaque at once so no earlier chapter shows, its words fading in only if setup takes a moment */
-.live-veil { position: fixed; inset: var(--demo-h) 0 0 0; z-index: 2147483639; display: grid; place-content: center; gap: 6px; padding: 24px; text-align: center; background: var(--live-bg); color: var(--live-dim); font: 13px var(--mono); }
-.live-veil > * { opacity: 0; animation: veil-words .3s ease .4s forwards; }
-.live-veil b { color: var(--live-ink); font: 600 18px/1.3 var(--sans, system-ui); }
-@keyframes veil-words { to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .live-veil > * { animation: none; opacity: 1; } }
+/* The loading screen while earlier chapters are set up out of sight: the page's own color covers
+   them at once, and a card in the walkthrough's colors fades in after a moment with where it's going
+   and a line that fills. A setup that takes under a third of a second shows only the plain cover */
+.live-veil { position: fixed; inset: var(--demo-h) 0 0 0; z-index: 2147483639; display: grid; place-items: center; padding: 16px; box-sizing: border-box; background: var(--bg, #f4f6f4); }
+body:has(.signin) .live-veil { background: var(--live-bg); }
+.live-load { width: min(460px, 100%); box-sizing: border-box; padding: 22px 24px 20px; border-radius: 16px; background: rgba(13, 2, 8, .96); border: 1px solid rgba(0, 255, 65, .3); box-shadow: 0 24px 64px rgba(0, 0, 0, .28); color: #d6f5dc; font: 15px/1.55 var(--sans, system-ui); opacity: 0; animation: veil-in .3s ease .3s forwards; }
+.live-load h2 { margin: 0 0 8px; font: 600 20px/1.25 var(--mono); color: var(--live-hi); text-wrap: balance; }
+.live-load p { margin: 0 0 14px; }
+.live-load .live-card-eye { margin-bottom: 8px; }
+.live-load-bar { height: 4px; border-radius: 99px; background: rgba(0, 255, 65, .16); overflow: hidden; }
+.live-load-bar i { display: block; height: 100%; border-radius: 99px; background: var(--live-glow); transform-origin: left; transition: transform .5s ease; }
+@keyframes veil-in { to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .live-load { animation: none; opacity: 1; } .live-load-bar i { transition: none; } }
+
+
+/* --- The narration: one line at the bottom of the screen, like a film's subtitles ---------------
+   What's happening on screen, in type large enough to catch without looking for it. Above the phone's
+   tab bar; below the cursor and her thoughts, which stay clear of it (player.ts) */
+.live-sub { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); z-index: 2147483636; translate: -50% 0; width: max-content; max-width: min(760px, calc(100vw - 32px)); box-sizing: border-box; padding: 10px 18px 11px; border-radius: 12px;
+  background: rgba(13, 2, 8, .93); border: 1px solid var(--live-line); box-shadow: 0 10px 30px rgba(0, 0, 0, .28); color: #f1fff4; font: 500 16px/1.4 var(--sans, system-ui); text-align: center; text-wrap: balance; pointer-events: none;
+  opacity: 0; transform: translateY(6px); transition: opacity .25s ease, transform .25s ease; }
+.live-sub.on { opacity: 1; transform: none; }
+.live-sub span { display: block; animation: sub-in .35s ease both; }
+@keyframes sub-in { from { opacity: 0; transform: translateY(4px); } }
+/* Phones: above the tab bar when the portal shows one, a little smaller, and nearly edge to edge */
+@media (max-width: 640px) {
+  .live-sub { bottom: calc(12px + env(safe-area-inset-bottom)); max-width: calc(100vw - 20px); padding: 8px 12px 9px; font-size: 14.5px; }
+  body:has(.tabbar) .live-sub { bottom: calc(76px + env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) { .live-sub, .live-sub span { transition: none; animation: none; transform: none; } }
+
+
+/* --- The cards: before Start, at the end, and for a stumble -------------------------------------
+   A calm panel over the dimmed page, under the bar, in the bar's dark green glass. Above the cursor
+   and everything the story draws, so nothing sits on top of words someone is reading */
+.live-card-back { position: fixed; inset: var(--demo-h) 0 0 0; z-index: 2147483639; display: grid; place-items: center; padding: 16px; box-sizing: border-box; overflow: auto; background: rgba(13, 2, 8, .55); backdrop-filter: blur(3px); animation: card-back .25s ease both; }
+.live-card { width: min(560px, 100%); box-sizing: border-box; padding: 24px 26px 18px; border-radius: 16px; background: rgba(13, 2, 8, .96); border: 1px solid rgba(0, 255, 65, .3); box-shadow: 0 24px 64px rgba(0, 0, 0, .5); color: #d6f5dc; font: 15px/1.55 var(--sans, system-ui); animation: card-in .3s ease both; }
+.live-card:focus { outline: none; }
+.live-card-eye { margin: 0 0 8px; color: var(--live-dim); font: 11.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.live-card h2 { margin: 0 0 12px; font: 600 22px/1.25 var(--mono); color: var(--live-hi); text-wrap: balance; }
+.live-card p { margin: 0 0 12px; }
+.live-card a { color: var(--live-hi); text-underline-offset: 3px; }
+.live-card-acts { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 14px; }
+.live-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 16px; box-sizing: border-box; border-radius: 99px; border: 1px solid var(--live-line); background: transparent; color: var(--live-hi); font: 600 13px var(--mono); text-decoration: none; cursor: pointer; }
+.live-card a.live-btn { color: var(--live-hi); }
+.live-btn:hover { background: rgba(108, 255, 168, .12); }
+.live-btn.primary, .live-card a.live-btn.primary { border-color: var(--live-glow); background: var(--live-glow); color: var(--live-bg); }
+.live-btn.primary:hover { filter: brightness(1.08); background: var(--live-glow); }
+.live-btn small { font: 400 12px var(--sans, system-ui); opacity: .8; }
+.live-btn:focus-visible, .live-card a:focus-visible { outline: 2px solid var(--live-glow); outline-offset: 3px; }
+.live-btn.primary:focus-visible { outline-color: #fff; }
+.live-card-foot { margin: 0; color: var(--live-dim); font-size: 13px; line-height: 1.5; }
+@keyframes card-back { from { opacity: 0; } }
+@keyframes card-in { from { opacity: 0; transform: translateY(8px); } }
+@media (max-width: 640px) {
+  .live-card-back { padding: 10px; place-items: start center; }
+  .live-card { padding: 18px 18px 14px; font-size: 14.5px; }
+  .live-card h2 { font-size: 19px; margin-bottom: 8px; }
+  .live-card-acts { gap: 8px; margin: 14px 0 12px; }
+  .live-btn { min-height: 44px; flex: 1 1 auto; justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) { .live-card-back, .live-card { animation: none; backdrop-filter: none; } }
 
 
 /* --- The cursor: under the bar and its menus, over the portal (the layers below share 54 to 58) */
@@ -274,10 +332,9 @@ dialog.live-modal { box-shadow: 0 24px 64px rgba(0, 0, 0, .25), 0 0 0 100vmax rg
   .live-prop, .sh-card { transition: none; transform: none; }
 }
 
-/* The primer before the full story: a calm card over the sign-in screen, in its dark green glass */
-.live-primer { position: fixed; inset: var(--demo-h, 0px) 0 0; margin: auto; height: fit-content; z-index: 2147483633; width: min(520px, calc(100vw - 32px));
-  max-height: calc(100dvh - var(--demo-h, 0px) - 32px); overflow: auto; padding: 26px 26px 10px; border-radius: 14px; background: rgba(13, 2, 8, .92);
-  border: 1px solid rgba(0, 255, 65, .28); box-shadow: 0 18px 48px rgba(0, 0, 0, .45); color: #D6F5DC; font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
-.live-primer h2 { margin: 0 0 12px; font: 600 22px var(--mono); color: #9AFF9A; }
-.live-primer p { margin: 0 0 14px; font-size: 15px; line-height: 1.55; }
-@media (max-width: 640px) { .live-primer { padding: 18px 18px 4px; } .live-primer h2 { font-size: 19px; margin-bottom: 8px; } .live-primer p { font-size: 14px; line-height: 1.45; margin-bottom: 10px; } }
+
+/* On a phone, the loading screen and the cards' backdrop also cover the strip under the browser's own
+   controls (see --under in app.css), with the card still centered in the part that shows */
+@media (hover: none) and (pointer: coarse) {
+  .live-veil, .live-card-back { bottom: calc(-1 * var(--under, 0px)); padding-bottom: calc(16px + var(--under, 0px)); }
+}

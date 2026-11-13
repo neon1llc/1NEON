@@ -12,6 +12,9 @@ export type ShortId = (typeof SHORT_IDS)[number];
 // The whole project's id, for the saved place; ?play=full asks for it from the start
 export const PROJECT = "project";
 const FULL = "full";
+// How long the whole project takes at the default speed, said on its intro card and wherever another
+// walkthrough offers it. The browser check times it and fails when this stops being true
+export const FULL_LENGTH = "about 11 minutes";
 
 /** What to play: a show, and optionally the section of it to start at */
 export interface Play {
