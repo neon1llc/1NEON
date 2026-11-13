@@ -24,7 +24,8 @@ export interface CheckoutRequest {
 export interface PaymentEvent {
   id: string;
   type: string;
-  session?: { id: string; paymentStatus: string; amountTotal: number; paymentIntent?: string; method?: string; metadata: Record<string, string> };
+  // `method` is set when the session offered one way to pay; `methods` lists every way it offered
+  session?: { id: string; paymentStatus: string; amountTotal: number; paymentIntent?: string; method?: string; methods?: string[]; metadata: Record<string, string> };
 }
 
 /** The payment provider */
@@ -79,6 +80,7 @@ export function readEvent(body: string): PaymentEvent {
       amountTotal: Number(o!.amount_total ?? 0),
       paymentIntent: typeof o!.payment_intent === "string" ? o!.payment_intent : undefined,
       method: Array.isArray(o!.payment_method_types) && o!.payment_method_types.length === 1 ? String(o!.payment_method_types[0]) : undefined,
+      methods: Array.isArray(o!.payment_method_types) ? o!.payment_method_types.map(String) : undefined,
       metadata: (o!.metadata ?? {}) as Record<string, string>,
     } : undefined,
   };

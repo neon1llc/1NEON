@@ -408,7 +408,8 @@ describe("paying online", () => {
     await call(s.raj.email, "POST", `${path}/invoices/${inv.id}/pay`);
     const session = payments!.sessions[0]!;
     const card = event(session, "checkout.session.completed", "paid");
-    card.data.object.payment_method_types = ["card"];
+    // Both ways were offered, as in real use: paid on the spot means the card
+    card.data.object.payment_method_types = ["us_bank_account", "card"];
     await hook(card);
     const { items } = await flow();
     expect(items.filter((i) => i.kind === "payment")).toMatchObject([{ status: "done", fields: { method: "card" } }]);

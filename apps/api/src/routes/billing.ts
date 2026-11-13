@@ -61,8 +61,10 @@ export function stripeWebhook(app: App, k: Kit) {
     // Only a transfer still on its way moves on; a received or failed payment is a record and stays
     if (!status || (had && (had.status !== "pending" || status === "pending"))) return;
     const today = now().slice(0, 10);
+    // Checkout offers bank and card together, so the session doesn't say which was used. A bank
+    // transfer never completes at once, so one paid on the spot was a card; one that waits is the bank
     const startedAt = had ? String(had.fields.startedAt ?? had.fields.receivedAt) : status === "done" ? undefined : today;
-    await writePayment(p, invoice, { id: pid, status, was: had, amountCents: s.amountTotal, method: METHOD[s.method ?? ""] ?? (status === "done" && !had ? "other" : "ach"), ref: s.paymentIntent ?? s.id, receivedAt: status === "failed" && had ? String(had.fields.receivedAt) : today, startedAt, by: "stripe", stripe: { session: s.id, intent: s.paymentIntent } });
+    await writePayment(p, invoice, { id: pid, status, was: had, amountCents: s.amountTotal, method: METHOD[s.method ?? ""] ?? (status !== "done" || had ? "ach" : s.methods?.includes("card") ? "card" : "other"), ref: s.paymentIntent ?? s.id, receivedAt: status === "failed" && had ? String(had.fields.receivedAt) : today, startedAt, by: "stripe", stripe: { session: s.id, intent: s.paymentIntent } });
   }
 
   /**
