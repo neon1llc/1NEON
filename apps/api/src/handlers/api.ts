@@ -15,6 +15,7 @@ import { DynamoTable } from "../store/dynamo.ts";
 import { Repo } from "../store/repo.ts";
 import { bedrockNeo } from "../neo/bedrock.ts";
 import { DEFAULT_BUDGET } from "../routes/neo.ts";
+import { guardDirectory, guardMailer } from "../dev-guard.ts";
 
 
 // Built once per cold start and reused across invocations
@@ -27,7 +28,8 @@ if (!cfg.table || !cfg.userPoolId || !cfg.clientId || !cfg.authDomain || !cfg.ma
 
 // Production wiring: DynamoDB, Cognito, SES, and S3 behind the same interfaces tests use
 const repo = new Repo(new DynamoTable(cfg.table));
-const mailer = new SesMailer(cfg.mailFrom);
+// In dev (a copy of production's data) mail reaches neon1 only; see dev-guard.ts
+const mailer = guardMailer(cfg, new SesMailer(cfg.mailFrom));
 // Texts only once the toll-free number is set up
 const texter = cfg.smsFrom ? new AwsTexter(cfg.smsFrom) : undefined;
 const storage = new S3Storage(cfg.docsBucket);
@@ -52,7 +54,7 @@ const payments = await stripe();
 const app = createApp({
   cfg,
   repo,
-  directory: new CognitoDirectory(cfg.userPoolId),
+  directory: guardDirectory(cfg, new CognitoDirectory(cfg.userPoolId)),
   mailer,
   storage,
   texter,

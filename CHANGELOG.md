@@ -2,6 +2,10 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## Unreleased
+
+- Dev can hold a copy of production's data: `node scripts/dev-data.mjs --yes` (admin profile) replaces dev's table and documents with production's, leaving out queued messages, sessions, and sign-in links. Because that copy holds real clients, dev now admits only neon1's own people, sends mail only to them, and creates no dev accounts for anyone else.
+
 ## v0.9.0 - 2026-11-13
 
 ### Added

@@ -8,15 +8,18 @@ import { factorInventory } from "../factors.ts";
 import { assurance } from "../lib/assurance.ts";
 import { body, fail } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
+import { isDev, neon1Only } from "../dev-guard.ts";
 
 
 export function authRoutes(app: App, k: Kit) {
-  const { d, repo } = k;
+  const { d, repo, cfg } = k;
   const { refreshEnrolled } = assurance(k);
 
   /** After any sign-in: invite check, link the Cognito identity, refresh strong sign-in */
   async function admit(r: Verified | undefined): Promise<"ok" | "failed" | "not_invited"> {
     if (!r || !r.emailVerified) return "failed";
+    // Dev runs on a copy of production's data: only neon1's own people may sign in there
+    if (isDev(cfg) && !neon1Only(cfg, r.email)) return "not_invited";
     // Invite only: a verified email must already belong to an invited person
     const uid = await repo.userIdForEmail(r.email);
     if (!uid) return "not_invited";
