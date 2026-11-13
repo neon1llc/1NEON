@@ -4,13 +4,13 @@
 
 import { balanceOf, dollars as wholeDollars, failedOn, invoiceState, InvoiceFields, money as dollars, payableOn, paymentPlan, priceMeaning, priceOf, betterWhen, canApprove, changedSince, currentDecision, todayIn, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, priceCheckDue, ProjectRole, proposalRef, PurchaseFields, HandoffFields, revisions, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
 import { ArrowRight, Pencil, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
 import { GUIDE, Pick, RequestBuilder, Starters } from "../components/Guide.tsx";
 import { ItemPanel, STATUS_WORDS, statusWord, useDeleteItem, useMayDelete } from "../components/ItemPanel.tsx";
 import { downloadDocx, FICTIONAL } from "../lib/docx.ts";
 import { gate, Stale } from "../components/Reads.tsx";
-import { Link, NavLink, useLocation, useParams } from "react-router";
+import { Link, NavLink, useLocation, useNavigate, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, ConflictDialog, Dialog, Empty, Health, HEALTH_LABEL, LayerBadge, LAYERS, layerHint, layerName, layerProgress, OnionProgress, Trend, ago, dateLabel, daysSince, layerFromSlug, layerSlug, useToast } from "../components/ui.tsx";
 import { api, DEMO, HttpError } from "../lib/api.ts";
@@ -19,7 +19,7 @@ import { firstYear, money, parseCost, type Recurring } from "../lib/cost.ts";
 import { handoverSummary } from "../lib/handover.ts";
 import { numberProblem, optionalNumber } from "../lib/measures.ts";
 import { problem, useMembers, useProject, useProjects, useRefresh, useSubmit } from "../lib/hooks.ts";
-import { aimBetween } from "../lib/motion.ts";
+import { aimBetween, canSlide } from "../lib/motion.ts";
 import type { EditMarker } from "../lib/types.ts";
 
 
@@ -69,6 +69,7 @@ export function ProjectPage() {
   const pid = projects.data?.find((p) => p.key === key)?.id;
   const detail = useProject(org.id, pid);
   const base = `/o/${summary.slug}/projects/${key}`;
+  const nav = useNavigate();
   // Breadcrumb plus the avatars of anyone editing in this project
   useTopBar(
     <span>
@@ -90,6 +91,16 @@ export function ProjectPage() {
   const stageAt = org.stages.findIndex((s) => s.id === p.stageId);
   // The open tab's position, so moving to a later tab pans left and an earlier one pans right
   const at = tab === "overview" ? 0 : LAYERS.indexOf(tab as Layer) + 1;
+  // A tab slides to the next one when the browser can. When it can't (no support, less motion asked
+  // for, a walkthrough setting up out of sight), it's a plain move: a transition the router can't
+  // make would only have it draw the page late
+  const toTab = (e: ReactMouseEvent, to: string, i: number) => {
+    if (canSlide()) return aimBetween(at, i);
+    // A click meant for a new tab or window is the browser's
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    void nav(to);
+  };
   // Item counts for each layer tab
   // A measure counts as done once its latest reading reaches the target
   const prog = layerProgress(items.map((i) => (i.kind === "metric" && (metricProgress(MetricFields.parse(i.fields)) ?? 0) >= 1 ? { ...i, status: "done" } : i)), (k) => KIND_LAYER[k as ItemKind]);
@@ -114,9 +125,9 @@ export function ProjectPage() {
       <NextStep project={p} items={items} stage={org.stages[stageAt]} base={base} />
       {/* Overview, then one tab per layer with its item count; at is the open tab's position */}
       <nav className="tabs" aria-label="Project sections" data-tour="layers">
-        <NavLink to={base} end viewTransition onClick={() => aimBetween(at, 0)} className={() => (tab === "overview" ? "active" : "")}>Overview</NavLink>
+        <NavLink to={base} end viewTransition onClick={(e) => toTab(e, base, 0)} className={() => (tab === "overview" ? "active" : "")}>Overview</NavLink>
         {LAYERS.map((l, i) => (
-          <NavLink key={l} to={`${base}/${layerSlug(l)}`} viewTransition onClick={() => aimBetween(at, i + 1)}><LayerBadge layer={l} /><span className="tab-name">{layerName(l)}<small className="sub"><span className="sr">, </span>{layerHint(l)}</small></span> {prog[l][1] > 0 && <span className="muted" aria-label={`${prog[l][0]} of ${prog[l][1]} done`} title={`${prog[l][0]} of ${prog[l][1]} done`}>{prog[l][0]}/{prog[l][1]}</span>}</NavLink>
+          <NavLink key={l} to={`${base}/${layerSlug(l)}`} viewTransition onClick={(e) => toTab(e, `${base}/${layerSlug(l)}`, i + 1)}><LayerBadge layer={l} /><span className="tab-name">{layerName(l)}<small className="sub"><span className="sr">, </span>{layerHint(l)}</small></span> {prog[l][1] > 0 && <span className="muted" aria-label={`${prog[l][0]} of ${prog[l][1]} done`} title={`${prog[l][0]} of ${prog[l][1]} done`}>{prog[l][0]}/{prog[l][1]}</span>}</NavLink>
         ))}
       </nav>
       {/* The section under the tabs pans by tab order */}

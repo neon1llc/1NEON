@@ -3,13 +3,14 @@
 
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { menuOf } from "@1neon/domain";
 import { api, DEMO as IN_DEMO, LIVE as IN_LIVE, devUser, HttpError, pickPerson, resetDemo, Unconfirmed } from "../lib/api.ts";
 import { failureOf, read } from "../lib/reads.ts";
 import { passkeyAssertion } from "../lib/passkey.ts";
 import { SIGN_IN_METHODS } from "../lib/methods.ts";
+import { drew } from "../lib/motion.ts";
 import { REWIND } from "../lib/nav.ts";
 import { usePersisting } from "../lib/persist.ts";
 import { cleanCode, clearStep, loadStep, saveStep, session } from "../lib/signin.ts";
@@ -96,6 +97,8 @@ export function Root() {
 function App() {
   const me = useMe();
   const loc = useLocation();
+  // Which location is on screen, for the check that keeps the page with the address (lib/motion.ts)
+  useLayoutEffect(() => drew(loc.key), [loc.key]);
   const qc = useQueryClient();
   // Any call that hears 401 asks for a fresh session check; its 401 then shows sign-in below
   useEffect(() => {
