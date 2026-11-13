@@ -293,7 +293,9 @@ async function run({ show, size, scenario }, tries = RETRIES) {
   } catch (e) {
     const shot = join(ROOT, `walkthrough-failure-${show}-${size}-${scenario}.png`);
     await page.screenshot({ path: shot }).catch(() => undefined);
-    const why = `${name}\n      ${String(e.message ?? e)}${problems.length ? `\n      console: ${problems.slice(0, 4).join(" | ")}` : ""}`;
+    // Where the page was and what it was saying: a refused request shows as a notice, not in the console
+    const seen = await page.evaluate(() => `at ${location.pathname.replace("/1NEON/live", "") || "/"}${location.hash}${[...document.querySelectorAll(".toast, [role=alert]")].map((n) => `; on screen: ${n.textContent.trim().slice(0, 160)}`).join("")}`).catch(() => "");
+    const why = `${name}\n      ${String(e.message ?? e)}${seen ? `\n      ${seen}` : ""}${problems.length ? `\n      console: ${problems.slice(0, 4).join(" | ")}` : ""}`;
     if (tries > 0) {
       console.log(`retry ${name}`);
       retried.push(why);
