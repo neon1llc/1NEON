@@ -98,7 +98,7 @@ describe("suggested lines", () => {
 
   it("reads an estimate's range, and says what it means for the person paying", () => {
     const p = priceOf(est)!;
-    expect(p).toEqual({ kind: "estimate", rateCents: 17_500, hoursLow: 20, hoursHigh: 24, lowCents: 350_000, highCents: 420_000 });
+    expect(p).toEqual({ kind: "estimate", rateCents: 17_500, hoursLow: 20, hoursHigh: 24, lowCents: 350_000, highCents: 420_000, depositPercent: 50 });
     expect(priceLine(p)).toBe("$3,500 to $4,200 estimate");
     expect(priceMeaning(p)).toContain("can't pass $4,200");
     expect(paymentPlan(p)[0]).toBe("$1,750.00 when you approve (50% of the low end, as a deposit)");
@@ -122,6 +122,18 @@ describe("suggested lines", () => {
     expect(invoiceTotal({ type: "final", taxCents: 0, lines })).toBe(192_500);
     // Once that final invoice exists, nothing more is owed for the same hours
     expect(finalLines(e, [paid, inv("i2", "issued", { type: "final", lines }), time("t1", 12.5), time("t2", 8.5)])).toEqual([]);
+  });
+
+  it("asks the deposit share the client agreed: 20% of the low end, or nothing up front", () => {
+    const twenty = rec("d4", "decision", "approved", { code: "0039-r1-A", terms: { ...est, depositPercent: 20 } });
+    expect(depositLines(twenty)).toEqual([{ text: "Deposit on 0039-r1-A B. Solid setup: 20% of the estimate's low end ($3,500)", qty: 1, unitCents: 70_000, ref: "d4" }]);
+    expect(paymentPlan(priceOf({ ...est, depositPercent: 20 })!)[0]).toBe("$700.00 when you approve (20% of the low end, as a deposit)");
+    const none = rec("d5", "decision", "approved", { terms: { cost: "$1,700 fixed", pricing: "fixed", depositPercent: 0 } });
+    expect(depositLines(none)).toEqual([]);
+    expect(paymentPlan(priceOf({ cost: "$1,700 fixed", depositPercent: 0 })!)).toEqual(["Nothing up front; $1,700.00 when you accept the handover"]);
+    // A draft deposit asks for nothing until it's issued, so a second draft still suggests the full share
+    const draft = inv("i9", "draft", { type: "deposit", lines: depositLines(twenty) });
+    expect(depositLines(twenty, undefined, [draft])).toHaveLength(1);
   });
 
   it("never bills past an estimate's high end, and shows the hours it doesn't charge for", () => {

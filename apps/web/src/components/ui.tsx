@@ -3,7 +3,7 @@
 
 
 import { LAYER_LETTER, LAYER_NAMES, RECORD_KINDS, type Health as HealthT, type Layer } from "@1neon/domain";
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 
 // Avatar colors: brand greens and calm accents, all readable with white initials
@@ -396,4 +396,15 @@ export function Changes({ e }: { e: { summary: string; details?: string[] } }) {
   const all = e.details ?? [];
   if (!all.length || all.every((d) => e.summary.includes(d))) return null;
   return <ul className="changes">{all.map((d, i) => <li key={i}>{d}</li>)}</ul>;
+}
+
+
+/** A dollar amount: the box shows a $ before the number and opens the number keypad on a phone */
+export function Money({ value, onChange, id, placeholder, label, required, style, invalid }: { value: string; onChange: (v: string) => void; id?: string; placeholder?: string; label?: string; required?: boolean; style?: CSSProperties; invalid?: boolean }) {
+  return (
+    <span className="affix" style={style}>
+      <span className="affix-before" aria-hidden="true">$</span>
+      <input id={id} inputMode="decimal" autoComplete="off" value={value} onChange={(e) => onChange(e.target.value.replace(/^\s*\$\s*/, ""))} placeholder={placeholder} aria-label={label} required={required} aria-invalid={invalid ? true : undefined} />
+    </span>
+  );
 }

@@ -380,6 +380,9 @@ const priceFields = {
   rateCents: z.number().int().min(0).max(10_000_00).optional(),
   hoursLow: z.number().min(0).max(10_000).optional(),
   hoursHigh: z.number().min(0).max(10_000).optional(),
+  // The share asked up front, as a percent: of a fixed price, or of an estimate's low end. Unset means
+  // the usual 50; a client can agree a different share (20, or 0 for nothing up front)
+  depositPercent: z.number().int().min(0).max(100).optional(),
   // Where the hours go, piece by piece, so the price can be checked against the work
   basis: z.array(BasisLine).max(40).optional(),
 };

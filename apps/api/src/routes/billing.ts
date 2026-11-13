@@ -168,7 +168,7 @@ export function billingRoutes(app: App, k: Kit, pay: ReturnType<typeof stripeWeb
       const target = items.find((i) => i.id === input.appliesTo && i.kind === "invoice");
       if (!target || target.status === "draft" || target.status === "void" || target.fields.type === "credit") fail(400, "invalid", "A credit reduces one issued invoice. Choose which.");
     }
-    const suggested = input.type === "deposit" ? (decision ? depositLines(decision) : []) : input.type === "final" || input.type === "progress" ? (decision ? finalLines(decision, items) : []) : input.type === "reimbursement" ? reimbursementLines(items) : [];
+    const suggested = input.type === "deposit" ? (decision ? depositLines(decision, undefined, items) : []) : input.type === "final" || input.type === "progress" ? (decision ? finalLines(decision, items) : []) : input.type === "reimbursement" ? reimbursementLines(items) : [];
     const lines = input.lines ?? suggested;
     if (!lines.length) fail(400, "no_lines", "There's nothing to bill yet. Add a line with what it's for and the amount.");
     const ts = now();

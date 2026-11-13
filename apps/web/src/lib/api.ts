@@ -34,6 +34,9 @@ const under = (p: string) => location.pathname === p || location.pathname.starts
 export const LIVE = under("/1NEON/live");
 /** /1NEON/demo (and live): the whole portal runs in this browser, with its own copy of the API and nothing sent anywhere */
 export const DEMO = LIVE || under("/1NEON/demo");
+/** Documents and previews (a proposal, an invoice) open in a new tab, so the page they came from stays
+ * as it was. The demo and the live playback keep them in the same tab: their data lives in this one */
+export const NEW_TAB = (DEMO ? {} : { target: "_blank", rel: "noopener", title: "Opens in a new tab" }) as { target?: string; rel?: string; title?: string };
 // The router's base: the demo and the live playback keep every page under their own path
 export const BASE_PATH = LIVE ? "/1NEON/live" : DEMO ? "/1NEON/demo" : "/1NEON";
 // Pick a person to be, as in local development: true in the dev server and in the demo

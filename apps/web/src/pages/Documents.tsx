@@ -10,6 +10,7 @@ import { DropZone, FileList } from "../components/Files.tsx";
 import { gate, Stale } from "../components/Reads.tsx";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
 import { LayerBadge, LAYERS, layerName } from "../components/ui.tsx";
+import { NEW_TAB } from "../lib/api.ts";
 import { read } from "../lib/reads.ts";
 
 
@@ -98,7 +99,7 @@ export function Documents() {
               return (
                 <div className={`revision${r.status !== "issued" || stale ? " faded" : ""}`} key={r.id}>
                   <div>
-                    <Link to={`/o/${org.slug}/projects/${r.key}/proposal?r=${r.rev}`}><b>{r.title}</b></Link>
+                    <Link to={`/o/${org.slug}/projects/${r.key}/proposal?r=${r.rev}`} {...NEW_TAB}><b>{r.title}</b></Link>
                     <span className="small muted"> · {r.key} · issued {new Date(r.issuedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}{r.issuerName ? ` by ${r.issuerName}` : ""}</span>
                     <div className="small">
                       {r.decided.length ? <span className="tag client">approved {r.decided.join(", ")}</span> : r.status === "superseded" ? <span className="tag">replaced by a later revision</span> : stale ? <span className="tag warn">prices may have changed</span> : <span className="tag">waiting on a decision</span>}

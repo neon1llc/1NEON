@@ -233,7 +233,7 @@ export function itemRoutes(app: App, k: Kit) {
     const by = actorId(c);
     const approver = who(c).user;
     // The terms exactly as approved travel with the decision, so it never depends on the option later
-    const terms = { title: option.title, body: option.body, cost: of.cost, timeline: of.timeline, hours: of.hours || undefined, outsideCosts: of.outsideCosts || undefined, result: of.result || undefined, costScore: of.costScore, qualityScore: of.qualityScore, effortScore: of.effortScore, recommended: of.recommended, purchases: of.purchases.length ? of.purchases : undefined, pricing: of.pricing, rateCents: of.rateCents, hoursLow: of.hoursLow, hoursHigh: of.hoursHigh, basis: of.basis?.length ? of.basis : undefined };
+    const terms = { title: option.title, body: option.body, cost: of.cost, timeline: of.timeline, hours: of.hours || undefined, outsideCosts: of.outsideCosts || undefined, result: of.result || undefined, costScore: of.costScore, qualityScore: of.qualityScore, effortScore: of.effortScore, recommended: of.recommended, purchases: of.purchases.length ? of.purchases : undefined, pricing: of.pricing, rateCents: of.rateCents, hoursLow: of.hoursLow, hoursHigh: of.hoursHigh, depositPercent: of.depositPercent, basis: of.basis?.length ? of.basis : undefined };
     const earlier = items.filter((i) => i.kind === "decision").map((i) => i.id);
     const name = approver.name || approver.email;
     // The approver signs this option ID over a hash of exactly what they agreed to; when neon1 buys

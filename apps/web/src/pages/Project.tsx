@@ -3,7 +3,7 @@
 
 
 import { balanceOf, billedOn, depositLines, hoursLogged, hoursText, lineage, lineCents, dollars as wholeDollars, failedOn, invoiceState, InvoiceFields, money as dollars, payableOn, paymentPlan, priceMeaning, priceOf, betterWhen, canApprove, changedSince, currentDecision, todayIn, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, priceCheckDue, ProjectRole, proposalRef, PurchaseFields, HandoffFields, revisions, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
-import { ArrowRight, Pencil, Trash2 } from "lucide-react";
+import { ArrowRight, ExternalLink, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
 import { GUIDE, Pick, RequestBuilder, Starters } from "../components/Guide.tsx";
@@ -13,7 +13,7 @@ import { gate, Stale } from "../components/Reads.tsx";
 import { Link, NavLink, useLocation, useNavigate, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, ConflictDialog, Dialog, Empty, Health, HEALTH_LABEL, LayerBadge, LAYERS, layerHint, layerName, layerProgress, OnionProgress, Trend, ago, dateLabel, daysSince, inStageFor, layerFromSlug, layerSlug, useAsk, useToast } from "../components/ui.tsx";
-import { api, DEMO, HttpError } from "../lib/api.ts";
+import { api, DEMO, HttpError, NEW_TAB } from "../lib/api.ts";
 import { AgreementNeeded, Hours, Invoices, PriceBasis, SignBox, signReady, useAgreementSigned, type Priced, type SignValue } from "../components/Billing.tsx";
 import { firstYear, money, parseCost, type Recurring } from "../lib/cost.ts";
 import { handoverSummary } from "../lib/handover.ts";
@@ -655,16 +655,18 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
   const path = `/t/${org.id}/projects/${project.id}`;
   const decisions = items.filter((i) => i.kind === "decision");
   // A link to one item (#item-…) or a group (#options) scrolls to it and flashes it once
-  const { hash } = useLocation();
+  // (the location's key changes on every click, so a link to where the page already is still scrolls)
+  const { hash, key } = useLocation();
   useEffect(() => {
     if (!hash) return;
     const el = document.getElementById(hash.slice(1));
     if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: el.offsetHeight > innerHeight * 0.6 ? "start" : "center" });
     el.classList.add("flash");
     const t = setTimeout(() => el.classList.remove("flash"), 2200);
     return () => clearTimeout(t);
-  }, [hash, items.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hash, key, items.length]);
 
   // Quick edits (done, readings): on a conflict, say so and show the latest instead of a dialog
   // True once saved; on a failure the caller keeps what the person typed (EP-03)
@@ -1086,12 +1088,12 @@ function ProposalStrip({ all, path, project, decider }: { all: Item[]; path: str
       )}
       {scopeAsks.length > 0 && <div className="small"><span className="tag warn">{scopeAsks.length} {scopeAsks.length === 1 ? "request changes" : "requests change"} the agreed scope</span> {mayIssue ? "Answer with the next revision." : "neon1 answers with the next revision."}</div>}
       <div className="acts">
-        <Link className="btn btn-ghost btn-sm" to={`${base}/proposal${cur ? "" : "?draft=1"}`}>{cur ? "Read the proposal" : "Preview the draft"}</Link>
+        <Link className="btn btn-ghost btn-sm" to={`${base}/proposal${cur ? "" : "?draft=1"}`} {...NEW_TAB}>{cur ? "Read the proposal" : "Preview the draft"} <ExternalLink size={13} aria-hidden="true" /></Link>
         {cur && <button type="button" className="btn btn-ghost btn-sm" onClick={() => void docx()}>Download Word</button>}
-        {cur && mayIssue && (changes?.any || scopeAsks.length > 0 || stale) && <Link className="btn btn-ghost btn-sm" to={`${base}/proposal?draft=1`}>Preview r{cur.p.rev + 1}</Link>}
+        {cur && mayIssue && (changes?.any || scopeAsks.length > 0 || stale) && <Link className="btn btn-ghost btn-sm" to={`${base}/proposal?draft=1`} {...NEW_TAB}>Preview r{cur.p.rev + 1} <ExternalLink size={13} aria-hidden="true" /></Link>}
         {mayIssue && (!cur || changes?.any || stale || scopeAsks.length > 0 || cur.p.refreshAsked) && <button type="button" className="btn btn-primary btn-sm" onClick={() => setIssuing(true)}>{cur ? `Issue r${cur.p.rev + 1}` : "Issue the proposal"}</button>}
         {stale && decider && !cur!.p.refreshAsked && <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void askRefresh()}>Ask neon1 to refresh</button>}
-        {revs.length > 1 && <span className="small muted">Earlier: {revs.slice(0, -1).map((r, i) => <span key={r.id}>{i ? ", " : ""}<Link className="faded-link" to={`${base}/proposal?r=${r.p.rev}`}>r{r.p.rev}</Link></span>)}</span>}
+        {revs.length > 1 && <span className="small muted">Earlier: {revs.slice(0, -1).map((r, i) => <span key={r.id}>{i ? ", " : ""}<Link className="faded-link" to={`${base}/proposal?r=${r.p.rev}`} {...NEW_TAB}>r{r.p.rev}</Link></span>)}</span>}
       </div>
       <Dialog open={issuing} onClose={() => setIssuing(false)} label="Issue the proposal">
         <h2>{cur ? `Issue revision ${cur.p.rev + 1}?` : "Issue the proposal?"}</h2>
