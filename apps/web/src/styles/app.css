@@ -1304,3 +1304,16 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
 /* The agreement note reads as one sentence with its link; the way back sits beside the confirmation */
 .notice.agreement-needed { display: block; }
 .notice .agreement-back { flex: none; }
+
+
+/* --- Under the browser's own controls (2026-11-13) ---
+   Some phone browsers (DuckDuckGo on iPhone) pin a fixed element's bottom above their floating toolbar
+   yet draw the page below it, so the page scrolled by underneath, in view. Whatever is fixed and should
+   reach the screen's edge runs --under past it, as the tab bar does: the menu (the mini rail and the
+   open menu) and the dimmed backdrop behind it. The extra is padding, so nothing inside moves; on
+   other browsers it sits off screen */
+@media (hover: none) and (pointer: coarse) {
+  :root { --under: 40vh; }
+  .side { bottom: calc(-1 * var(--under)); padding-bottom: calc(8px + var(--under)); }
+  .scrim { bottom: calc(-1 * var(--under)); }
+}

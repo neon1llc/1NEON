@@ -19,7 +19,10 @@
 - A notice above the options tells a decision maker when the service agreement needs signing first, with a link to read and sign it and a button back to the options afterwards.
 - A check that plays every walkthrough in a real browser, on a desktop and a phone screen, and stops a release if any of them doesn't reach its end. It also jumps between chapters, reloads partway, pauses and clicks around, turns the phone, and leaves the tab, and it fails when a walkthrough takes much longer or shorter than it says it does.
 
+- A phone's screen stays lit while a walkthrough plays, and dims as usual once it's paused or over. Browsers without that ability behave as before.
+
 ### Fixed
+- On phone browsers that float their controls over the page (DuckDuckGo on iPhone), the strip under the menu showed the page scrolling by. The menu, the dimmed backdrop behind it, and the walkthrough's cards and loading screen now reach the screen's edge, as the tab bar already did.
 - The short walkthrough no longer redraws the page a moment after it opens.
 - Maria's cursor no longer rests on top of the opening card.
 - On a phone with the mini menu, the walkthrough picked the wrong menu item for People and Projects and stopped. It now finds each page by where its link leads.

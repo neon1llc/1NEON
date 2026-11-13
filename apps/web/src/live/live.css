@@ -331,3 +331,10 @@ dialog.live-modal { box-shadow: 0 24px 64px rgba(0, 0, 0, .25), 0 0 0 100vmax rg
   .live-think.fresh .txt, .live-pop, .live-desk-file, .live-speed-pop, .ph-msg { animation: none; }
   .live-prop, .sh-card { transition: none; transform: none; }
 }
+
+
+/* On a phone, the loading screen and the cards' backdrop also cover the strip under the browser's own
+   controls (see --under in app.css), with the card still centered in the part that shows */
+@media (hover: none) and (pointer: coarse) {
+  .live-veil, .live-card-back { bottom: calc(-1 * var(--under, 0px)); padding-bottom: calc(16px + var(--under, 0px)); }
+}

@@ -8,6 +8,7 @@ import { BASE_PATH, devUser, liveEngine } from "../lib/api.ts";
 import { clearCache, navigate, refreshAll, REWIND } from "../lib/nav.ts";
 import { clearStep, session } from "../lib/signin.ts";
 import { endTour } from "../components/Help.tsx";
+import { keepAwake } from "./awake.ts";
 import { opening } from "./opening.ts";
 import { SHORTS } from "./shorts.ts";
 import { PLAY, PROJECT, remember } from "./where.ts";
@@ -471,6 +472,8 @@ export class Player {
     // Moving on its own: the portal underneath goes inert; paused or done, it's live again
     const now = this.started && !this.view.paused && !this.view.done;
     if (now !== playing) { playing = now; isolate(); }
+    // A phone's screen stays lit while the story moves; on the cards, paused, or stopped, it may dim
+    keepAwake(now && !this.view.idle && !this.view.failed);
     for (const fn of this.listeners) fn(this.view);
   }
 
@@ -1036,12 +1039,18 @@ export class Player {
         if (!a && !p.fast) {
           const btn = find(".tabbar .menu-btn") ?? find(".top .menu-btn");
           if (btn) {
-            await reach(btn);
-            await pause(150);
-            p.cursor!.press();
-            btn.click();
-            await pause(450);
-            a = link(".side.open");
+            // The button toggles: a menu already open (someone explored while paused) is left open
+            if (!find(".side.open")) {
+              await reach(btn);
+              await pause(150);
+              p.cursor!.press();
+              btn.click();
+            }
+            // The menu slides open; on a slow device its links take a moment to be there
+            for (let tries = 0; tries < 8 && !a; tries++) {
+              await pause(300);
+              a = link(".side.open");
+            }
             // Nothing in the menu leads there: close it again, and say so for whoever keeps the story
             // (the walkthrough checks fail on this line, so a page without a visible way in gets one)
             if (!a) {

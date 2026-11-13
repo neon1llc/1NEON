@@ -176,7 +176,7 @@ const SCENARIOS = {
   },
 
   /** Reload in the middle; the card offers to carry on, and it plays to the end from there */
-  async reload(page) {
+  async reload(page, show) {
     await until(page, (s) => s.card === "intro", "the intro card", 20_000);
     await press(page, "Start");
     const first = await until(page, (s) => s.chapter >= 1, "the first chapter");
@@ -185,8 +185,11 @@ const SCENARIOS = {
     await page.reload();
     await until(page, (s) => s.card === "intro", "the card after a reload", 20_000);
     const words = await page.locator(".live-card").innerText();
-    if (!/Pick up where you left off/.test(words)) throw new Error("a reload partway through didn't offer to carry on");
-    await press(page, "Continue");
+    // One chapter on its own (a link from help) is a sign-in and one thing: a reload starts it again.
+    // Everything longer offers to carry on from the chapter it was in
+    const again = CHAPTERS.includes(show);
+    if (!again && !/Pick up where you left off/.test(words)) throw new Error("a reload partway through didn't offer to carry on");
+    await press(page, again ? "Start" : "Continue");
     await until(page, (s) => s.card === "end", "the end card");
     // And again from the end: Watch again starts over without a reload
     await press(page, "Watch again");
@@ -243,7 +246,8 @@ const SCENARIOS = {
       Object.defineProperty(document, "visibilityState", { configurable: true, get: () => (h ? "hidden" : "visible") });
       document.dispatchEvent(new Event("visibilitychange"));
     }, hidden);
-    const end = Date.now() + LIMIT;
+    // Away for a third of the time, and a moment to pick up on each return: allow twice the usual limit
+    const end = Date.now() + LIMIT * 2;
     while (Date.now() < end) {
       const s = await state(page);
       if (s.card === "failed") throw new Error(`stopped at "${s.title}" after leaving the tab`);
@@ -281,7 +285,7 @@ async function run({ show, size, scenario }, tries = RETRIES) {
   const t0 = Date.now();
   try {
     await page.goto(address(show));
-    await SCENARIOS[scenario](page);
+    await SCENARIOS[scenario](page, show);
     // A missing shared file or a blocked font isn't the walkthrough's doing; anything else is
     const real = problems.filter((p) => !/Failed to load resource|net::ERR|favicon/.test(p));
     if (real.length) throw new Error(real.join("\n      "));
