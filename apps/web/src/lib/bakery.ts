@@ -72,21 +72,30 @@ export interface BakeryOption { title: string; body: string; fields: Record<stri
 // Every option is an estimate: hours at the rate, from a low to a high end, with the work behind them
 const estimate = (hoursLow: number, hoursHigh: number, basis: BasisLine[]) => ({ pricing: "estimate" as const, rateCents: RATE_CENTS, hoursLow, hoursHigh, basis });
 
-// The work in A, which B and C build on (B needs less of A's own testing: its dry run covers it)
+// The work behind each option, task by task, as the proposal's "How the hours add up" lists it
+// (Knowledge Center, "Proposal with options, filled in"). A and B share the form; C starts from B
 const FORM: BasisLine[] = [
-  { work: "Order form with pickup rules and a confirmation to the customer", hours: 1.5 },
+  { work: "Order form with pickup rules and a confirmation to the customer", hours: 2 },
   { work: "One order list with a status for each order", hours: 0.5 },
   { work: "The form's link on your website and Google profile, and in automatic replies", hours: 0.5 },
 ];
-const SOLID: BasisLine[] = [
+const QUICK: BasisLine[] = [
+  { work: "Accounts set up in the bakery's name, and the follow-up questions from discovery", hours: 0.5 },
   ...FORM,
-  { work: "Order emails and voicemail transcripts read into the list, each marked to check", hours: 3.5 },
-  { work: "Staff form for phone and Instagram orders, and a flag on possible duplicates", hours: 1 },
-  { work: "7pm summary for you and Sam, and Dee's bake sheet for 4am", hours: 1.5 },
-  { work: "Pickup tags from the label printer", hours: 1 },
-  { work: "Safety net: a nightly copy, an alert if orders stop arriving, and a sign-in for each person", hours: 1 },
-  { work: "Dry run on a past week of real orders, then a week side by side with the old way", hours: 2 },
-  { work: "Runbook, recorded walkthrough, and handover", hours: 1 },
+  { work: "Ten test orders with you and Sam, and a walkthrough", hours: 1 },
+  { work: "Go-live support: the first two weeks of fixes and questions", hours: 0.5 },
+];
+const SOLID: BasisLine[] = [
+  { work: "Accounts set up in the bakery's name, and the follow-up questions from discovery", hours: 1.5 },
+  ...FORM,
+  { work: "Order emails and voicemail transcripts read into the list, each marked to check", hours: 5 },
+  { work: "Staff form for phone and Instagram orders, and a flag on possible duplicates", hours: 2 },
+  { work: "7pm summary for you and Sam, and Dee's bake sheet for 4am", hours: 2 },
+  { work: "Pickup tags from the label printer", hours: 1.5 },
+  { work: "Safety net: a nightly copy, an alert if orders stop arriving, and a sign-in for each person", hours: 2.5 },
+  { work: "Dry run on a past week of real orders, then a week side by side with the old way", hours: 3 },
+  { work: "Runbook, recorded walkthrough, training for each person, and handover", hours: 2.5 },
+  { work: "Go-live support: the first two weeks of fixes and questions", hours: 2 },
 ];
 const sum = (b: BasisLine[]) => b.reduce((n, x) => n + x.hours, 0);
 
@@ -99,7 +108,7 @@ export const OPTIONS: BakeryOption[] = [
       "Not included:\n- Orders that still come by email, voicemail, or Instagram message, which are typed in as today\n- The 7pm summary and the kitchen's bake sheet",
     ].join("\n\n"),
     fields: {
-      ...estimate(3, 4, [...FORM, { work: "Ten test orders with you and Sam, and a walkthrough", hours: 1 }]),
+      ...estimate(4, 6, QUICK),
       timeline: "1 week", outsideCosts: "None. It runs in the Google account you already pay for",
       result: "Orders from the form appear in the list within a minute, with nothing retyped.",
       why: "Pick this to try the form before paying for more. Emails, voicemails, and Instagram messages would still be retyped, and they are most of tonight's hour.",
@@ -110,15 +119,15 @@ export const OPTIONS: BakeryOption[] = [
     title: "B. Solid setup",
     body: [
       "Every order in one list by 7pm, however it arrived, and the kitchen's bake sheet made from that list. Nobody retypes an order; a person checks each one that a customer didn't type in themselves.",
-      "Includes:\n- Everything in A\n- Order emails and voicemail transcripts read into the same list as they arrive. Each is marked to check, with a link to the original, so a person confirms it in seconds and nothing is trusted blindly\n- A 20-second staff form for phone calls and Instagram messages, and a flag when the same order seems to have arrived twice\n- A 7pm email to you and Sam with tomorrow's pickups and anything still to check, and a bake sheet for Dee with tomorrow's totals by item, ready before 4am\n- Pickup tags printed from the list\n- A safety net: a nightly copy of the list, an alert to you if no orders arrive during opening hours, and each person signing in as themselves in place of the shared password\n- A dry run on a past week of your real orders before anything goes live, then a week side by side with the old way\n- A runbook, a recorded walkthrough for new staff, and every account in the bakery's name",
+      "Includes:\n- Everything in A\n- Order emails and voicemail transcripts read into the same list as they arrive. Each is marked to check, with a link to the original, so a person confirms it in seconds and nothing is trusted blindly\n- A 20-second staff form for phone calls and Instagram messages, and a flag when the same order seems to have arrived twice\n- A 7pm email to you and Sam with tomorrow's pickups and anything still to check, and a bake sheet for Dee with tomorrow's totals by item, ready before 4am\n- Pickup tags printed from the list\n- A safety net: a nightly copy of the list, an alert to you if no orders arrive during opening hours, and each person signing in as themselves in place of the shared password\n- A dry run on a past week of your real orders before anything goes live, then a week side by side with the old way\n- A runbook, a recorded walkthrough for new staff, training for each person, and every account in the bakery's name\n- Two weeks of go-live support for fixes and questions",
       "Not included:\n- Taking payment online\n- Changes to your phone service or your website's design",
       "Depends on:\n- Your phone service emailing voicemail transcripts. Most do, and if yours doesn't, a free Google Voice number can\n- Instagram messages can't be read automatically. An instant reply sends the order form's link, and staff use the staff form for the rest",
     ].join("\n\n"),
     fields: {
-      ...estimate(12, 15, SOLID),
+      ...estimate(22, 28, SOLID),
       timeline: "4 weeks, the last one side by side", outsideCosts: "Nothing each month. It runs in the Google account you already pay for",
       result: "Every order is in one list by 7pm, with under 10 minutes of checking a night, and no order missed.",
-      why: "It ends the retyping without asking one customer to change how they order, and it's running before the holiday rush. The online order page in C can follow later, and nothing in B is redone.",
+      why: "It ends the nightly retyping without asking one customer to change how they order, and it's running before the holiday rush. The online order page in C can follow later, and nothing in B is redone.",
       costScore: 3, qualityScore: 4, effortScore: 4, recommended: true,
       purchases: [{ name: "Label printer for pickup bags", estimate: "$180-$220", buyer: "client", why: "Prints a pickup tag from each order in the list", example: "Brother QL-820NWB" }],
     },
@@ -132,11 +141,12 @@ export const OPTIONS: BakeryOption[] = [
       "Depends on:\n- Your menu with prices, two weeks before go-live\n- Customers choosing to order online; the email, voicemail, and Instagram paths from B stay open",
     ].join("\n\n"),
     fields: {
-      ...estimate(18, 23, [
+      ...estimate(32, 39, [
         { work: "Everything in B", hours: sum(SOLID) },
-        { work: "Online order page with your menu, pickup times, and holiday cutoffs", hours: 3 },
-        { work: "Payment when ordering, deposits on custom cakes, and pickup reminders", hours: 2 },
-        { work: "Paid orders into the same list, then test orders and a refund end to end", hours: 2 },
+        { work: "Online order page with your menu, pickup times, and holiday cutoffs", hours: 4 },
+        { work: "Payment when ordering, deposits on custom cakes, and pickup reminders", hours: 3 },
+        { work: "Paid orders into the same list, then test orders and a refund end to end", hours: 3 },
+        { work: "Go-live support for the online order page", hours: 0.5 },
       ]),
       timeline: "7 weeks", outsideCosts: "About $20 a month for the service that links Square to your order list, plus Square's card fees on each online order",
       result: "Most new orders arrive paid, with a pickup time, and never pass through the inbox.",
@@ -164,16 +174,18 @@ export const MILESTONE = "Side-by-side week starts";
 
 /** Every hour Pradeep logs, in order. `when` is days before the handover, for a believable date */
 export const HOURS: { work: string; hours: number; when: number; phase: "plan" | "build" | "test" | "handover" }[] = [
-  { work: "Order form with pickup rules and the customer's confirmation", hours: 1.5, when: 24, phase: "plan" },
+  { work: "Accounts set up in the bakery's name; follow-up questions from discovery", hours: 1.5, when: 25, phase: "plan" },
+  { work: "Order form with pickup rules and the customer's confirmation", hours: 2, when: 24, phase: "plan" },
   { work: "Order list with statuses; form link and automatic replies", hours: 1, when: 23, phase: "plan" },
-  { work: "Order emails read into the list, each marked to check", hours: 2.5, when: 20, phase: "build" },
-  { work: "Voicemail transcripts read into the list", hours: 1, when: 19, phase: "build" },
-  { work: "Staff form for phone and Instagram orders; possible-duplicate flag", hours: 1, when: 18, phase: "build" },
-  { work: "7pm summary for Maria and Sam; Dee's bake sheet", hours: 1.5, when: 16, phase: "build" },
-  { work: "Pickup tags on the label printer", hours: 1, when: 15, phase: "build" },
-  { work: "Nightly copy, the no-orders alert, and a sign-in for each person", hours: 1, when: 14, phase: "build" },
-  { work: `Dry run on ${DRY_RUN.orders} past orders, fixes for two-order emails and photo orders, and two check-ins in the side-by-side week`, hours: 2.25, when: 8, phase: "test" },
-  { work: "Runbook, recorded walkthrough with Sam and Dee, and handover", hours: 1, when: 1, phase: "handover" },
+  { work: "Order emails read into the list, each marked to check", hours: 3, when: 20, phase: "build" },
+  { work: "Voicemail transcripts read into the list", hours: 1.5, when: 19, phase: "build" },
+  { work: "Staff form for phone and Instagram orders; possible-duplicate flag", hours: 2, when: 18, phase: "build" },
+  { work: "7pm summary for Maria and Sam; Dee's bake sheet", hours: 2, when: 16, phase: "build" },
+  { work: "Pickup tags on the label printer", hours: 1.5, when: 15, phase: "build" },
+  { work: "Nightly copy, the no-orders alert, and a sign-in for each person", hours: 2, when: 14, phase: "build" },
+  { work: `Dry run on ${DRY_RUN.orders} past orders, fixes for two-order emails and photo orders, and two check-ins in the side-by-side week`, hours: 3.5, when: 8, phase: "test" },
+  { work: "Go-live support: fixes and questions in the first two weeks", hours: 2, when: 4, phase: "test" },
+  { work: "Runbook, recorded walkthrough, training Maria, Sam, and Dee, and handover", hours: 2.5, when: 1, phase: "handover" },
 ];
 
 /** The updates Pradeep posts: the plan, and the dry run with what it found */
@@ -214,7 +226,7 @@ export const MONEY = {
   depositCents, earnedCents, finalCents: earnedCents - depositCents,
 } as const;
 
-/** Each option's price line and hours, for pages that list the three ("$1,200 to $1,500 estimate") */
+/** Each option's price line and hours, for pages that list the three ("$2,200 to $2,800 estimate") */
 export const SUMMARY = OPTIONS.map((o) => {
   const p = priceOf(o.fields) as Extract<Price, { kind: "estimate" }>;
   return { title: o.title.replace(/^[A-C]\. /, ""), price: priceLine(p), hours: hoursRange(p), expected: sum(o.fields.basis) };
