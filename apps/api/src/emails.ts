@@ -107,13 +107,13 @@ export function factorRemovedEmail(opts: { url: string; what: string; how: "remo
 
 
 /** A notification by email: who did what, where, with a link to look */
-export function noticeEmail(opts: { orgName: string; by: string; summary: string; url: string; important?: boolean; at?: Date }) {
+export function noticeEmail(opts: { orgName: string; by: string; summary: string; url: string; button?: string; important?: boolean; at?: Date }) {
   const at = opts.at ?? new Date();
   const subject = `${opts.orgName}: ${opts.summary}`.slice(0, 140);
   const text = [
     `${opts.by} in ${opts.orgName}: ${opts.summary}`,
     "",
-    `Open 1NEON: ${opts.url}`,
+    `${opts.button ?? "Open 1NEON"}: ${opts.url}`,
     "",
     "Choose which of these reach you in your 1NEON profile, under Notifications.",
     sentAt(at),
@@ -123,7 +123,7 @@ export function noticeEmail(opts: { orgName: string; by: string; summary: string
     preheader: `${opts.by}: ${opts.summary}`,
     heading: opts.summary,
     body: `<p style="margin:0">${esc(opts.by)} in <b>${esc(opts.orgName)}</b>.</p>`,
-    button: { label: "Open 1NEON", url: opts.url },
+    button: { label: opts.button ?? "Open 1NEON", url: opts.url },
     note: "Choose which of these reach you in your 1NEON profile, under Notifications.",
     at,
   });

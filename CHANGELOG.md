@@ -26,6 +26,7 @@
 - The full story is 14 chapters and says about 13 minutes.
 - **Next step** tells a client who has the work: "Build is with neon1. It's done when: all milestone tasks done. Then neon1 moves the project to Verify. Nothing needs you right now." It used to tell the client to move the project themselves. Moving a stage from Next step is offered to neon1.
 - "Handoff" reads "handover" everywhere, and a finished step no longer offers its own signature beside the one that accepts them all.
+- An email about an invoice or a payment opens that invoice, with **See the invoice**, where it used to open Home.
 - Notices about payments name the payment page as their source, where they used to say "Someone".
 - Progress counts skip records: hours, invoices, payments, decisions, and updates are never counted as work to finish.
 
