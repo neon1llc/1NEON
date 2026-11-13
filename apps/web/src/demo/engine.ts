@@ -5,6 +5,7 @@
 
 import { createApp } from "../../../api/src/app.ts";
 import { MemoryDirectory, MemoryMailer, MemoryStorage, MemoryTexter } from "../../../api/src/local.ts";
+import { DemoPayments } from "../../../api/src/payments.ts";
 import { seed } from "../../../api/src/seed.ts";
 import { MemoryTable } from "../../../api/src/store/memory.ts";
 import { Repo } from "../../../api/src/store/repo.ts";
@@ -170,6 +171,8 @@ const ready = (async () => {
     mailer,
     texter,
     storage,
+    // Pay opens a stand-in for the payment page, so a visitor sees a payment start, clear, or fail
+    payments: new DemoPayments(),
   });
 })();
 

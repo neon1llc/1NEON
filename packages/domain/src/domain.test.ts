@@ -197,7 +197,7 @@ describe("notification groups", () => {
       "member.invited": "access", "member.joined": "access", "member.updated": "access", "member.signedin": "signins",
       "org.created": "updates", "org.stages": "workflow", "project.created": "workflow", "project.moved": "workflow",
       "project.trashed": "workflow", "project.updated": "updates",
-      "agreement.signed": "billing", "invoice.issued": "billing", "invoice.voided": "billing", "payment.recorded": "billing", "payment.failed": "billing",
+      "agreement.signed": "billing", "invoice.issued": "billing", "invoice.voided": "billing", "payment.started": "billing", "payment.received": "billing", "payment.failed": "billing",
     };
     for (const kind of Object.keys(KIND_LAYER)) {
       for (const verb of ["created", "updated", "deleted"]) expected[`${kind}.${verb}`] = kind === "option" ? "decisions" : kind === "payment" ? "billing" : "updates";

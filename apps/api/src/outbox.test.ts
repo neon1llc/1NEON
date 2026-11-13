@@ -170,6 +170,20 @@ describe("event notices", () => {
     expect(mailer.sent.length - before).toBe(sent);
     expect(new Set(mailer.sent.slice(before).map((m) => m.to)).size).toBe(sent);
   });
+
+  it("opens the invoice itself from a billing notice, and the workspace from any other", async () => {
+    const app = appWith("worker");
+    const { p } = await flow();
+    const made = await call(app, "POST", `/t/${p.tenantId}/projects/${p.id}/invoices`, { type: "progress", lines: [{ text: "Week one", unitCents: 50_000 }] }, OP);
+    await call(app, "POST", `/t/${p.tenantId}/projects/${p.id}/invoices/${made.json.id}/issue`, { version: made.json.version }, OP);
+    await call(app, "POST", `/t/${p.tenantId}/projects/${p.id}/items`, { kind: "task", title: "Something else" }, OP);
+    const before = mailer.sent.length;
+    await pass();
+    const texts = mailer.sent.slice(before).filter((m) => m.to === s.raj.email).map((m) => m.text);
+    const billing = texts.find((t) => t.includes("issued INV-"))!;
+    expect(billing).toContain(`See the invoice: https://example.invalid/1NEON/o/${s.acme.slug}/projects/FLOW-1/invoices/${made.json.id}`);
+    for (const t of texts.filter((x) => x !== billing)) expect(t).toContain(`Open 1NEON: https://example.invalid/1NEON/o/${s.acme.slug}/workspace`);
+  });
 });
 
 

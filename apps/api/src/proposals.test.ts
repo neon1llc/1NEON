@@ -77,7 +77,7 @@ describe("proposal revisions", () => {
   it("names the option's ID on the decision, and waits for a new revision when the option changed after issue", async () => {
     const { opt, path } = await flow();
     const a = opt("A");
-    const edited = await call(OP, "PATCH", `${path}/items/${a.id}`, { version: a.version, fields: { cost: "$950 fixed" } });
+    const edited = await call(OP, "PATCH", `${path}/items/${a.id}`, { version: a.version, fields: { pricing: "fixed", cost: "$950 fixed" } });
     expect((await call(s.raj.email, "POST", `${path}/items/${a.id}/approve`, { version: edited.json.version, signature: SIGN })).json.error).toBe("changed_since_issue");
     await call(OP, "POST", `${path}/proposals`, { note: "A's price changed" });
     const ok = await call(s.raj.email, "POST", `${path}/items/${a.id}/approve`, { version: edited.json.version, signature: SIGN });

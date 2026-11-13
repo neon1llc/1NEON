@@ -100,7 +100,7 @@ export function Bell({ tid, slug }: { tid: string; slug: string }) {
                       <span className={`dot${isNew ? " on" : ""}`} aria-hidden="true" />
                       <span className="what">
                         <span className="sum">{isNew && <span className="sr-only">New: </span>}{e.summary}</span>
-                        <span className="muted small">{names.get(e.actorId) ?? "Someone"} · {ago(e.at)}{e.level === "critical" && <span className="tag imp">important</span>}</span>
+                        <span className="muted small">{e.actorId === "stripe" ? "The payment page" : names.get(e.actorId) ?? "Someone"} · {ago(e.at)}{e.level === "critical" && <span className="tag imp">important</span>}</span>
                       </span>
                     </>
                   );

@@ -2,6 +2,41 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.7.0 - 2026-11-13
+
+### Added
+- An option's price is now one of two kinds, and says which. A **fixed** price is the whole price for the work described. An **estimate** is a range of hours at an hourly rate: you pay for the hours worked, and the total never passes the high end unless you approve a change first.
+- **How this adds up**, under every price: the work behind it line by line with the hours each piece should take, the expected total, and **When you pay** (the deposit at approval and the rest at handover). The approval restates the price, what kind it is, and when you pay before you sign. The proposal and its Word copy print the same breakdown.
+- Each option says why neon1 recommends it, or when it's the right one to pick.
+- **Hours**, under Execute: every entry neon1 logs, with its date, what the time went to, and how long it took, beside a bar showing the hours against the estimate and what they come to so far. Hours past the high end are listed and not billed. Only neon1 adds entries, and an entry stays as logged once an invoice bills it.
+- An invoice for hours lists each entry it covers, so its total can be checked against the work, and the line that subtracts earlier invoices names them by number.
+- Two walkthrough chapters, **Pay the deposit** and **Pay the final invoice**, so the full story shows both invoices and how each was worked out.
+- A bank payment (ACH) shows on its invoice from the day it's started: "bank payment clearing", with the amount and the date. While it clears, **Pay** is gone and the invoice isn't counted as overdue, so nobody pays twice. If the bank refuses it, the invoice says so, is open again with **Pay again**, and both sides are told the same day. Before this, an invoice looked unpaid for the days a transfer took, and a refused one left no trace the client could see.
+- When an estimate's hours come to less than the deposit, accepting the handover drafts a credit for the difference against the deposit invoice, so the refund the service agreement promises is on neon1's list to issue and not left to memory.
+- **Accept the handover**: once every handover step is done, the decision maker accepts all of them with one signature. Each step is still signed for, and an accepted step stays done.
+- **Needs you**, on Home, now lists invoices to pay (with the due date, overdue first), drafts for neon1 to issue, and a handover ready to accept.
+- In the interactive demo and the walkthroughs, **Pay** opens a stand-in for the payment page that says no money moves, and lets you pay by bank or card to see each outcome. In the demo you can also play the bank and clear or refuse a transfer.
+- FAQ answers: whether a price is fixed or an estimate, where the hours worked are listed, what happens if the work needs more or fewer hours than estimated, what happens if a bank payment doesn't go through, whether you get a receipt, whether paying by card or paying late costs more, and what to do if an invoice looks wrong.
+
+### Changed
+- The service agreement is edition 2.0. Its Paying section says how fixed prices and estimates are billed, that a deposit counts toward the final invoice, and that any difference is refunded if the work comes to less than a deposit paid. An organization that signed edition 1.0 signs 2.0 before its next approval, and its earlier signature keeps the text it was given.
+- Deposits: half of a fixed price, or half of an estimate's low end. The final invoice on an estimate is the hours worked, less earlier invoices.
+- Maple Street Bakery, the fictional client in every walkthrough and on the sample page, is rebuilt as one consistent example: a team of eight taking orders by email, voicemail, and Instagram; limits found before any option was written; three options priced as estimates with the hours behind each; a dry run on a past week of real orders; 21 hours logged against an estimate of 20 to 24; and a deposit and a final invoice that add up. Every figure is illustrative.
+- The interactive demo offers an estimate beside a fixed price to choose from, and its project in progress shows hours, a paid deposit, and an open invoice worked out from those hours.
+- The full story is 14 chapters and says about 13 minutes.
+- **Next step** tells a client who has the work: "Build is with neon1. It's done when: all milestone tasks done. Then neon1 moves the project to Verify. Nothing needs you right now." It used to tell the client to move the project themselves. Moving a stage from Next step is offered to neon1.
+- "Handoff" reads "handover" everywhere, and a finished step no longer offers its own signature beside the one that accepts them all.
+- An email about an invoice or a payment opens that invoice, with **See the invoice**, where it used to open Home.
+- Notices about payments name the payment page as their source, where they used to say "Someone".
+- Progress counts skip records: hours, invoices, payments, decisions, and updates are never counted as work to finish.
+- The interactive demo's history reads in order: each project was created before the stages it has passed, its proposal was issued the day it reached Decide, and each project's health says who assessed it and when.
+- A walkthrough of one chapter sets the story up a second time by itself if the first setup stumbles, and only then shows a card.
+- The demo bar's **Switch person** and **Start over** are as tall as the bar, so they're easy to tap on a phone.
+
+### Fixed
+- A project tab tapped just before another link (two quick taps on a busy phone) could leave the tab's page on screen under the link's address. The page shown now always matches the address, and a tab still slides to the next one.
+- A walkthrough could stop partway in Safari while it set the story up out of sight, for the same reason. Setup now moves between pages without sliding, and a step that can't find what it needs says what the page showed instead.
+
 ## v0.6.0 - 2026-11-13
 
 ### Changed

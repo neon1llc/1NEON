@@ -1,6 +1,6 @@
 // apps/api/src/payments.ts - Taking card and bank (ACH) payments through Stripe Checkout, and keeping a
 // locked copy of each billing record. Both sit behind small interfaces so tests, local runs, and the
-// browser demo work without Stripe or AWS. Only Web APIs (fetch, crypto.subtle) are used here; the S3
+// browser demo (which has its own stand-in, DemoPayments) work without Stripe or AWS. Only Web APIs (fetch, crypto.subtle) are used here; the S3
 // copy (S3Records) lives in services.ts with the other AWS clients.
 
 
@@ -24,7 +24,8 @@ export interface CheckoutRequest {
 export interface PaymentEvent {
   id: string;
   type: string;
-  session?: { id: string; paymentStatus: string; amountTotal: number; paymentIntent?: string; method?: string; metadata: Record<string, string> };
+  // `method` is set when the session offered one way to pay; `methods` lists every way it offered
+  session?: { id: string; paymentStatus: string; amountTotal: number; paymentIntent?: string; method?: string; methods?: string[]; metadata: Record<string, string> };
 }
 
 /** The payment provider */
@@ -79,6 +80,7 @@ export function readEvent(body: string): PaymentEvent {
       amountTotal: Number(o!.amount_total ?? 0),
       paymentIntent: typeof o!.payment_intent === "string" ? o!.payment_intent : undefined,
       method: Array.isArray(o!.payment_method_types) && o!.payment_method_types.length === 1 ? String(o!.payment_method_types[0]) : undefined,
+      methods: Array.isArray(o!.payment_method_types) ? o!.payment_method_types.map(String) : undefined,
       metadata: (o!.metadata ?? {}) as Record<string, string>,
     } : undefined,
   };
@@ -157,6 +159,27 @@ export class MemoryPayments implements Payments {
     const body = JSON.stringify(event);
     const t = Math.floor(at / 1000);
     return { body, header: `t=${t},v1=${await hmacHex(this.webhookSecret, `${t}.${body}`)}` };
+  }
+}
+
+
+/**
+ * The browser demo and the walkthroughs: no money moves and nothing leaves the browser. Checkout
+ * hands back a "demo:" address, which the web app answers with its own stand-in for the payment
+ * page; that page then reports what a real one would (paid by card, a bank transfer started,
+ * cleared, or refused) as an event marked "demo" in place of Stripe's signature
+ */
+export class DemoPayments implements Payments {
+  private n = 0;
+
+  async checkout(r: CheckoutRequest) {
+    // Unique across reloads, since the demo's data outlives the page
+    const id = `cs_demo_${Date.now().toString(36)}${++this.n}`;
+    return { id, url: `demo:checkout?${new URLSearchParams({ session: id, amount: String(r.amountCents), invoice: r.invoiceNumber, ...r.metadata })}` };
+  }
+
+  async verify(rawBody: string, header: string | undefined) {
+    return header === "demo" ? readEvent(rawBody) : undefined;
   }
 }
 

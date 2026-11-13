@@ -4,7 +4,7 @@
 
 
 /** The edition clients sign now; a new edition is signed again before the next approval */
-export const AGREEMENT_EDITION = "1.0";
+export const AGREEMENT_EDITION = "2.0";
 
 
 /** The agreement's text (Markdown). Changing a word here means a new edition above */
@@ -24,7 +24,7 @@ Prices for equipment, software, and services from other vendors are estimates. Y
 
 ## Paying
 
-I send invoices through 1NEON. Each one is due within 15 days unless it says otherwise. A fixed-price option may ask for a deposit when it is approved, as the proposal states. You can pay by bank transfer (ACH), card, check, Zelle, or wire. If an invoice is more than 30 days overdue, I may pause work until it is paid, after telling you.
+I send invoices through 1NEON. Each one is due within 15 days unless it says otherwise. An option's price is either fixed or an estimate, and the proposal says which. A fixed price is the whole price for the work described. An estimate is billed for the hours I work, at the rate it states; each hour is listed in 1NEON, and the total never passes the estimate's high end unless you approve a change first. An option may ask for a deposit when it is approved, as the proposal states. A deposit counts toward the final invoice; if the work done comes to less than a deposit you paid, I refund the difference. You can pay by bank transfer (ACH), card, check, Zelle, or wire. If an invoice is more than 30 days overdue, I may pause work until it is paid, after telling you.
 
 ## What you provide
 

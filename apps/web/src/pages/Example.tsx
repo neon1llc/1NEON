@@ -4,45 +4,57 @@
 
 import { LayerBadge, LAYERS, layerHint, layerName } from "../components/ui.tsx";
 import type { Layer } from "@1neon/domain";
+import { CHOSEN, CONSTRAINTS, DRY_RUN, FRIDAY, HOURS, MEASURES, MONEY, PRINTER, SUMMARY, TASKS } from "../lib/bakery.ts";
 
 
-// The bakery's story, one entry per layer: each card is a title, its lines, and an optional list
+// The bakery's story, one entry per layer: each card is a title, its lines, and an optional list.
+// The facts and figures are the walkthrough's own (lib/bakery.ts), so the two never disagree
 type Card = { title: string; lines: (string | [string, string])[]; list?: { text: string; state?: "done" | "now" | "picked" }[] };
+const [quick, solid, fuller] = SUMMARY;
 const STORY: Record<Layer, { lead: string; cards: Card[] }> = {
   needs: {
-    lead: "What the client wants, the ways to get there, and the choice.",
+    lead: "What the client wants, what neon1 learned by listening, the ways to get there, and the choice.",
     cards: [
-      { title: "Request", lines: [["Currently", "every night we copy about 40 orders from email and voicemail notes into a spreadsheet. It takes an hour, and a few orders get missed each week."], ["Goal", "orders land in one list on their own, and nobody retypes them."], ["Due", "before the holiday rush."]] },
-      { title: "Options", lines: ["Proposal 0039-r1 offers a few choices, each with what's in and out, the hours it takes, the price, anything to buy, and the result you can check. Each option has its own ID. The figures are illustrative."], list: [
-        { text: "Quick fix: an order form that writes straight into the spreadsheet, about 3 hours" },
-        { text: "Solid setup: the form, plus order emails and voicemails added to the same list, with a 7pm summary, about 10 hours", state: "picked" },
-        { text: "Fuller build: all of that, plus an online order page with pickup times, payment, and reminders, about 17 hours" },
+      { title: "Request", lines: [["Currently", `orders come in by email, voicemail, and Instagram. The owner and the counter lead retype about 40 a night into a spreadsheet, and the head baker tallies the bake from it by hand at 4am. It takes an hour, and about ${MEASURES[1].baseline} orders a week go wrong.`], ["Goal", "every order lands in one list on its own, the kitchen gets its bake sheet, and nobody retypes anything."], ["Due", "before the holiday rush."]] },
+      { title: "What neon1 learned", lines: [`After a twenty-minute call and a week of real orders (${DRY_RUN.orders} of them), written into the project where the owner can correct it.`], list: [
+        { text: `Where orders come from: on one Friday, ${FRIDAY.emails} emails, ${FRIDAY.voicemails} voicemails, and ${FRIDAY.instagram} Instagram messages` },
+        { text: "What can't change: customers keep ordering the way they do now, and the staff don't learn a new app" },
+        ...CONSTRAINTS.slice(0, 2).map(([title]) => ({ text: `A limit, said before any option was written: ${title.charAt(0).toLowerCase()}${title.slice(1)}` })),
       ] },
-      { title: "Decision", lines: ["The owner read the proposal, then approved 0039-r1-B, Solid setup, in the portal on Oct 3, with a typed signature. The approval restated the terms first; the decision, who made it, and those exact terms stay with the project."] },
+      { title: "Options", lines: [`Proposal 0039-r1 offers three choices. Each says what's in and out, the hours behind its price task by task, anything to buy, and the result to check. Each price here is an estimate at ${MONEY.rate} an hour: billed for the hours worked, and never above its high end unless the client approves a change first. The figures are illustrative.`], list: [
+        { text: `${quick!.title}: an order form that feeds one order list. ${quick!.hours}, ${quick!.price}` },
+        { text: `${solid!.title}: every order in one list however it arrived, each marked to check, with a 7pm summary, the kitchen's bake sheet, and a safety net. ${solid!.hours}, ${solid!.price}`, state: "picked" },
+        { text: `${fuller!.title}: all of that, plus an online order page with pickup times, payment, and reminders. ${fuller!.hours}, ${fuller!.price}` },
+      ] },
+      { title: "Decision", lines: [`The owner read the proposal, signed neon1's service agreement once for the bakery, then approved 0039-r1-B, ${solid!.title}, on Oct 3 with a typed signature. The approval restated the terms first, including when she pays: ${MONEY.deposit} at approval (half of the estimate's low end) and the rest at handover. The decision, who made it, and those exact terms stay with the project.`, `Why this one: ${String(CHOSEN.fields.why)}`] },
     ],
   },
   execution: {
-    lead: "The work, as it happens, with updates you can read in a minute.",
+    lead: "The work, as it happens, with updates you can read in a minute and every hour listed.",
     cards: [
       { title: "Work", lines: [], list: [
-        { text: "Order form connected to the spreadsheet", state: "done" },
-        { text: "Order emails and voicemails added to the list", state: "done" },
-        { text: "Daily summary at 7pm", state: "done" },
+        ...[TASKS.form, TASKS.reading, TASKS.summary, TASKS.safety, TASKS.dryRun].map((text) => ({ text, state: "done" as const })),
         { text: "A week running side by side with the old way", state: "now" },
       ] },
+      { title: "Hours", lines: [`${MONEY.logged} logged against an estimate of ${MONEY.hours}, each with its date and what it was for. The client sees the list grow as the work is done.`], list: HOURS.slice(0, 3).map((h) => ({ text: `${h.work}: ${h.hours} ${h.hours === 1 ? "hour" : "hours"}`, state: "done" as const })).concat([{ text: `…and ${HOURS.length - 3} more entries, ${MONEY.logged} in all`, state: "done" as const }]) },
+      { title: "Update · Oct 21", lines: [["Health", `on track. I replayed last week's ${DRY_RUN.orders} orders through the new list, and ${DRY_RUN.right} landed right. ${DRY_RUN.fixed} needed a fix: emails with two orders in one message, and orders sent as a photo. Both cases are handled now. No change to the estimate.`]] },
       { title: "Purchases", lines: ["From the approved option, bought by the bakery in its own name."], list: [
-        { text: "Label printer for pickup bags: estimate $90-$120, paid $104.99, receipt attached", state: "done" },
+        { text: `${PRINTER.name}: estimate $180-$220, paid ${PRINTER.paid}, receipt attached`, state: "done" },
       ] },
-      { title: "Update · Oct 17", lines: [["Health", "on track. Order emails and voicemails now arrive in the list within a minute. One order with a photo attachment needed a manual fix; that case is handled now. Waiting on you: confirm the summary should go to both owners."]] },
+      { title: "Invoices", lines: ["Each invoice says what it's for and how it was worked out, and is paid by bank transfer or card from the project."], list: [
+        { text: `INV-0039-01, deposit: ${MONEY.deposit}, half of the estimate's low end (${MONEY.low}). Paid`, state: "done" },
+        { text: `INV-0039-02, final: ${MONEY.logged} at ${MONEY.rate} is ${MONEY.earned}, less the deposit, ${MONEY.final}. It lists every hour it bills. Paid`, state: "done" },
+        { text: `Total for the work: ${MONEY.earned}, inside the ${MONEY.range} approved` },
+      ] },
     ],
   },
   observation: {
     lead: "The same measures, before and after, so the result is a number.",
     cards: [
       { title: "Measures", lines: ["Measured the same way before and after, over two weeks each. Illustrative numbers."], list: [
-        { text: "Nightly retyping: 60 min → 5 min", state: "done" },
-        { text: "Missed orders a week: 3 → 0", state: "done" },
-        { text: "Target: under 10 minutes a night, no missed orders" },
+        { text: `Nightly retyping: ${MEASURES[0].baseline} min → 5 min`, state: "done" },
+        { text: `Orders missed or wrong each week: ${MEASURES[1].baseline} → ${MEASURES[1].target}`, state: "done" },
+        { text: `Target: under ${MEASURES[0].target} minutes a night, and no order missed` },
       ] },
     ],
   },
@@ -50,9 +62,10 @@ const STORY: Record<Layer, { lead: string; cards: Card[] }> = {
     lead: "Making it the normal way of working, owned by the client.",
     cards: [
       { title: "Handover", lines: [], list: [
-        { text: "A one-page runbook: where orders go, and what to do if one looks wrong", state: "done" },
-        { text: "A 30-minute walkthrough with both owners, recorded for new staff", state: "done" },
-        { text: "Every account and bill in the bakery's own name, checked and accepted by the owner", state: "done" },
+        { text: "A one-page runbook: where orders go, what to do each evening, and what to do if something looks wrong", state: "done" },
+        { text: "A walkthrough with the counter lead and the head baker, recorded for new staff", state: "done" },
+        { text: "Every account in the bakery's own name, a sign-in for each person in place of the shared password, and neon1's access removed", state: "done" },
+        { text: "The last step checked and accepted by the owner, with a signature", state: "done" },
       ] },
       { title: "Care", lines: ["Optional and monthly: a check that the numbers still hold, and small changes as the bakery grows. The bakery can also run it without neon1."] },
     ],
@@ -76,7 +89,7 @@ export function Example() {
       <main className="content example-body" id="main">
         <p className="eyebrow">Sample project · every name, number, and file is made up</p>
         <h1 className="page-title">Maple Street Bakery: orders without retyping</h1>
-        <p className="lead">A two-person bakery takes orders by email and phone, then retypes them into a spreadsheet each night. Follow it through the four layers.</p>
+        <p className="lead">A neighborhood bakery with a team of eight takes orders by email, voicemail, and Instagram, then retypes them into a spreadsheet each night. Follow it through the four layers.</p>
         {/* Contents: jump to a layer */}
         <nav className="tabs" aria-label="Layers">
           {LAYERS.map((l) => <a key={l} href={`#${l}`}><LayerBadge layer={l} /><span className="tab-name">{layerName(l)}<small className="sub"><span className="sr">, </span>{layerHint(l)}</small></span></a>)}

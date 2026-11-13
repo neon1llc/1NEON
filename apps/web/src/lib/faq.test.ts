@@ -5,7 +5,7 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { aliasesOf, matches, parse, slug } from "./faq.ts";
+import { ALIAS_IDS, aliasesOf, matches, parse, slug } from "./faq.ts";
 
 
 const FAQ = parse(readFileSync(new URL("../help/faqs.md", import.meta.url), "utf8"));
@@ -26,7 +26,7 @@ describe("faq anchors", () => {
 
   it("only keeps aliases for questions that exist", () => {
     const ids = new Set(all.map((i) => i.id));
-    for (const id of ["i-lost-my-phone-or-my-authenticator-app", "where-are-invoices-and-payments", "who-buys-equipment-or-software-for-a-project", "how-do-i-suggest-changes-to-a-proposal", "can-we-get-a-copy-of-our-data", "something-urgent-is-wrong-who-do-i-tell"]) {
+    for (const id of ALIAS_IDS) {
       expect(ids.has(id)).toBe(true);
       expect(aliasesOf(id).length).toBeGreaterThan(0);
     }

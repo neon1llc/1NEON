@@ -53,6 +53,11 @@ const ALIASES: Record<string, string[]> = {
   "what-s-a-passkey": ["2fa", "mfa", "fingerprint", "face id", "touch id", "webauthn"],
   "can-i-use-an-authenticator-app": ["2fa", "mfa", "totp", "google authenticator", "authy"],
   "where-are-invoices-and-payments": ["invoice", "invoices", "billing", "bill", "payment", "pay", "receipt"],
+  "what-if-my-bank-payment-doesn-t-go-through": ["failed payment", "declined", "bounced", "returned", "insufficient funds", "nsf", "ach failed"],
+  "is-there-a-fee-for-paying-by-card-or-for-paying-late": ["surcharge", "late fee", "interest", "penalty", "convenience fee", "overdue"],
+  "what-if-i-think-an-invoice-is-wrong": ["dispute", "mistake", "error", "wrong amount", "overcharged", "question a charge"],
+  "what-if-the-work-needs-more-hours-than-the-estimate": ["refund", "over budget", "overrun", "overage", "money back", "cap", "ceiling"],
+  "is-a-price-fixed-or-an-estimate": ["quote", "hourly", "rate", "range", "price", "cost"],
   "something-urgent-is-wrong-who-do-i-tell": ["support", "urgent", "emergency", "outage", "down", "broken", "help", "incident"],
   "who-can-i-contact": ["support", "help", "email", "contact"],
   "can-we-get-a-copy-of-our-data": ["export", "download", "backup", "copy of data", "offboarding"],
@@ -64,6 +69,9 @@ const ALIASES: Record<string, string[]> = {
   "what-if-we-need-something-new-after-approving": ["change request", "change order", "scope", "extra work", "add work"],
   "what-is-a-proposal-revision": ["quote", "estimate", "expired", "expiry", "price check", "refresh"],
 };
+
+/** Every question id that has aliases (for the test that each still names a real question) */
+export const ALIAS_IDS = Object.keys(ALIASES);
 
 /** The aliases for one question (exported for the tests) */
 export const aliasesOf = (id: string) => ALIASES[id] ?? [];

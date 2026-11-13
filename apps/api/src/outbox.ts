@@ -254,7 +254,13 @@ async function eventTargets(d: OutboxDeps, e: AuditEvent, clock: Clock): Promise
   const { repo, cfg } = d;
   const io = <T>(p: Promise<T>) => beforeDeadline(p, clock.deadline);
   const [members, tenant, actor] = await io(Promise.all([repo.listMembers(e.tenantId), repo.getTenant(e.tenantId), repo.getUser(e.actorId)]));
-  const by = actor?.name || actor?.email || "Someone";
+  // Stripe's own events (a payment started, received, or failed) have no person behind them
+  const by = e.actorId === "stripe" ? "The payment page (Stripe)" : actor?.name || actor?.email || "Someone";
+  // A notice about an invoice or a payment opens that invoice, so its lines and Pay are one tap away.
+  // Billing summaries begin with the project's key ("FLOW-1: ..."), and their target is the invoice
+  const home = `${cfg.publicUrl}/1NEON/o/${tenant?.slug ?? ""}`;
+  const key = /^([A-Z][A-Z0-9]*-\d+): /.exec(e.summary)?.[1];
+  const invoiceUrl = key && (e.action.startsWith("invoice.") || e.action.startsWith("payment.")) ? `${home}/projects/${key}/invoices/${e.target}` : undefined;
   const targets: Target[] = [];
   for (const m of members) {
     if (m.status !== "joined" || m.userId === e.actorId) continue;
@@ -263,7 +269,7 @@ async function eventTargets(d: OutboxDeps, e: AuditEvent, clock: Clock): Promise
     // neon1's working drafts reach neon1 only
     if (neon1Only(e.action) && !cfg.operatorEmails.includes(u.email)) continue;
     if (wants(u.notify, e.action, "email")) {
-      const mail = noticeEmail({ orgName: tenant?.name ?? "1NEON", by, summary: e.summary, url: `${cfg.publicUrl}/1NEON/o/${tenant?.slug ?? ""}/workspace`, important: groupOf(e.action).level === "critical" });
+      const mail = noticeEmail({ orgName: tenant?.name ?? "1NEON", by, summary: e.summary, url: invoiceUrl ?? `${home}/workspace`, button: invoiceUrl ? "See the invoice" : undefined, important: groupOf(e.action).level === "critical" });
       targets.push({ key: u.id, channel: "email", send: (signal) => d.mailer.send(u.email, mail.subject, mail.text, mail.html, undefined, signal) });
     }
     // Texts only to a verified number the person still has, within the budgets, with no project detail

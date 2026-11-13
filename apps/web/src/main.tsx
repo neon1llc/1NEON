@@ -15,7 +15,7 @@ import { Legal } from "./pages/Legal.tsx";
 import { NotFound } from "./pages/NotFound.tsx";
 import { BASE_PATH, DEMO, devUser, LIVE } from "./lib/api.ts";
 import { applyHead, headFor } from "./lib/head.ts";
-import { quietSkippedTransitions } from "./lib/motion.ts";
+import { keepPageWithAddress, quietSkippedTransitions } from "./lib/motion.ts";
 import { setCache, setNavigate } from "./lib/nav.ts";
 import { offline } from "./lib/reads.ts";
 import { Example } from "./pages/Example.tsx";
@@ -118,6 +118,16 @@ router.subscribe(head);
 
 // Code outside React (the live playback) navigates through the same router
 setNavigate((to) => void router.navigate(to));
+// A transition's page that lands after a newer navigation is put right (lib/motion.ts)
+keepPageWithAddress(
+  () => ({ key: router.state.location.key, idle: router.state.navigation.state === "idle" }),
+  () => {
+    // The router's place carries the base path, and going somewhere adds it, so it comes off first
+    const at = router.state.location;
+    const pathname = at.pathname.startsWith(BASE_PATH) ? at.pathname.slice(BASE_PATH.length) || "/" : at.pathname;
+    void router.navigate({ pathname, search: at.search, hash: at.hash }, { replace: true, state: at.state });
+  },
+);
 setCache({ invalidateQueries: () => queries.invalidateQueries(), clear: () => queries.clear() });
 // A write that got no answer may still have happened: re-read everything on screen (safe GETs) so the
 // page shows the real outcome. The write itself is never sent again on its own

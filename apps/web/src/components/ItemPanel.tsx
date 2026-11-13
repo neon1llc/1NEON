@@ -3,7 +3,7 @@
 // and Linear use, so a list stays short and every detail is one tap away.
 
 
-import { MetricFields, OptionFields, PurchaseFields, PurchaseLine, STATUSES, WORK_STATUSES, type AuditEvent, type Item, type ItemKind } from "@1neon/domain";
+import { BasisLine, MetricFields, OptionFields, PurchaseFields, PurchaseLine, STATUSES, WORK_STATUSES, hoursRange, hoursText, priceLine, priceOf, type AuditEvent, type Item, type ItemKind, type Price } from "@1neon/domain";
 import { numberProblem, optionalNumber } from "../lib/measures.ts";
 import { useQuery } from "@tanstack/react-query";
 import { Trash2, X } from "lucide-react";
@@ -45,6 +45,13 @@ export function parseLines(text: string): PurchaseLine[] {
 }
 
 
+// An option's hours by piece of work edit as lines: "work | hours"
+export const basisOf = (list: BasisLine[] = []) => list.map((x) => `${x.work} | ${x.hours}`).join("\n");
+export function parseBasis(text: string): BasisLine[] {
+  return text.split("\n").map((l) => l.split("|").map((x) => x.trim())).filter((x) => x[0] && Number.isFinite(Number(x[1]))).map(([work, hours]) => BasisLine.parse({ work: work!.slice(0, 160), hours: Number(hours) }));
+}
+
+
 // A comment as the API returns it
 interface Comment {
   id: string;
@@ -68,7 +75,9 @@ const draftOf = (i: Item): Draft => ({ title: i.title, body: i.body, status: i.s
 function kindFields(i: Item): Record<string, string> {
   if (i.kind === "option") {
     const o = OptionFields.parse(i.fields);
-    return { cost: o.cost, timeline: o.timeline, hours: o.hours, outsideCosts: o.outsideCosts, result: o.result, costScore: String(o.costScore), qualityScore: String(o.qualityScore), effortScore: String(o.effortScore), recommended: o.recommended ? "yes" : "", purchases: linesOf(o.purchases) };
+    return { cost: o.cost, timeline: o.timeline, hours: o.hours, outsideCosts: o.outsideCosts, result: o.result, costScore: String(o.costScore), qualityScore: String(o.qualityScore), effortScore: String(o.effortScore), recommended: o.recommended ? "yes" : "", purchases: linesOf(o.purchases),
+      // How it's priced: as written, fixed, or an hourly estimate with its rate and range of hours
+      pricing: o.pricing ?? "", rateCents: o.rateCents === undefined ? "" : String(o.rateCents / 100), hoursLow: o.hoursLow === undefined ? "" : String(o.hoursLow), hoursHigh: o.hoursHigh === undefined ? "" : String(o.hoursHigh), basis: basisOf(o.basis), why: o.why };
   }
   if (i.kind === "purchase") {
     const x = PurchaseFields.parse(i.fields);
@@ -86,6 +95,11 @@ function typed(key: string, v: string): unknown {
   if (key.endsWith("Score")) return Number(v);
   if (key === "recommended") return v === "yes";
   if (key === "purchases") return parseLines(v);
+  if (key === "basis") return parseBasis(v);
+  // A blank kind of price or number clears it (the API takes null as "remove this field")
+  if (key === "pricing") return v || null;
+  if (key === "rateCents") { const n = optionalNumber(v); return n.ok && n.value !== undefined ? Math.round(n.value * 100) : null; }
+  if (key === "hoursLow" || key === "hoursHigh") { const n = optionalNumber(v); return n.ok && n.value !== undefined ? n.value : null; }
   // Only called once the panel has checked the text (numberProblem); blank leaves the value unset
   if (key === "baseline" || key === "target") { const n = optionalNumber(v); return n.ok ? n.value : undefined; }
   return v;
@@ -384,12 +398,43 @@ const SCORE_CHOICES: Record<string, string[]> = {
 /** The editors for a kind's own fields; kinds without any show nothing */
 function KindFields({ kind, f, onChange }: { kind: ItemKind; f: Record<string, string>; onChange: (f: Record<string, string>) => void }) {
   const set = (k: string, v: string) => onChange({ ...f, [k]: v });
+  // An estimate's numbers as they stand in the form, to preview the line the client will read
+  const estimate = f.pricing === "estimate";
+  const num = (v?: string) => { const n = optionalNumber(v ?? ""); return n.ok ? n.value : undefined; };
+  const rate = num(f.rateCents);
+  const price = estimate ? priceOf({ pricing: "estimate", rateCents: rate === undefined ? undefined : Math.round(rate * 100), hoursLow: num(f.hoursLow), hoursHigh: num(f.hoursHigh) }) : undefined;
   if (kind === "option") return (
     <div className="props">
-      <label>Cost<input value={f.cost ?? ""} onChange={(e) => set("cost", e.target.value)} placeholder="e.g. $4,800 fixed" maxLength={80} /></label>
+      {/* How the price works. An estimate is hours at a rate: its cost and hours lines are worked out
+          from the numbers, so they can't disagree with what gets invoiced */}
+      <label>Kind of price
+        <select value={f.pricing ?? ""} onChange={(e) => set("pricing", e.target.value)}>
+          <option value="">As written below</option>
+          <option value="fixed">Fixed price</option>
+          <option value="estimate">Estimate: hours at a rate, with a range</option>
+        </select>
+      </label>
+      {estimate ? (
+        <>
+          <label>Rate, dollars an hour<input inputMode="decimal" value={f.rateCents ?? ""} onChange={(e) => set("rateCents", e.target.value)} placeholder="e.g. 175" /></label>
+          <label>Hours, low end<input inputMode="decimal" value={f.hoursLow ?? ""} onChange={(e) => set("hoursLow", e.target.value)} placeholder="e.g. 20" /></label>
+          <label>Hours, high end<input inputMode="decimal" value={f.hoursHigh ?? ""} onChange={(e) => set("hoursHigh", e.target.value)} placeholder="e.g. 24" /></label>
+          <p className="small muted" style={{ gridColumn: "1 / -1", margin: 0 }}>{price ? `Shown as “${priceLine(price)}”, ${hoursRange(price as Extract<Price, { kind: "estimate" }>)}. Billed for the hours logged, never past the high end.` : "Add the rate and the high end of the hours to price this option."}</p>
+        </>
+      ) : (
+        <>
+          <label>Cost<input value={f.cost ?? ""} onChange={(e) => set("cost", e.target.value)} placeholder="e.g. $4,800 fixed" maxLength={80} /></label>
+          {/* neon1's own working time */}
+          <label>Hours<input value={f.hours ?? ""} onChange={(e) => set("hours", e.target.value)} placeholder="e.g. about 10 hours" maxLength={80} /></label>
+        </>
+      )}
       <label>Timeline<input value={f.timeline ?? ""} onChange={(e) => set("timeline", e.target.value)} placeholder="e.g. 3 weeks" maxLength={80} /></label>
-      {/* neon1's own working time, what the client pays vendors directly, and the checkable result */}
-      <label>Hours<input value={f.hours ?? ""} onChange={(e) => set("hours", e.target.value)} placeholder="e.g. about 10 hours" maxLength={80} /></label>
+      {/* Where the hours go, so the price can be checked against the work */}
+      <label style={{ gridColumn: "1 / -1" }}>How the hours add up
+        <textarea rows={4} value={f.basis ?? ""} onChange={(e) => set("basis", e.target.value)} placeholder="One per line: piece of work | hours" />
+        <span className="small muted">One per line: piece of work | hours.{f.basis?.trim() ? ` ${hoursText(parseBasis(f.basis).reduce((n, x) => n + x.hours, 0))} in all.` : ""}</span>
+      </label>
+      {/* What the client pays vendors directly, and the checkable result */}
       <label>Outside costs<input value={f.outsideCosts ?? ""} onChange={(e) => set("outsideCosts", e.target.value)} placeholder="e.g. none; uses your Google account" maxLength={160} /></label>
       <label>Result<input value={f.result ?? ""} onChange={(e) => set("result", e.target.value)} placeholder="e.g. every order in one list by 7pm" maxLength={300} /></label>
       {/* What the option expects to be bought; the client buys unless a line says neon1 */}
@@ -398,6 +443,7 @@ function KindFields({ kind, f, onChange }: { kind: ItemKind; f: Record<string, s
         <span className="small muted">One per line: name | estimate | client or neon1 | why | example. neon1 buys only with the client's initials, paid back at cost.</span>
       </label>
       <label className="check"><input type="checkbox" checked={f.recommended === "yes"} onChange={(e) => set("recommended", e.target.checked ? "yes" : "")} /> Recommended</label>
+      <label style={{ gridColumn: "1 / -1" }}>Why this one, or when to pick it<textarea rows={2} value={f.why ?? ""} onChange={(e) => set("why", e.target.value)} maxLength={400} placeholder="e.g. It ends the retyping without asking customers to change anything." /></label>
       {/* The three ratings read as one group, on one line at every width */}
       <fieldset className="ratings">
         <legend>Ratings</legend>

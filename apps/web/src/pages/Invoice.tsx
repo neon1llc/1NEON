@@ -3,7 +3,7 @@
 // (number, lines, due date, and the hash that fixes them), what has been paid, and what is left.
 
 
-import { InvoiceFields, PaymentFields, balanceOf, invoiceState, invoiceTotal, money, todayIn, type PaymentMethod } from "@1neon/domain";
+import { InvoiceFields, PaymentFields, balanceOf, currentDecision, failedOn, hoursText, invoiceState, invoiceTotal, money, payableOn, priceOf, received, todayIn, type Item, type PaymentMethod, type PriceTerms } from "@1neon/domain";
 import { Printer } from "lucide-react";
 import { useEffect } from "react";
 import { Link, useParams } from "react-router";
@@ -30,7 +30,7 @@ export function InvoicePage() {
   const pid = projects.data?.find((p) => p.key === key)?.id;
   const detail = useProject(org.id, pid);
   const me = useSession();
-  const pay = usePay(`/t/${org.id}/projects/${pid}`);
+  const [pay, payPage] = usePay(`/t/${org.id}/projects/${pid}`);
   const base = `/o/${summary.slug}/projects/${key}`;
   useTopBar(<span><Link to={`/o/${summary.slug}/projects`}>Projects</Link> / <Link to={base}>{key}</Link> / Invoice</span>, [key, summary.slug]);
   const it = detail.data?.items.find((i) => i.id === iid && i.kind === "invoice");
@@ -50,21 +50,43 @@ export function InvoicePage() {
   const state = invoiceState(it, items, todayIn(org.timeZone));
   const total = invoiceTotal(f);
   const left = balanceOf(it, items);
-  const payments = items.filter((i) => i.kind === "payment" && i.fields.invoiceId === it.id).map((i) => PaymentFields.parse(i.fields));
+  // Money received reduces the balance; a bank transfer still clearing is shown but not yet counted,
+  // and what can be paid now leaves it out, so nobody pays twice
+  const on = items.filter((i) => i.kind === "payment" && i.fields.invoiceId === it.id);
+  const payments = on.filter(received).map((i) => PaymentFields.parse(i.fields));
+  const clearing = on.filter((i) => i.status === "pending").map((i) => PaymentFields.parse(i.fields));
+  const payable = payableOn(it, items);
+  const failed = failedOn(it, items);
   const credits = items.filter((i) => i.kind === "invoice" && i.status !== "void" && i.status !== "draft" && i.fields.appliesTo === it.id).map((i) => InvoiceFields.parse(i.fields));
   const reduces = f.appliesTo ? items.find((i) => i.id === f.appliesTo) : undefined;
+  // The hours this invoice bills, entry by entry: the ones stamped with it once issued; on a draft
+  // for an hourly estimate, the ones not billed yet, which issuing will stamp
+  const hourly = priceOf((currentDecision(items).decision?.fields.terms ?? {}) as PriceTerms)?.kind === "estimate";
+  const forHours = hourly && (f.type === "final" || f.type === "progress");
+  const mine = (i: Item) => (it.status === "draft" ? forHours && !i.fields.invoiceId : i.fields.invoiceId === it.id);
+  // Its hours line counts every hour so far and subtracts earlier invoices, so hours those invoices
+  // listed are shown again, marked with the invoice they were on, and the total matches the line
+  const before = new Map(items.filter((i) => i.kind === "invoice" && i.id !== it.id && i.status !== "draft" && i.status !== "void" && (it.status === "draft" || String(i.fields.issuedAt ?? "") < String(f.issuedAt ?? ""))).map((i) => [i.id, String(i.fields.number ?? "")]));
+  const hours = items
+    .filter((i) => i.kind === "time" && (mine(i) || (forHours && before.has(String(i.fields.invoiceId)))))
+    .sort((a, b) => String(a.fields.date).localeCompare(String(b.fields.date)) || a.createdAt.localeCompare(b.createdAt));
+  const carried = hours.some((h) => !mine(h));
   return (
     <>
       <div className="pp-tools">
         <Link className="btn btn-ghost btn-sm" to={`${base}/execute#billing`}>Back to invoices</Link>
         {/* The client pays what's left right here, as from the project's Invoices */}
-        {!me.operator && f.type !== "credit" && it.status === "issued" && left > 0 && <button type="button" className="btn btn-primary btn-sm" onClick={() => void pay(it)}>Pay {money(left)}</button>}
-        <button type="button" className={`btn ${!me.operator && left > 0 && it.status === "issued" ? "btn-ghost" : "btn-primary"} btn-sm`} onClick={() => window.print()}><Printer size={15} aria-hidden="true" /> Print or save as PDF</button>
+        {!me.operator && f.type !== "credit" && it.status === "issued" && payable > 0 && <button type="button" className="btn btn-primary btn-sm" onClick={() => void pay(it)}>{failed ? "Pay again: " : "Pay "}{money(payable)}</button>}
+        <button type="button" className={`btn ${!me.operator && payable > 0 && it.status === "issued" ? "btn-ghost" : "btn-primary"} btn-sm`} onClick={() => window.print()}><Printer size={15} aria-hidden="true" /> Print or save as PDF</button>
       </div>
+      {payPage}
+      {/* A bank payment on its way, or one the bank refused, is said before anything else */}
+      {clearing.map((x, i) => <p key={i} className="pp-state" role="status">A bank payment of {money(x.amountCents)} was started on {longDate(x.receivedAt)}. It takes a few business days to clear, and you'll be told when it does.{payable > 0 ? ` ${money(payable)} more is owed.` : " There's nothing more to pay."}</p>)}
+      {failed && <p className="pp-state warn" role="status">The bank payment of {money(failed.amountCents)} started on {longDate(failed.receivedAt)} didn't go through, so no money moved and {money(payable)} is still owed. {me.operator ? "The client can pay again, by bank or card, or another way." : "You can pay again, by bank or card, or one of the other ways below."}</p>}
       {it.status === "draft" && <p className="pp-state" role="status">Draft, only neon1 sees it. Issuing numbers it and shows it to the client.</p>}
       {state === "void" && <p className="pp-state warn" role="status">Void{f.voided ? `: ${f.voided.reason}` : ""}. Nothing is owed on it.</p>}
       <article className={`proposal invoice${state === "void" ? " pp-faded" : ""}`} aria-labelledby="inv-h1">
-        {DEMO && <p className="pp-note">{FICTIONAL}</p>}
+        {DEMO && <p className="pp-note">{FICTIONAL.replace("proposal", "invoice").replace("Not an offer", "Not a bill")}</p>}
         {/* Letterhead: neon1 left, the invoice's number and dates right */}
         <header className="pp-head">
           <div className="pp-mark">
@@ -107,11 +129,26 @@ export function InvoicePage() {
             {credits.map((c, i) => <tr key={`c${i}`}><th colSpan={3}>Credit {c.number}</th><td>{money(invoiceTotal(c))}</td></tr>)}
             {payments.map((p, i) => <tr key={`p${i}`}><th colSpan={3}>Paid {longDate(p.receivedAt)}, {METHOD[p.method]}{p.ref ? ` (${p.ref})` : ""}</th><td>-{money(p.amountCents)}</td></tr>)}
             {f.type !== "credit" && it.status !== "draft" && <tr><th colSpan={3}>{state === "paid" ? "Paid in full" : "Balance due"}</th><td><b>{money(left)}</b></td></tr>}
+            {clearing.map((p, i) => <tr key={`w${i}`} className="inv-clearing"><th colSpan={3}>Bank transfer (ACH) started {longDate(p.receivedAt)}, clearing</th><td>{money(p.amountCents)}</td></tr>)}
           </tfoot>
         </table>
         {f.note && <p>{f.note}</p>}
 
-        {f.type !== "credit" && left > 0 && (
+        {/* An invoice for hours lists each one, so the quantity above can be checked line by line */}
+        {hours.length > 0 && (
+          <section className="pp-section">
+            <h2 className="pp-bar">{carried ? "Hours through this invoice" : "Hours on this invoice"}</h2>
+            <table className="pp-hours inv-hours">
+              <thead><tr><th>Date</th><th>Work done</th><th>Hours</th></tr></thead>
+              <tbody>
+                {hours.map((h) => <tr key={h.id}><td>{longDate(String(h.fields.date))}</td><td>{h.title}{!mine(h) && <small> (listed on {before.get(String(h.fields.invoiceId))})</small>}</td><td>{Number(Number(h.fields.hours).toFixed(2))}</td></tr>)}
+                <tr className="total"><td colSpan={2}>Total</td><td>{hoursText(hours.reduce((n, h) => n + Number(h.fields.hours || 0), 0))}</td></tr>
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {f.type !== "credit" && payable > 0 && (
           <section className="pp-section">
             <h2 className="pp-bar">How to pay</h2>
             <ul className="pp-list">

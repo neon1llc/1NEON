@@ -201,6 +201,130 @@ describe("invoices", () => {
     expect(r.json.fields.accepted.signature).toMatchObject({ doc: "acceptance", typedName: "Raj Patel" });
     const final = (await flow()).items.find((i) => i.kind === "invoice" && i.fields.type === "final")!;
     expect(final).toMatchObject({ status: "draft", fields: { lines: [{ unitCents: 325_000 }] } });
+    // A signed acceptance is a record: the step stays done
+    const again = (await flow()).items.find((i) => i.id === h.id)!;
+    expect((await call(OP, "PATCH", `${path}/items/${h.id}`, { version: again.version, status: "open" })).json.error).toBe("immutable");
+  });
+
+  it("accepts the whole handover with one signature once every step is done, each step signed for", async () => {
+    const { draft, path } = await approveB();
+    await call(OP, "POST", `${path}/invoices/${draft.id}/issue`, { version: draft.version });
+    const first = (await flow()).items.find((i) => i.kind === "handoff")!;
+    const second = (await call(OP, "POST", `${path}/items`, { kind: "handoff", title: "Docs delivered and walked through" })).json;
+    // Not while a step is still open, and only for the decision maker
+    expect((await call(s.raj.email, "POST", `${path}/handover/accept`, { signature: SIGN })).json.error).toBe("not_done");
+    await call(OP, "PATCH", `${path}/items/${first.id}`, { version: first.version, status: "done" });
+    await call(OP, "PATCH", `${path}/items/${second.id}`, { version: second.version, status: "done" });
+    expect((await call(s.dana.email, "POST", `${path}/handover/accept`, { signature: SIGN })).status).toBe(403);
+    expect((await flow()).items.some((i) => i.kind === "invoice" && i.fields.type === "final")).toBe(false);
+    // Home lists what waits on Raj: the deposit to pay first, then the handover to accept
+    const before = (await call(s.raj.email, "GET", `/t/${s.acme.id}/workspace?waiting=all`)).json.waiting as { action: string; title: string; projectKey: string }[];
+    expect(before.filter((w) => w.projectKey === "FLOW-1").map((w) => w.action).slice(0, 2)).toEqual(["pay", "accept"]);
+    expect(before.find((w) => w.action === "pay" && w.projectKey === "FLOW-1")!.title).toBe("Pay INV-0039-01: $3,250");
+    // neon1 is asked for nothing on a client's invoice
+    expect(((await call(OP, "GET", `/t/${s.acme.id}/workspace?waiting=all`)).json.waiting as { action: string }[]).some((w) => w.action === "pay" || w.action === "accept")).toBe(false);
+    const r = await call(s.raj.email, "POST", `${path}/handover/accept`, { note: "Dana ran a day on her own", signature: SIGN });
+    expect(r.status).toBe(200);
+    expect(r.json).toMatchObject({ final: true });
+    const steps = (await flow()).items.filter((i) => i.kind === "handoff");
+    expect(steps).toHaveLength(2);
+    for (const step of steps) expect(step.fields.accepted).toMatchObject({ name: "Raj Patel", note: "Dana ran a day on her own", signature: { doc: "acceptance", ref: step.title, typedName: "Raj Patel" } });
+    expect((await flow()).items.filter((i) => i.kind === "invoice" && i.fields.type === "final")).toHaveLength(1);
+    // Home's "Needs you" asked Raj for it while it waited, and no longer does
+    const needs = async () => ((await call(s.raj.email, "GET", `/t/${s.acme.id}/workspace?waiting=all`)).json.waiting as { action: string; title: string }[]);
+    expect((await needs()).some((w) => w.action === "accept")).toBe(false);
+    // Nothing left to accept, and no second final invoice
+    expect((await call(s.raj.email, "POST", `${path}/handover/accept`, { signature: SIGN })).json.error).toBe("nothing_to_accept");
+  });
+});
+
+
+describe("an hourly estimate", () => {
+  /** Option C repriced as an estimate (20 to 24 hours at $175), issued in the next revision, and approved */
+  async function approveEstimate() {
+    const { opt, path } = await flow();
+    const c = opt("C");
+    const r = await call(OP, "PATCH", `${path}/items/${c.id}`, { version: c.version, fields: { pricing: "estimate", rateCents: 17_500, hoursLow: 20, hoursHigh: 24, cost: "typed by hand", basis: [{ work: "Order form", hours: 3 }, { work: "Everything else", hours: 19 }] } });
+    // The written cost and hours follow the numbers
+    expect(r.json.fields).toMatchObject({ cost: "$3,500 to $4,200 estimate", hours: "20 to 24 hours" });
+    await call(OP, "POST", `${path}/proposals`, {});
+    const fresh = (await flow()).opt("C");
+    const ok = await call(s.raj.email, "POST", `${path}/items/${fresh.id}/approve`, { version: fresh.version, signature: SIGN });
+    expect(ok.status).toBe(201);
+    return { path, decision: ok.json.decision };
+  }
+  const log = (as: string, path: string, hours: number, title = "Order form and list") => call(as, "POST", `${path}/items`, { kind: "time", title, fields: { date: "2026-11-12", hours } });
+
+  it("keeps the numbers in the signed terms, and drafts a deposit of half the low end", async () => {
+    const { decision } = await approveEstimate();
+    expect(decision.fields.terms).toMatchObject({ pricing: "estimate", rateCents: 17_500, hoursLow: 20, hoursHigh: 24, cost: "$3,500 to $4,200 estimate", basis: [{ work: "Order form", hours: 3 }, { work: "Everything else", hours: 19 }] });
+    const draft = (await flow()).items.find((i) => i.kind === "invoice")!;
+    expect(draft).toMatchObject({ status: "draft", fields: { type: "deposit", lines: [{ unitCents: 175_000 }] } });
+  });
+
+  it("lets only neon1 log hours, in quarter hours, and never counts them as open work", async () => {
+    const { path } = await approveEstimate();
+    expect((await log(s.raj.email, path, 2)).json.error).toBe("neon1_only");
+    expect((await log(OP, path, 2.1)).status).toBe(400);
+    const made = await log(OP, path, 2.5);
+    expect(made.status).toBe(201);
+    expect(made.json).toMatchObject({ kind: "time", status: "done", fields: { hours: 2.5, date: "2026-11-12" } });
+    // The client reads them, and can't change or remove them
+    expect((await call(s.raj.email, "PATCH", `${path}/items/${made.json.id}`, { version: 1, fields: { hours: 1 } })).json.error).toBe("neon1_only");
+    expect((await call(s.raj.email, "DELETE", `${path}/items/${made.json.id}?version=1`)).json.error).toBe("neon1_only");
+  });
+
+  it("bills the hours worked less the deposit, and locks billed hours once the invoice is issued", async () => {
+    const { path } = await approveEstimate();
+    const dep = (await flow()).items.find((i) => i.kind === "invoice")!;
+    await call(OP, "POST", `${path}/invoices/${dep.id}/issue`, { version: dep.version });
+    const a = await log(OP, path, 12.5);
+    await log(OP, path, 8.5, "Runbook and walkthrough");
+    // Before issue, an entry can still be corrected
+    expect((await call(OP, "PATCH", `${path}/items/${a.json.id}`, { version: 1, title: "Order form, list, and email reader" })).status).toBe(200);
+    // The last handover step accepted drafts the final invoice: 21 hours at $175, less the $1,750 deposit
+    const h = (await flow()).items.find((i) => i.kind === "handoff")!;
+    await call(s.raj.email, "POST", `${path}/items/${h.id}/accept`, { version: h.version, signature: SIGN });
+    const final = (await flow()).items.find((i) => i.kind === "invoice" && i.fields.type === "final")!;
+    expect(final.fields.lines).toMatchObject([{ qty: 21, unitCents: 17_500 }, { qty: 1, unitCents: -175_000 }]);
+    const issued = await call(OP, "POST", `${path}/invoices/${final.id}/issue`, { version: final.version });
+    expect(issued.status).toBe(200);
+    const hours = (await flow()).items.filter((i) => i.kind === "time");
+    expect(hours.every((x) => x.fields.invoiceId === final.id)).toBe(true);
+    const locked = hours[0]!;
+    expect((await call(OP, "PATCH", `${path}/items/${locked.id}`, { version: locked.version, fields: { hours: 1 } })).json.error).toBe("immutable");
+    expect((await call(OP, "DELETE", `${path}/items/${locked.id}?version=${locked.version}`)).json.error).toBe("immutable");
+    // Hours logged afterwards are new work: a progress invoice asks only for those
+    await log(OP, path, 1);
+    const more = await call(OP, "POST", `${path}/invoices`, { type: "progress" });
+    expect(more.json.fields.lines).toMatchObject([{ qty: 22, unitCents: 17_500 }, { unitCents: -367_500 }]);
+  });
+});
+
+
+describe("a deposit larger than the finished work", () => {
+  it("drafts a credit for the difference when the handover is accepted, once", async () => {
+    const { opt, path } = await flow();
+    const c = opt("C");
+    await call(OP, "PATCH", `${path}/items/${c.id}`, { version: c.version, fields: { pricing: "estimate", rateCents: 17_500, hoursLow: 20, hoursHigh: 24, cost: "", basis: [{ work: "All of it", hours: 22 }] } });
+    await call(OP, "POST", `${path}/proposals`, {});
+    const fresh = (await flow()).opt("C");
+    await call(s.raj.email, "POST", `${path}/items/${fresh.id}/approve`, { version: fresh.version, signature: SIGN });
+    const dep = (await flow()).items.find((i) => i.kind === "invoice")!;
+    await call(OP, "POST", `${path}/invoices/${dep.id}/issue`, { version: dep.version });
+    await call(OP, "POST", `${path}/invoices/${dep.id}/payments`, { amountCents: 175_000, method: "check", ref: "1041", receivedAt: "2026-11-12" });
+    // The work turned out far smaller: 6 hours, $1,050, against a $1,750 deposit
+    await call(OP, "POST", `${path}/items`, { kind: "time", title: "Order form", fields: { date: "2026-11-12", hours: 6 } });
+    const h = (await flow()).items.find((i) => i.kind === "handoff")!;
+    await call(s.raj.email, "POST", `${path}/items/${h.id}/accept`, { version: h.version, signature: SIGN });
+    const { items } = await flow();
+    expect(items.some((i) => i.kind === "invoice" && i.fields.type === "final")).toBe(false);
+    const credit = items.find((i) => i.kind === "invoice" && i.fields.type === "credit")!;
+    expect(credit).toMatchObject({ status: "draft", fields: { appliesTo: dep.id, lines: [{ unitCents: 70_000 }] } });
+    expect(String((credit.fields.lines as { text: string }[])[0]!.text)).toContain("6 hours worked comes to $1,050.00, less than the $1,750.00 invoiced earlier");
+    // Issued, the client sees it against the deposit; a second one isn't suggested
+    expect((await call(OP, "POST", `${path}/invoices/${credit.id}/issue`, { version: credit.version })).status).toBe(200);
+    expect((await call(OP, "POST", `${path}/invoices`, { type: "final" })).json.error).toBe("no_lines");
   });
 });
 
@@ -212,7 +336,14 @@ describe("paying online", () => {
     expect((await call(s.raj.email, "POST", `${path}/invoices/${inv.id}/pay`)).json.error).toBe("payments_off");
   });
 
-  it("opens Checkout for what is owed, then records the bank payment once when Stripe confirms it", async () => {
+  // A Checkout session's event, signed as Stripe signs it
+  const event = (session: { id: string; metadata: unknown }, type: string, payment_status: string) => ({ id: `evt_${type}`, type, data: { object: { object: "checkout.session", id: session.id, payment_status, amount_total: 325_000, payment_intent: "pi_1", payment_method_types: ["us_bank_account"], metadata: session.metadata } } });
+  const hook = async (e: unknown, header?: string) => {
+    const signed = await payments!.sign(e);
+    return app.request("/1NEON/api/billing/stripe", { method: "POST", headers: { "stripe-signature": header ?? signed.header }, body: signed.body });
+  };
+
+  it("opens Checkout for what is owed, shows the bank payment on its way, and records it once when it clears", async () => {
     const { inv, path } = await issuedDeposit();
     // Anyone in the organization may pay
     const r = await call(s.dana.email, "POST", `${path}/invoices/${inv.id}/pay`);
@@ -220,23 +351,68 @@ describe("paying online", () => {
     const session = payments!.sessions[0]!;
     expect(session).toMatchObject({ amountCents: 325_000, invoiceNumber: "INV-0039-01", metadata: { invoiceId: inv.id } });
 
-    const event = (type: string, payment_status: string) => ({ id: `evt_${type}`, type, data: { object: { object: "checkout.session", id: session.id, payment_status, amount_total: 325_000, payment_intent: "pi_1", payment_method_types: ["us_bank_account"], metadata: session.metadata } } });
-    const hook = async (e: unknown, header?: string) => {
-      const signed = await payments!.sign(e);
-      return app.request("/1NEON/api/billing/stripe", { method: "POST", headers: { "stripe-signature": header ?? signed.header }, body: signed.body });
-    };
     // A forged or stale signature is refused
-    expect((await hook(event("checkout.session.async_payment_succeeded", "paid"), "t=1,v1=00")).status).toBe(400);
-    // Bank payments complete later: the first event records nothing
-    expect((await hook(event("checkout.session.completed", "unpaid"))).status).toBe(200);
-    expect((await flow()).items.some((i) => i.kind === "payment")).toBe(false);
-    // Confirmed: one payment, by ACH, and the invoice is paid; a repeat changes nothing
-    await hook(event("checkout.session.async_payment_succeeded", "paid"));
-    await hook(event("checkout.session.async_payment_succeeded", "paid"));
+    expect((await hook(event(session, "checkout.session.async_payment_succeeded", "paid"), "t=1,v1=00")).status).toBe(400);
+    // Bank payments complete later: the first event records it as started, and the invoice stays open
+    expect((await hook(event(session, "checkout.session.completed", "unpaid"))).status).toBe(200);
+    await hook(event(session, "checkout.session.completed", "unpaid"));
+    const mid = await flow();
+    const started = mid.items.filter((i) => i.kind === "payment");
+    expect(started).toHaveLength(1);
+    expect(started[0]).toMatchObject({ status: "pending", fields: { method: "ach", amountCents: 325_000 } });
+    expect(mid.items.find((i) => i.id === inv.id)!.status).toBe("issued");
+    // While it clears nobody can pay again, by any route, and the invoice can't be voided
+    expect((await call(s.raj.email, "POST", `${path}/invoices/${inv.id}/pay`)).json.error).toBe("clearing");
+    expect((await call(OP, "POST", `${path}/invoices/${inv.id}/payments`, { amountCents: 325_000, method: "check", ref: "1041", receivedAt: "2026-11-12" })).json.error).toBe("too_much");
+    expect((await call(OP, "POST", `${path}/invoices/${inv.id}/void`, { version: mid.items.find((i) => i.id === inv.id)!.version, reason: "Wrong amount" })).json.error).toBe("has_payments");
+    // Home no longer asks the client to pay it
+    const home = await call(s.raj.email, "GET", `/t/${s.acme.id}/workspace`);
+    expect(home.json.waiting.filter((w: { itemId: string }) => w.itemId === inv.id)).toHaveLength(0);
+    // Confirmed: the same payment, now received, and the invoice is paid; a repeat changes nothing
+    await hook(event(session, "checkout.session.async_payment_succeeded", "paid"));
+    await hook(event(session, "checkout.session.async_payment_succeeded", "paid"));
+    await hook(event(session, "checkout.session.async_payment_failed", "unpaid"));
     const { items } = await flow();
     const pays = items.filter((i) => i.kind === "payment");
     expect(pays).toHaveLength(1);
-    expect(pays[0]!.fields).toMatchObject({ method: "ach", amountCents: 325_000, ref: "pi_1", stripe: { session: session.id } });
+    expect(pays[0]).toMatchObject({ id: started[0]!.id, status: "done", fields: { method: "ach", amountCents: 325_000, ref: "pi_1", stripe: { session: session.id } } });
+    expect(pays[0]!.fields.startedAt).toBeTruthy();
+    expect(items.find((i) => i.id === inv.id)!.status).toBe("paid");
+  });
+
+  it("marks a bank payment the bank refused as failed, tells both sides, and lets the client pay again", async () => {
+    const { inv, path } = await issuedDeposit();
+    await call(s.raj.email, "POST", `${path}/invoices/${inv.id}/pay`);
+    const session = payments!.sessions[0]!;
+    await hook(event(session, "checkout.session.completed", "unpaid"));
+    await hook(event(session, "checkout.session.async_payment_failed", "unpaid"));
+    // A late or repeated event never brings a failed payment back
+    await hook(event(session, "checkout.session.completed", "unpaid"));
+    const { items } = await flow();
+    const pays = items.filter((i) => i.kind === "payment");
+    expect(pays).toHaveLength(1);
+    expect(pays[0]!.status).toBe("failed");
+    expect(items.find((i) => i.id === inv.id)!.status).toBe("issued");
+    // It's owed again: Home asks, and Pay opens a new session for the whole amount
+    const home = await call(s.raj.email, "GET", `/t/${s.acme.id}/workspace`);
+    expect(home.json.waiting.find((w: { itemId: string }) => w.itemId === inv.id)).toMatchObject({ title: "Pay INV-0039-01: $3,250, the bank payment didn't go through", failed: true });
+    expect((await call(s.raj.email, "POST", `${path}/invoices/${inv.id}/pay`)).json.url).toBeTruthy();
+    expect(payments!.sessions.at(-1)).toMatchObject({ amountCents: 325_000 });
+    // With no money tied to it, neon1 may void it
+    const cur = items.find((i) => i.id === inv.id)!;
+    expect((await call(OP, "POST", `${path}/invoices/${inv.id}/void`, { version: cur.version, reason: "Reissuing with a later due date" })).status).toBe(200);
+  });
+
+  it("records a card payment at once", async () => {
+    const { inv, path } = await issuedDeposit();
+    await call(s.raj.email, "POST", `${path}/invoices/${inv.id}/pay`);
+    const session = payments!.sessions[0]!;
+    const card = event(session, "checkout.session.completed", "paid");
+    // Both ways were offered, as in real use: paid on the spot means the card
+    card.data.object.payment_method_types = ["us_bank_account", "card"];
+    await hook(card);
+    const { items } = await flow();
+    expect(items.filter((i) => i.kind === "payment")).toMatchObject([{ status: "done", fields: { method: "card" } }]);
     expect(items.find((i) => i.id === inv.id)!.status).toBe("paid");
   });
 });

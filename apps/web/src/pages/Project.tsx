@@ -2,24 +2,24 @@
 // Execute, Observe, Normalize).
 
 
-import { balanceOf, invoiceState, InvoiceFields, money as dollars, betterWhen, canApprove, changedSince, currentDecision, todayIn, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, priceCheckDue, ProjectRole, proposalRef, PurchaseFields, HandoffFields, revisions, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
+import { balanceOf, dollars as wholeDollars, failedOn, invoiceState, InvoiceFields, money as dollars, payableOn, paymentPlan, priceMeaning, priceOf, betterWhen, canApprove, changedSince, currentDecision, todayIn, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, priceCheckDue, ProjectRole, proposalRef, PurchaseFields, HandoffFields, revisions, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
 import { ArrowRight, Pencil, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
 import { GUIDE, Pick, RequestBuilder, Starters } from "../components/Guide.tsx";
 import { ItemPanel, STATUS_WORDS, statusWord, useDeleteItem, useMayDelete } from "../components/ItemPanel.tsx";
 import { downloadDocx, FICTIONAL } from "../lib/docx.ts";
 import { gate, Stale } from "../components/Reads.tsx";
-import { Link, NavLink, useLocation, useParams } from "react-router";
+import { Link, NavLink, useLocation, useNavigate, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, ConflictDialog, Dialog, Empty, Health, HEALTH_LABEL, LayerBadge, LAYERS, layerHint, layerName, layerProgress, OnionProgress, Trend, ago, dateLabel, daysSince, layerFromSlug, layerSlug, useToast } from "../components/ui.tsx";
 import { api, DEMO, HttpError } from "../lib/api.ts";
-import { AgreementNeeded, Invoices, SignBox, signReady, useAgreementSigned, type SignValue } from "../components/Billing.tsx";
+import { AgreementNeeded, Hours, Invoices, PriceBasis, SignBox, signReady, useAgreementSigned, type Priced, type SignValue } from "../components/Billing.tsx";
 import { firstYear, money, parseCost, type Recurring } from "../lib/cost.ts";
 import { handoverSummary } from "../lib/handover.ts";
 import { numberProblem, optionalNumber } from "../lib/measures.ts";
 import { problem, useMembers, useProject, useProjects, useRefresh, useSubmit } from "../lib/hooks.ts";
-import { aimBetween } from "../lib/motion.ts";
+import { aimBetween, canSlide } from "../lib/motion.ts";
 import type { EditMarker } from "../lib/types.ts";
 
 
@@ -41,22 +41,23 @@ const KIND_LABEL: Record<ItemKind, [string, string]> = {
   purchase: ["Purchase", "Purchases"],
   invoice: ["Invoice", "Invoices"],
   payment: ["Payment", "Payments"],
+  time: ["Hours entry", "Hours"],
   signoff: ["Outside approval", "Outside approvals"],
   metric: ["Measure", "Measures"],
   check: ["Check", "Checks"],
   incident: ["Incident", "Incidents"],
-  handoff: ["Handoff step", "Handoff checklist"],
+  handoff: ["Handover step", "Handover checklist"],
   runbook: ["Runbook", "Runbooks"],
   training: ["Training", "Training"],
   care: ["Care item", "Care plan"],
   retro: ["Retro note", "Retrospective"],
 };
 // Kinds shown under a layer tab. Decisions appear as banners, revisions in the proposal strip, and
-// invoices and payments in Invoices (under Execute), never as editable rows
-const KINDS_IN = (layer: Layer) => (Object.keys(KIND_LAYER) as ItemKind[]).filter((k) => KIND_LAYER[k] === layer && !["decision", "proposal", "invoice", "payment"].includes(k));
+// invoices, payments, and hours in their own sections under Execute, never as editable rows
+const KINDS_IN = (layer: Layer) => (Object.keys(KIND_LAYER) as ItemKind[]).filter((k) => KIND_LAYER[k] === layer && !["decision", "proposal", "invoice", "payment", "time"].includes(k));
 // Every work item is done or not done, with a checkbox, so each counted need can be finished. Options
 // finish by approval, measures by reaching their target, and decisions and updates are records
-const CHECKABLE = new Set<ItemKind>((Object.keys(KIND_LAYER) as ItemKind[]).filter((k) => !["option", "metric", "decision", "update", "purchase", "proposal", "constraint", "invoice", "payment"].includes(k)));
+const CHECKABLE = new Set<ItemKind>((Object.keys(KIND_LAYER) as ItemKind[]).filter((k) => !["option", "metric", "decision", "update", "purchase", "proposal", "constraint", "invoice", "payment", "time"].includes(k)));
 
 
 /** A project by key (FLOW-1): the key resolves to an ID through the project list */
@@ -68,6 +69,7 @@ export function ProjectPage() {
   const pid = projects.data?.find((p) => p.key === key)?.id;
   const detail = useProject(org.id, pid);
   const base = `/o/${summary.slug}/projects/${key}`;
+  const nav = useNavigate();
   // Breadcrumb plus the avatars of anyone editing in this project
   useTopBar(
     <span>
@@ -89,6 +91,16 @@ export function ProjectPage() {
   const stageAt = org.stages.findIndex((s) => s.id === p.stageId);
   // The open tab's position, so moving to a later tab pans left and an earlier one pans right
   const at = tab === "overview" ? 0 : LAYERS.indexOf(tab as Layer) + 1;
+  // A tab slides to the next one when the browser can. When it can't (no support, less motion asked
+  // for, a walkthrough setting up out of sight), it's a plain move: a transition the router can't
+  // make would only have it draw the page late
+  const toTab = (e: ReactMouseEvent, to: string, i: number) => {
+    if (canSlide()) return aimBetween(at, i);
+    // A click meant for a new tab or window is the browser's
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    void nav(to);
+  };
   // Item counts for each layer tab
   // A measure counts as done once its latest reading reaches the target
   const prog = layerProgress(items.map((i) => (i.kind === "metric" && (metricProgress(MetricFields.parse(i.fields)) ?? 0) >= 1 ? { ...i, status: "done" } : i)), (k) => KIND_LAYER[k as ItemKind]);
@@ -113,9 +125,9 @@ export function ProjectPage() {
       <NextStep project={p} items={items} stage={org.stages[stageAt]} base={base} />
       {/* Overview, then one tab per layer with its item count; at is the open tab's position */}
       <nav className="tabs" aria-label="Project sections" data-tour="layers">
-        <NavLink to={base} end viewTransition onClick={() => aimBetween(at, 0)} className={() => (tab === "overview" ? "active" : "")}>Overview</NavLink>
+        <NavLink to={base} end viewTransition onClick={(e) => toTab(e, base, 0)} className={() => (tab === "overview" ? "active" : "")}>Overview</NavLink>
         {LAYERS.map((l, i) => (
-          <NavLink key={l} to={`${base}/${layerSlug(l)}`} viewTransition onClick={() => aimBetween(at, i + 1)}><LayerBadge layer={l} /><span className="tab-name">{layerName(l)}<small className="sub"><span className="sr">, </span>{layerHint(l)}</small></span> {prog[l][1] > 0 && <span className="muted" aria-label={`${prog[l][0]} of ${prog[l][1]} done`} title={`${prog[l][0]} of ${prog[l][1]} done`}>{prog[l][0]}/{prog[l][1]}</span>}</NavLink>
+          <NavLink key={l} to={`${base}/${layerSlug(l)}`} viewTransition onClick={(e) => toTab(e, `${base}/${layerSlug(l)}`, i + 1)}><LayerBadge layer={l} /><span className="tab-name">{layerName(l)}<small className="sub"><span className="sr">, </span>{layerHint(l)}</small></span> {prog[l][1] > 0 && <span className="muted" aria-label={`${prog[l][0]} of ${prog[l][1]} done`} title={`${prog[l][0]} of ${prog[l][1]} done`}>{prog[l][0]}/{prog[l][1]}</span>}</NavLink>
         ))}
       </nav>
       {/* The section under the tabs pans by tab order */}
@@ -170,7 +182,7 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
             {(h.agreed || h.changes.length > 0) && <><dt>What changed</dt><dd>{h.agreed && <b>{h.agreed}</b>}{h.agreed && h.changes.length > 0 && ". "}{h.changes.join(", ")}{h.changes.length > 0 && "."}</dd></>}
             {h.results.length > 0 && <><dt>The result</dt><dd>{h.results.map((r, n) => <span key={r.title}>{n > 0 && "; "}{r.title}: {r.before && r.now ? <>{r.before} to <b>{r.now}</b></> : <b>{r.now ?? r.before}</b>}{r.target && ` (target ${r.target}${r.reached ? ", reached" : ""})`}</span>)}.</dd></>}
             {h.owners.length > 0 && <><dt>Who owns what</dt><dd>{h.owners.map((o, n) => <span key={o.title}>{n > 0 && "; "}{o.title}: {o.owner ?? "no owner named yet"}</span>)}.</dd></>}
-            {allSteps > 0 && <><dt>Handoff checklist</dt><dd>{doneSteps} of {allSteps} done.</dd></>}
+            {allSteps > 0 && <><dt>Handover checklist</dt><dd>{doneSteps} of {allSteps} done.</dd></>}
           </dl>
         )}
         <p>{h.empty ? "This project is closed. " : ""}{canWrite ? `Reopen it to pick the work back up in ${back?.name ?? "an earlier stage"}.` : h.empty ? "Nothing more is planned." : "The full handover is under Normalize."}</p>
@@ -185,8 +197,13 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
   const proposed = approved ? [] : options.filter((i) => i.status === "proposed");
   const files = items.filter((i) => i.kind === "file_request" && i.status !== "done");
   const mine = items.filter((i) => i.assigneeId === me.user.id && i.status !== "done");
+  const handover = items.filter((i) => i.kind === "handoff");
+  const unsigned = handover.filter((i) => !i.fields.accepted);
   const deciders = p.people.filter((x) => x.role === "decision_maker").map((x) => names.get(x.userId) ?? "the decision maker");
   // Moving on past Decide needs an approved option (or a reason, given on the board)
+  // neon1 runs the stages of a client's project: Next step offers the move to neon1 (and to anyone in
+  // neon1's own organization), and tells a client who has the work
+  const drives = canWrite && (me.operator || isOwnOrg(org.slug));
   const gated = Boolean(ahead) && decideAt >= 0 && at <= decideAt && org.stages.indexOf(ahead!) > decideAt && !approved;
   const nextName = ahead?.name;
   // The most pressing step first: a decision, then files, then the caller's own work, then the stage
@@ -200,13 +217,15 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
   const unissued = !approved && proposed.length > 0 && (!cur || changedSince(cur.p, items).any);
   // Money first once anything is billed: the client's open invoices, neon1's drafts to check and issue
   const today = todayIn(org.timeZone);
-  const owed = items.filter((i) => i.kind === "invoice" && balanceOf(i, items) > 0);
+  // (an invoice a bank payment already covers asks for nothing while the transfer clears)
+  const owed = items.filter((i) => i.kind === "invoice" && payableOn(i, items) > 0);
   const drafts = items.filter((i) => i.kind === "invoice" && i.status === "draft");
   const overdue = owed.filter((i) => invoiceState(i, items, today) === "overdue");
   if (!me.operator && owed.length) {
-    const first = overdue[0] ?? owed[0]!;
+    const refused = owed.find((i) => failedOn(i, items));
+    const first = refused ?? overdue[0] ?? owed[0]!;
     const f = InvoiceFields.parse(first.fields);
-    text = <>{overdue.length ? <>Invoice {f.number} is <b>overdue</b>: </> : <>Invoice {f.number} is ready: </>}{dollars(balanceOf(first, items))}, due {dateLabel(f.dueDate)}.{owed.length > 1 ? ` ${owed.length - 1} more ${owed.length === 2 ? "is" : "are"} open.` : ""}</>;
+    text = <>{refused ? <>The bank payment on invoice {f.number} <b>didn't go through</b>, so it's still owed: </> : overdue.length ? <>Invoice {f.number} is <b>overdue</b>: </> : <>Invoice {f.number} is ready: </>}{dollars(payableOn(first, items))}, due {dateLabel(f.dueDate)}.{owed.length > 1 ? ` ${owed.length - 1} more ${owed.length === 2 ? "is" : "are"} open.` : ""}</>;
     action = { to: `${base}/execute#billing`, label: "See and pay" };
   } else if (me.operator && drafts.length) {
     text = <>{drafts.length === 1 ? `A ${String(drafts[0]!.fields.type)} invoice is` : `${drafts.length} invoices are`} drafted. Check {drafts.length === 1 ? "it" : "them"}, then issue.</>;
@@ -216,7 +235,7 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
     action = { to: `${base}/needs#options`, label: cur ? `Issue r${cur.p.rev + 1}` : "Issue the proposal" };
   } else if (proposed.length && canApprove(actor, access, p.people, isOwnOrg(org.slug)).ok) {
     if (ready.length && fresh) text = <>Choose an option: {ready.length} {ready.length === 1 ? "is" : "are"} ready for your approval in Proposal {proposalRef(cur!.p.number, cur!.p.rev)}.</>;
-    else if (cur && !fresh) text = <>The estimates in Proposal {proposalRef(cur.p.number, cur.p.rev)} are due a price check. Ask neon1 to refresh them, then choose.</>;
+    else if (cur && !fresh) text = <>The prices in Proposal {proposalRef(cur.p.number, cur.p.rev)} are due a price check. Ask neon1 to refresh them, then choose.</>;
     else text = <>neon1 is preparing the proposal. You can read the options now and approve one once it's issued.</>;
     action = { to: `${base}/needs#options`, label: "Compare options" };
   } else if (proposed.length) {
@@ -225,23 +244,30 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
   } else if (files.length && !me.operator) {
     text = <>Send {files.length} {files.length === 1 ? "file" : "files"} so the work can go on.</>;
     action = { to: `${base}/needs#files`, label: "Upload" };
+  } else if (handover.length && unsigned.length && handover.every((i) => i.status === "done") && !me.operator && canApprove(actor, access, p.people, isOwnOrg(org.slug)).ok) {
+    // Every handover step is done: the decision maker's one signature accepts them
+    text = <>Every handover step is done. Check them, then accept the handover with one signature.</>;
+    action = { to: `${base}/normalize`, label: "Review and accept" };
   } else if (mine.length) {
     text = <>You have {mine.length} open {mine.length === 1 ? "item" : "items"} here.</>;
     action = { to: `${base}/${layerSlug(KIND_LAYER[mine[0]!.kind])}#item-${mine[0]!.id}`, label: "Open" };
   } else if (approved && decideAt >= 0 && at <= decideAt && ahead) {
     // The decision is made, so Decide is done: the step is moving on
-    text = <><b>{approved.title}</b> is approved. {canWrite ? <>Next, move the project to <b>{nextName}</b>.</> : <>Next, neon1 moves the project to <b>{nextName}</b>.</>}</>;
-    if (canWrite) move = ahead;
+    text = <><b>{approved.title}</b> is approved. {drives ? <>Next, move the project to <b>{nextName}</b>.</> : <>Next, neon1 moves the project to <b>{nextName}</b>.</>}</>;
+    if (drives) move = ahead;
   } else if (me.operator && canWrite && !options.length && at >= 0 && decideAt >= 0 && at <= decideAt && at >= decideAt - 1) {
     text = <>Add options for the client to compare and approve.</>;
     action = { to: `${base}/needs#options`, label: "Add options" };
   } else if (me.operator && canWrite && !approved && options.length && !proposed.length && at <= decideAt) {
     text = <>Share an option with the client so they can approve it.</>;
     action = { to: `${base}/needs#options`, label: "Open options" };
+  } else if (stage?.exit && !drives && !me.operator) {
+    // A client reads where the work stands and who has it; nothing here is theirs to do
+    text = <><b>{stage.name}</b> is with neon1. It's done when: {stage.exit.charAt(0).toLowerCase() + stage.exit.slice(1).replace(/\.$/, "")}.{ahead && !gated ? <> Then neon1 moves the project to <b>{nextName}</b>.</> : ""} Nothing needs you right now.</>;
   } else if (stage?.exit) {
-    text = <>To finish <b>{stage.name}</b>: {stage.exit.charAt(0).toLowerCase() + stage.exit.slice(1).replace(/\.$/, "")}.{canWrite && ahead && !gated ? <> When it is, move it to <b>{nextName}</b>.</> : ""}</>;
-    if (canWrite && !gated) move = ahead;
-  } else if (ahead && canWrite && !gated) {
+    text = <>To finish <b>{stage.name}</b>: {stage.exit.charAt(0).toLowerCase() + stage.exit.slice(1).replace(/\.$/, "")}.{drives && ahead && !gated ? <> When it is, move it to <b>{nextName}</b>.</> : ""}</>;
+    if (drives && !gated) move = ahead;
+  } else if (ahead && drives && !gated) {
     text = <>When <b>{stage?.name ?? "this stage"}</b> is done, move the project to <b>{nextName}</b>.</>;
     move = ahead;
   } else {
@@ -672,7 +698,7 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
               ))}</div> : null
             ) : (
               <div>{list.map((i) => (
-                <ItemRow key={i.id} item={i} path={path} marker={edits.find((e) => e.recordId === i.id)} onToggle={CHECKABLE.has(kind) && canWrite ? () => void patch(i, { status: i.status === "done" ? "open" : "done" }) : undefined}
+                <ItemRow key={i.id} item={i} path={path} marker={edits.find((e) => e.recordId === i.id)} locked={kind === "handoff" && Boolean(i.fields.accepted)} onToggle={CHECKABLE.has(kind) && canWrite ? () => void patch(i, { status: i.status === "done" ? "open" : "done" }) : undefined}
                   extra={kind === "file_request" ? <FileAsk item={i} docs={docs.filter((d) => d.itemId === i.id)} />
                     : kind === "discovery" && !i.body.trim() && canWrite ? <Answer question={i.title} onSave={(text) => void patch(i, { body: text, status: "done" })} />
                     : kind === "handoff" ? <Accept item={i} path={path} project={project} />
@@ -681,12 +707,16 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
                     : undefined} />
               ))}</div>
             )}
+            {/* Once every handover step is done, the decision maker accepts them all with one signature */}
+            {kind === "handoff" && <AcceptHandover steps={list} path={path} project={project} />}
             {/* Anyone may add a request; options come from neon1; everything else from editors */}
             {(kind === "request" || (canWrite && (kind !== "option" || me.operator))) && <AddItem kind={kind} path={path} taken={list.map((i) => i.title)} decided={Boolean(currentDecision(items).option)} />}
           </section>
         );
       })}
-      {/* Execute ends with the project's invoices: Pay for the client, drafts and payments for neon1 */}
+      {/* Execute ends with the money: hours logged against an estimate, then the project's invoices
+          (Pay for the client, drafts and payments for neon1) */}
+      {layer === "execution" && <Hours items={items} path={path} />}
       {layer === "execution" && <Invoices items={items} path={path} project={project} />}
       {/* Every file filed under this layer of the project; anyone in the organization can add one */}
       <section className="kind-group">
@@ -715,7 +745,7 @@ function FileAsk({ item, docs }: { item: Item; docs: DocumentRecord[] }) {
 
 
 /** One item in a list: check it off, or tap it to open its panel with details and comments */
-function ItemRow({ item, path, marker, onToggle, extra }: { item: Item; path: string; marker?: EditMarker; onToggle?: () => void; extra?: ReactNode }) {
+function ItemRow({ item, path, marker, onToggle, locked, extra }: { item: Item; path: string; marker?: EditMarker; onToggle?: () => void; locked?: boolean; extra?: ReactNode }) {
   const { org } = useOrg();
   const me = useSession();
   const members = useMembers(org.id);
@@ -727,7 +757,8 @@ function ItemRow({ item, path, marker, onToggle, extra }: { item: Item; path: st
   return (
     <div className="item" id={`item-${item.id}`}>
       {/* A checkbox for checkable kinds, an empty cell otherwise */}
-      {onToggle ? <input type="checkbox" checked={item.status === "done"} onChange={onToggle} aria-label={`Done: ${item.title}`} /> : <span style={{ width: 18 }} />}
+      {/* A step accepted with a signature stays ticked: the box shows it and no longer changes */}
+      {locked ? <input type="checkbox" checked disabled aria-label={`Done and accepted: ${item.title}`} /> : onToggle ? <input type="checkbox" checked={item.status === "done"} onChange={onToggle} aria-label={`Done: ${item.title}`} /> : <span style={{ width: 18 }} />}
       <div>
         <button type="button" className={`item-open title${item.status === "done" ? " is-done" : ""}`} onClick={() => setOpen(true)}>{item.title}</button>
         {item.body && <div className="body clamp">{item.body}</div>}
@@ -969,6 +1000,7 @@ function DecisionCard({ d, names, superseded }: { d: Item; names?: Map<string, s
         <div className="small" style={{ margin: "6px 0 0" }}>
           {(f.terms.cost || f.terms.timeline) && <div className="mono">Agreed: {[f.terms.cost, f.terms.timeline].filter(Boolean).join(" · ")}</div>}
           {f.terms.body && <p style={{ margin: "4px 0 0", whiteSpace: "pre-wrap" }}>{f.terms.body}</p>}
+          <PriceBasis terms={f.terms as Priced} />
         </div>
       ) : (
         <p className="small muted" style={{ margin: "6px 0 0" }}>This decision was recorded before 1NEON kept a copy of the approved terms, so only the option and version are on record.</p>
@@ -1014,7 +1046,7 @@ function ProposalStrip({ all, path, project, decider }: { all: Item[]; path: str
   const askRefresh = () => run(async () => {
     try {
       await api(`${path}/proposals/${cur!.id}/refresh`, { method: "POST" });
-      toast("neon1 is asked to refresh the estimates");
+      toast("neon1 is asked to refresh the prices");
     } catch (e) {
       toast(problem(e));
     }
@@ -1034,7 +1066,7 @@ function ProposalStrip({ all, path, project, decider }: { all: Item[]; path: str
         <>
           <div><b>Proposal {proposalRef(cur.p.number, cur.p.rev)}</b> <span className="small muted">issued {dateLabel(cur.p.issuedAt.slice(0, 10))}{cur.p.issuerName ? ` by ${cur.p.issuerName}` : ""} · estimates checked {dateLabel(cur.p.issuedAt.slice(0, 10))}, recheck after {dateLabel(cur.p.checkBy)}</span></div>
           {cur.p.note && <div className="small">What changed: {cur.p.note}</div>}
-          {stale && <div className="small"><span className="tag warn">prices may have changed</span> Approval waits until neon1 refreshes the estimates.{cur.p.refreshAsked ? ` ${cur.p.refreshAsked.name} asked for a refresh ${ago(cur.p.refreshAsked.at)}.` : ""}</div>}
+          {stale && <div className="small"><span className="tag warn">prices may have changed</span> Approval waits until neon1 refreshes the prices.{cur.p.refreshAsked ? ` ${cur.p.refreshAsked.name} asked for a refresh ${ago(cur.p.refreshAsked.at)}.` : ""}</div>}
           {changes?.any && <div className="small">Changed since r{cur.p.rev}{changes.edited.length ? `: ${named(changes.edited)} edited` : ""}{changes.added.length ? `${changes.edited.length ? ";" : ":"} ${named(changes.added)} added` : ""}{changes.removed.length ? `; ${changes.removed.map((o) => o.title).join(", ")} taken back` : ""}. {mayIssue ? "Issue the next revision to share it for approval." : "neon1 issues the next revision for approval."}</div>}
         </>
       ) : (
@@ -1051,7 +1083,7 @@ function ProposalStrip({ all, path, project, decider }: { all: Item[]; path: str
       </div>
       <Dialog open={issuing} onClose={() => setIssuing(false)} label="Issue the proposal">
         <h2>{cur ? `Issue revision ${cur.p.rev + 1}?` : "Issue the proposal?"}</h2>
-        <p className="small muted">This freezes a copy of the proposal as it is now, with an ID on every option, and tells the client. Estimates are marked checked today and due a recheck in 30 days. Earlier revisions stay readable.</p>
+        <p className="small muted">This freezes a copy of the proposal as it is now, with an ID on every option, and tells the client. Prices are marked checked today and due a recheck in 30 days. Earlier revisions stay readable.</p>
         <label htmlFor="iss-note">What changed (optional)</label>
         <textarea id="iss-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} placeholder={cur ? "e.g. prices rechecked; option B adds a scanner" : "e.g. first issue"} />
         <div className="actions">
@@ -1156,9 +1188,13 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
               {/* The card shows the first paragraph; the panel and the proposal show every detail */}
               {o.body && <p className="small muted" style={{ marginTop: 0, whiteSpace: "pre-wrap" }}>{o.body.split(/\n\s*\n/)[0]}</p>}
               {f.cost && <p className="mono small" style={{ margin: "0 0 8px" }}>{f.cost}{f.timeline ? ` · ${f.timeline}` : ""}{DEMO && <span className="tag" style={{ marginLeft: 6 }}>illustrative</span>}</p>}
-              {(f.hours || f.outsideCosts) && <p className="small muted" style={{ margin: "0 0 8px" }}>{[f.hours && `neon1's time: ${f.hours}`, f.outsideCosts && `Paid directly: ${f.outsideCosts}`].filter(Boolean).join(" · ")}</p>}
+              {(f.hours || f.outsideCosts) && <p className="small muted" style={{ margin: "0 0 8px" }}>{[f.hours && `neon1's time: ${f.hours}${f.rateCents && f.pricing === "estimate" ? ` at ${wholeDollars(f.rateCents)} an hour` : ""}`, f.outsideCosts && `Paid directly: ${f.outsideCosts}`].filter(Boolean).join(" · ")}</p>}
               {f.purchases.length > 0 && <p className="small muted" style={{ margin: "0 0 8px" }}>To buy: {f.purchases.map((x) => `${x.name}${x.estimate ? ` (${x.estimate})` : ""}${x.buyer === "neon1" ? ", neon1 buys" : ""}`).join("; ")}</p>}
               <CostSplit cost={f.cost} />
+              {/* The reason behind the recommendation, or when a different option is the better pick */}
+              {f.why && <p className="small option-why"><b>{f.recommended ? "Why neon1 recommends it" : "When to pick it"}:</b> {f.why}</p>}
+              {/* The price is never a bare number: what kind it is, the hours behind it, when it's paid */}
+              <PriceBasis terms={f} />
               {/* Cost, quality, and effort, scored so more bars is always better: neon1's own judgment */}
               <p className="assess-h">neon1's assessment</p>
               <Meter label="Cost" value={f.costScore} />
@@ -1179,7 +1215,7 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
       </div>
       {/* What the scores mean, once for all the options */}
       <p className="small muted assess-rubric">
-        <b>neon1's assessment</b>, from 1 to 5, where more filled dots is always better. <b>Cost</b>: the total cost. <b>Quality</b>: how fully it meets the agreed requirements. <b>Effort</b>: your team's effort to adopt and run it. The written price on each option is the estimate you'd accept{DEMO ? "; every figure in this demo is illustrative" : ""}.
+        <b>neon1's assessment</b>, from 1 to 5, where more filled dots is always better. <b>Cost</b>: the total cost. <b>Quality</b>: how fully it meets the agreed requirements. <b>Effort</b>: your team's effort to adopt and run it. The written price on each option is the price you'd accept{DEMO ? "; every figure in this demo is illustrative" : ""}.
       </p>
       {opened && <ItemPanel item={opened} label="Option" path={path} open onClose={() => setOpenId(undefined)} />}
       {/* Approval restates exactly what's being accepted, so nobody recalls terms from another screen */}
@@ -1189,7 +1225,8 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
           <dl className="terms-list">
             <dt>Option</dt><dd><b>{approving.title}</b>{aCode && <span className="opt-code"> · {aCode}</span>}</dd>
             {cur && <><dt>From</dt><dd>Proposal {proposalRef(cur.p.number, cur.p.rev)}, issued {dateLabel(cur.p.issuedAt.slice(0, 10))}</dd></>}
-            <dt>Estimate</dt><dd>{a.cost || "not stated"}<CostSplit cost={a.cost} /></dd>
+            <dt>Price</dt><dd>{a.cost || "not stated"}<CostSplit cost={a.cost} />{priceOf(a) && <div className="small muted">{priceMeaning(priceOf(a)!)}</div>}</dd>
+            {priceOf(a) && <><dt>When you pay</dt><dd>{paymentPlan(priceOf(a)!).map((l) => <div key={l}>{l}</div>)}</dd></>}
             {a.timeline && <><dt>Timeline</dt><dd>{a.timeline}</dd></>}
             {a.hours && <><dt>neon1's time</dt><dd>{a.hours}</dd></>}
             {a.outsideCosts && <><dt>Paid directly by you</dt><dd>{a.outsideCosts}</dd></>}
@@ -1201,7 +1238,7 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
         <textarea id="cond" value={conditions} onChange={(e) => setConditions(e.target.value)} maxLength={2000} placeholder="e.g. only if the work happens after 6pm" />
         {neon1Buys.length > 0 && <p className="small">Signing also agrees that neon1 buys {neon1Buys.map((x) => x.name).join(" and ")} for you and is paid back at cost, with the receipt.</p>}
         {signed ? <SignBox id="approve-sign" value={sign} onChange={setSign} /> : <AgreementNeeded />}
-        <p className="small muted">Signing approves this option's scope and estimate under your service agreement. 1NEON keeps a copy of these terms with your signature, who signed and when; none of it can be edited afterwards. Invoices follow as the proposal says.</p>
+        <p className="small muted">Signing approves this option's scope and price under your service agreement. 1NEON keeps a copy of these terms with your signature, who signed and when; none of it can be edited afterwards. Invoices follow as the proposal says.</p>
         <div className="actions">
           <button className="btn btn-primary" disabled={!signed || !signReady(sign)} onClick={() => void approve()}>Sign and approve {aCode ?? ""}</button>
           <button className="btn btn-ghost" onClick={() => setApproving(undefined)}>Cancel</button>
@@ -1293,7 +1330,9 @@ function Accept({ item, path, project }: { item: Item; path: string; project: Pr
   const accepted = f.success ? f.data.accepted : undefined;
   if (accepted) return <p className="accepted-note">Accepted by {accepted.name}, {dateLabel(accepted.at.slice(0, 10))}{accepted.note ? `: ${accepted.note}` : ""}{accepted.signature ? `, signed "${accepted.signature.typedName}"` : ""}</p>;
   const decider = canApprove({ userId: me.user.id, operator: me.operator, strongSession: false }, access, project.people, isOwnOrg(org.slug)).ok;
-  if (!decider) return null;
+  // A step already ticked waits for the one signature under the list; this accepts a step that isn't
+  // done yet, on its own, which also marks it done
+  if (!decider || item.status === "done") return null;
   const accept = async () => {
     try {
       await api(`${path}/items/${item.id}/accept`, { method: "POST", body: { version: item.version, note, signature: { typedName: sign.typedName.trim(), consent: sign.consent } } });
@@ -1314,6 +1353,55 @@ function Accept({ item, path, project }: { item: Item; path: string; project: Pr
       </div>
     </form>
   ) : <button type="button" className="chip" onClick={() => setOpen(true)}>Check it and accept</button>;
+}
+
+
+/**
+ * Under the handover steps, for the decision maker: once every step is done, one signature accepts
+ * them all (each step keeps its own signed record). Until then it says how many steps are left
+ */
+function AcceptHandover({ steps, path, project }: { steps: Item[]; path: string; project: Project }) {
+  const { org, access } = useOrg();
+  const me = useSession();
+  const toast = useToast();
+  const refresh = useRefresh(org.id);
+  const [note, setNote] = useState("");
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [sign, setSign] = useState<SignValue>({ typedName: "", consent: false });
+  const waiting = steps.filter((i) => !i.fields.accepted);
+  const left = steps.filter((i) => i.status !== "done").length;
+  const decider = canApprove({ userId: me.user.id, operator: me.operator, strongSession: false }, access, project.people, isOwnOrg(org.slug)).ok;
+  if (!steps.length || !waiting.length) return steps.length ? <p className="accepted-note handover-all">The handover is accepted: every step is signed for.</p> : null;
+  if (!decider) return null;
+  if (left) return <p className="small muted handover-all">When all {steps.length} steps are done, you can accept the handover with one signature. {left} to go.</p>;
+  const accept = async () => {
+    setBusy(true);
+    try {
+      await api(`${path}/handover/accept`, { method: "POST", body: { note, signature: { typedName: sign.typedName.trim(), consent: sign.consent } } });
+      toast("Handover accepted");
+      setOpen(false);
+    } catch (e) {
+      toast(problem(e));
+    }
+    setBusy(false);
+    refresh();
+  };
+  return (
+    <div className="handover-all card">
+      <p style={{ margin: 0 }}><b>Every step is done.</b> Accept the handover with one signature: it signs for {waiting.length === steps.length ? `all ${steps.length} steps` : `the ${waiting.length} ${waiting.length === 1 ? "step" : "steps"} not yet accepted`}, and neon1 prepares the final invoice.</p>
+      {open ? (
+        <form className="accept-form" onSubmit={(e) => { e.preventDefault(); if (signReady(sign) && !busy) void accept(); }}>
+          <input aria-label="What you checked (optional)" placeholder="What you checked (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} />
+          <SignBox id="accept-handover" value={sign} onChange={setSign} />
+          <div className="line">
+            <button className="btn btn-primary btn-sm" disabled={!signReady(sign) || busy}>Sign and accept the handover</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+          </div>
+        </form>
+      ) : <div className="actions" style={{ marginTop: 8 }}><button type="button" className="btn btn-primary btn-sm" onClick={() => setOpen(true)}>Accept the handover</button></div>}
+    </div>
+  );
 }
 
 

@@ -509,9 +509,9 @@ export class Repo {
 
   // --- Audit ---------------------------------------------------------------
 
-  // Audit rows sort by time within the tenant and expire after three years
-  auditOp(e: Omit<AuditEvent, "id" | "at">): WriteOp {
-    const at = new Date().toISOString();
+  // Audit rows sort by time within the tenant and expire after three years. `at` is passed only for a
+  // moment already fixed elsewhere (a proposal's issue time, the seeded examples); everything else is now
+  auditOp(e: Omit<AuditEvent, "id" | "at">, at = new Date().toISOString()): WriteOp {
     const id = newId();
     const ttl = Math.floor(Date.now() / 1000) + 3 * 365 * 24 * 3600;
     return { put: { PK: keys.audit(e.tenantId), SK: `${at}#${id}`, type: "audit", id, at, ttl, ...e }, guard: { always: true } };

@@ -2,7 +2,7 @@
 // body parsing, permission checks, and small pure helpers.
 
 
-import { KIND_LAYER, can, itemFields, type AccessLevel, type Action, type Actor, type Item, type Tenant, type User } from "@1neon/domain";
+import { KIND_LAYER, alignPrice, can, itemFields, type AccessLevel, type Action, type Actor, type Item, type Tenant, type User } from "@1neon/domain";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
@@ -78,7 +78,8 @@ export function validateFields(kind: Item["kind"], fields: Record<string, unknow
   if (!schema) return fields;
   const r = schema.safeParse(fields);
   if (!r.success) fail(400, "invalid", r.error.issues.map((i) => `fields.${i.path.join(".")}: ${i.message}`).join("; "));
-  return r.data as Record<string, unknown>;
+  // An estimate's written cost and hours always follow its numbers, however the form was filled in
+  return (kind === "option" ? alignPrice(r.data as Record<string, unknown>) : r.data) as Record<string, unknown>;
 }
 
 

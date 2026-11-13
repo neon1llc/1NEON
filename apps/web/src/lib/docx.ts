@@ -4,7 +4,7 @@
 // (neon1-proposal-id), and the header on every page.
 
 
-import { findProposalRef, proposalFileName, proposalRef, type ProposalFields, type ProposalSnapshot } from "@1neon/domain";
+import { findProposalRef, hoursRange, hoursText, paymentPlan, priceMeaning, priceOf, proposalFileName, proposalRef, type ProposalFields, type ProposalSnapshot } from "@1neon/domain";
 
 
 // The fictional-sample line, on screen and on every printed page of a Demo proposal
@@ -45,7 +45,7 @@ export async function downloadDocx(p: Pick<ProposalFields, "number" | "rev" | "i
 
   const children: (InstanceType<typeof Paragraph> | InstanceType<typeof Table>)[] = [
     new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun({ text: `${s.orgName}: ${s.project.name}`, bold: true })] }),
-    para(`Proposal ${ref} · Issued ${longDate(p.issuedAt)} · Estimates checked ${longDate(p.issuedAt)}; recheck after ${longDate(p.checkBy)}`, { color: "555555" }),
+    para(`Proposal ${ref} · Issued ${longDate(p.issuedAt)} · Prices checked ${longDate(p.issuedAt)}; recheck after ${longDate(p.checkBy)}`, { color: "555555" }),
   ];
   if (opts.fictional) children.push(para(opts.fictional, { italics: true, color: "8A5A00" }));
   if (p.note) children.push(para(`What changed in this revision: ${p.note}`, { italics: true }));
@@ -73,16 +73,25 @@ export async function downloadDocx(p: Pick<ProposalFields, "number" | "rev" | "i
     children.push(new Paragraph({ heading: HeadingLevel.HEADING_3, spacing: { before: 200 }, children: [new TextRun({ text: `${o.code}  `, color: "777777", size: 18 }), new TextRun({ text: o.title, bold: true }), new TextRun({ text: f.recommended ? "  (recommended)" : "" })] }));
     children.push(...body(o.body));
     if (f.result) children.push(para(`Target result: ${f.result}`));
-    children.push(para([f.hours && `neon1's time: ${f.hours}`, f.timeline && `Timeline: ${f.timeline}`, f.cost && `Estimate: ${f.cost}`, f.outsideCosts && `Paid directly by you: ${f.outsideCosts}`].filter(Boolean).join(" · "), { size: 18 }));
+    children.push(para([f.hours && `neon1's time: ${f.hours}`, f.timeline && `Timeline: ${f.timeline}`, f.cost && `Price: ${f.cost}`, f.outsideCosts && `Paid directly by you: ${f.outsideCosts}`].filter(Boolean).join(" · "), { size: 18 }));
+    if (f.why) children.push(para(`${f.recommended ? "Why I recommend it" : "When to pick it"}: ${f.why}`));
+    // The price, opened up: what kind it is, the work behind the hours, and when it's paid
+    const price = priceOf(f);
+    if (price) {
+      children.push(sub("How the price adds up"), para(priceMeaning(price)));
+      const basis = f.basis ?? [];
+      if (basis.length) children.push(table([["Work", "Expected"], ...basis.map((b) => [b.work, hoursText(b.hours)]), [`Total${price.kind === "estimate" && price.hoursLow !== price.hoursHigh ? `, within a range of ${hoursRange(price)}` : ""}`, hoursText(basis.reduce((n, b) => n + b.hours, 0))]]));
+      children.push(para(`When you pay: ${paymentPlan(price).join("; ")}.`));
+    }
     if (f.purchases.length) children.push(sub("Expected purchases"), table([["Item", "Estimate", "Bought by", "Why"], ...f.purchases.map((x) => [x.example ? `${x.name} (${x.example})` : x.name, x.estimate || "—", x.buyer === "neon1" ? "neon1, paid back at cost" : "You", x.why || ""])]));
   }
 
-  children.push(bar("Cost estimates"), table([["Option", "neon1's time", "Timeline", "Estimate", "Paid directly by you"], ...s.options.map((o) => [`${o.code} ${o.title}`, o.fields.hours || "—", o.fields.timeline || "—", o.fields.cost || "—", o.fields.outsideCosts || "None"])]));
-  children.push(para("Estimates are for the work described. Accounts and subscriptions are in your name and billed to you directly. Items to buy are bought by you unless you agree, with your initials, that neon1 buys them; those are paid back at cost, with the receipt.", { size: 18 }));
+  children.push(bar("Costs"), table([["Option", "neon1's time", "Timeline", "Price", "Paid directly by you"], ...s.options.map((o) => [`${o.code} ${o.title}`, o.fields.hours || "—", o.fields.timeline || "—", o.fields.cost || "—", o.fields.outsideCosts || "None"])]));
+  children.push(para("Prices are for the work described. A fixed price is the whole price for that work. An estimate is billed for the hours worked, at the rate shown, and never above its high end unless you approve a change first; every hour is listed in 1NEON as it's logged. Accounts and subscriptions are in your name and billed to you directly. Items to buy are bought by you unless you agree, with your initials, that neon1 buys them; those are paid back at cost, with the receipt.", { size: 18 }));
 
   children.push(bar("Comments and agreement"));
-  children.push(bullet(`Estimates were checked on ${longDate(p.issuedAt)}. After ${longDate(p.checkBy)}, ask neon1 to refresh them before choosing; refreshing issues the next revision.`));
-  children.push(bullet("Choosing an option accepts its scope and estimate. Work begins under our service agreement, signed once before any paid work, which covers payment, ownership, confidentiality, and how either of us can end the work."));
+  children.push(bullet(`Prices were checked on ${longDate(p.issuedAt)}. After ${longDate(p.checkBy)}, ask neon1 to refresh them before choosing; refreshing issues the next revision.`));
+  children.push(bullet("Choosing an option accepts its scope and price. Work begins under our service agreement, signed once before any paid work, which covers payment, ownership, confidentiality, and how either of us can end the work."));
   children.push(bullet("Neither of us adds work or cost without a written change, which becomes the next revision."));
   children.push(bullet("To suggest changes, mark up this document and upload it to the project's Files; neon1 answers with the next revision."));
   if (opts.accepted) {

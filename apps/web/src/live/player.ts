@@ -99,6 +99,26 @@ function visible(el: Element) {
  * function that finds the element itself (for things inside a pretend email) */
 export type Target = string | { sel: string; text?: string | RegExp; within?: string; nth?: number } | (() => HTMLElement | null | undefined);
 
+/** Why a target can't be found, for the console: nothing matches, or what keeps the first match out of reach */
+function missing(t: Target): string {
+  if (typeof t === "function") return "";
+  const sel = typeof t === "string" ? t : t.sel;
+  const all = [...document.querySelectorAll<HTMLElement>(sel)];
+  const at = location.pathname.replace(/^\/1NEON\/live/, "") || "/";
+  // With nothing to match, what the page is showing says why: still loading, an error, another page
+  const showing = (document.querySelector<HTMLElement>("#main") ?? document.body).innerText.replace(/\s+/g, " ").trim().slice(0, 90);
+  if (!all.length) return ` (nothing matches on ${at}, which shows "${showing}")`;
+  const el = all[0]!;
+  const r = el.getBoundingClientRect();
+  const shut = el.closest("[inert]");
+  const cs = getComputedStyle(el);
+  const why = r.width === 0 || r.height === 0 ? "has no size"
+    : shut && !shut.hasAttribute("data-live-inert") ? `is inside an inert <${shut.tagName.toLowerCase()} class="${shut.className}">`
+    : cs.visibility === "hidden" || cs.display === "none" || Number(cs.opacity) <= 0.05 ? "is hidden by its style"
+    : `reads "${(el.innerText || "").trim().slice(0, 40)}"`;
+  return ` (${all.length} on ${at}; the first ${why})`;
+}
+
 /** The first visible element matching a target, or undefined */
 export function find(t: Target): HTMLElement | undefined {
   if (typeof t === "function") {
@@ -204,6 +224,26 @@ document.addEventListener("click", (e) => {
   e.stopPropagation();
   dismiss(d);
 }, true);
+
+// --- No slides out of sight ------------------------------------------------------------
+// A view transition draws its page a frame or more after the click. Out of sight the steps follow one
+// another in a few milliseconds, so the next page would be asked for first and the slide's page drawn
+// over it. While the player runs fast the browser's transitions are put away, and pages change at once
+
+type Slides = { startViewTransition?: unknown };
+// The browser's transition function while it's put away
+let held: unknown;
+function instant(on: boolean) {
+  const d = document as unknown as Slides;
+  if (on && d.startViewTransition) {
+    held = d.startViewTransition;
+    d.startViewTransition = undefined;
+  } else if (!on && held) {
+    d.startViewTransition = held;
+    held = undefined;
+  }
+}
+
 
 // --- Maria's thoughts ------------------------------------------------------------
 
@@ -382,7 +422,16 @@ export class Player {
   private prepared = false;
   private prepPath = "/";
   view: View;
-  fast = false;
+  // Setting up or skipping ahead, out of sight: steps don't wait to be watched. Nothing slides either
+  // (see instant), so each page is drawn the moment it's asked for
+  private quick = false;
+  get fast() {
+    return this.quick;
+  }
+  set fast(on: boolean) {
+    this.quick = on;
+    instant(on);
+  }
   // Set once playing begins; before that the portal stays as it loaded
   private started = false;
   // Set once any section has run: until then the page is exactly the first section's start, so there
@@ -590,7 +639,9 @@ export class Player {
     if (!engine) return;
     // A single chapter from the FAQs: set the story up to it once, out of sight, then sign Maria out, so
     // the show's own first section is her coming in the front door. That point is the show's start
-    if (this.prep && !this.prepared) {
+    // Setting up can stumble once (a page slow to arrive on a busy device): it starts over from the
+    // seed by itself, and only a second stumble shows the card
+    for (let tries = 0; this.prep && !this.prepared; tries++) {
       try {
         await this.restore(this.snaps.get(0)!);
         this.fast = true;
@@ -613,6 +664,7 @@ export class Player {
       } catch (e) {
         if (e instanceof Cut || token.cut) return;
         console.error(e);
+        if (tries === 0) continue;
         this.emit({ paused: true, skipping: false, failed: true, caption: "", note: "" });
         return;
       } finally {
@@ -797,7 +849,7 @@ export class Player {
         await tick();
         const el = find(t);
         if (el) return el;
-        if (p.clock() > end) throw new Error(`live: can't find ${typeof t === "function" ? "a target" : JSON.stringify(t)}`);
+        if (p.clock() > end) throw new Error(`live: can't find ${typeof t === "function" ? "a target" : JSON.stringify(t)}${missing(t)}`);
         await sleep(p.fast ? 12 : 60);
       }
     };
