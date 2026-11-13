@@ -8,6 +8,7 @@ import { BASE_PATH, devUser, liveEngine } from "../lib/api.ts";
 import { clearCache, navigate, refreshAll, REWIND } from "../lib/nav.ts";
 import { clearStep, session } from "../lib/signin.ts";
 import { endTour } from "../components/Help.tsx";
+import { pageScroller } from "../lib/edge.ts";
 import { keepAwake } from "./awake.ts";
 import { opening } from "./opening.ts";
 import { SHORTS } from "./shorts.ts";
@@ -49,7 +50,7 @@ export interface Show {
 export interface View {
   index: number;
   title: string;
-  /** The narration for what's on screen now, shown as a line at the bottom, like a film's subtitles */
+  /** The narration for what's on screen now, shown in the band under the controls */
   caption: string;
   /** The player's own state in words, shown in the bar ("Paused…", "Skipping ahead…"); empty while it plays */
   note: string;
@@ -259,7 +260,7 @@ class Thought {
   private w = 0;
   private h = 0;
   private barBottom = 0;
-  // The top of the narration line at the bottom of the screen, when one is showing
+  // The screen's bottom edge, which a thought stays above
   private floor = innerHeight;
   private on = false;
   constructor(who: string) {
@@ -277,9 +278,9 @@ class Thought {
     const r = this.el.getBoundingClientRect();
     this.w = r.width;
     this.h = r.height;
-    this.barBottom = document.querySelector(".live-bar")?.getBoundingClientRect().bottom ?? 0;
-    const sub = document.querySelector(".live-sub.on")?.getBoundingClientRect();
-    this.floor = sub && sub.height ? sub.top : innerHeight;
+    // The controls and the narration band under them are the ceiling; the screen's bottom is the floor
+    this.barBottom = (document.querySelector(".live-sub") ?? document.querySelector(".live-bar"))?.getBoundingClientRect().bottom ?? 0;
+    this.floor = innerHeight;
   }
   /** Show a new thought; it fades in, and the old one is gone */
   say(text: string, x: number, y: number) {
@@ -412,6 +413,8 @@ export class Player {
   private hovered: Element[] = [];
   // The last thought and when it appeared, so the next one waits until it can have been read
   private lastThought = { at: 0, read: 0 };
+  // When the narration last changed, and how long to let it be read before a thought appears
+  private lastCaption = { at: 0, read: 0 };
   // A thought on screen, and how many moves it has ridden along: it goes with the cursor to the one
   // thing it announces, then, once read, fades before the cursor moves on (see settleThought)
   private thinking = false;
@@ -597,9 +600,10 @@ export class Player {
     try { localStorage.setItem("1neon.liveSpeed", `2:${this.speed}`); } catch { /* private mode */ }
   }
   // The movements were tuned fast; 1x is what used to be 0.75x on the old scale (1.5 / 0.75 = 2), and
-  // every duration scales from there
+  // since 2026-11-13 another 15% calmer (2.3), so a first-time viewer reads the narration and the
+  // thought beside the cursor without hurrying. Every duration scales from here
   private pace(ms: number) {
-    return (ms * 2) / this.speed;
+    return (ms * 2.3) / this.speed;
   }
   toggle() {
     if (this.view.idle) return void this.start();
@@ -705,7 +709,7 @@ export class Player {
           devUser.set("");
           clearCache();
           navigate("/");
-          scrollTo({ top: 0 });
+          pageScroller().scrollTo({ top: 0 });
           await sleep(300);
           this.emit({ skipping: false, caption: "", note: "", progress: 0 });
           await opening(`${this.sections[i]!.id}-in`, "Maria opens 1NEON and signs in", this.sections[i]!.why ?? "Let me sign in to 1NEON.", path).run(this.stage(token));
@@ -803,7 +807,7 @@ export class Player {
     this.thinking = false;
     // Whoever was signed in at that point is signed in again (nobody, at the very start)
     devUser.set(s.who);
-    scrollTo({ top: 0 });
+    pageScroller().scrollTo({ top: 0 });
     this.unhover();
     clearCache();
     navigate(s.path);
@@ -902,7 +906,7 @@ export class Player {
     const reach = async (el: HTMLElement) => {
       await settleThought();
       const r0 = el.getBoundingClientRect();
-      const top = 70 + (document.querySelector(".live-bar")?.getBoundingClientRect().height ?? 0);
+      const top = 70 + ((document.querySelector(".live-sub") ?? document.querySelector(".live-bar"))?.getBoundingClientRect().bottom ?? 0);
       if (r0.top < top || r0.bottom > innerHeight - 70) {
         el.scrollIntoView({ block: "center", behavior: how() });
         await pause(560);
@@ -926,7 +930,14 @@ export class Player {
       /** Hold for a moment (skipped when catching up) */
       wait: async (ms: number) => { await pause(ms); },
       /** What's happening, shown in the controls */
-      say: async (caption: string) => { await tick(); if (!p.fast) { await settleThought(true); p.emit({ caption }); } },
+      say: async (caption: string) => {
+        await tick();
+        if (p.fast) return;
+        await settleThought(true);
+        p.emit({ caption });
+        // A thought waits until the new line has been seen, so the eye goes to one, then the other
+        p.lastCaption = { at: p.clock(), read: p.pace(500 + caption.length * 12) };
+      },
       /**
        * What Maria is thinking, beside the cursor. A new thought waits until the last one has been on
        * screen long enough to read, so quick actions never flash words past
@@ -934,7 +945,8 @@ export class Player {
       think: async (text: string) => {
         await tick();
         if (p.fast) return;
-        const left = p.lastThought.at + p.lastThought.read - p.clock();
+        // Never at the same moment as the narration, nor over a thought still being read
+        const left = Math.max(p.lastThought.at + p.lastThought.read, p.lastCaption.at + p.lastCaption.read) - p.clock();
         if (left > 0) await pause(left / p.pace(1));
         p.cursor!.thought.say(text, p.cursor!.x, p.cursor!.y);
         p.lastThought = { at: p.clock(), read: p.pace(450 + text.length * 22) };
@@ -1151,13 +1163,13 @@ export class Player {
       /** Scroll the page by some amount, smoothly */
       scroll: async (dy: number, after = 600) => {
         await tick();
-        scrollBy({ top: dy, behavior: how() });
+        pageScroller().scrollBy({ top: dy, behavior: how() });
         await pause(after);
       },
       /** Back to the top of the page */
       top: async () => {
         await tick();
-        scrollTo({ top: 0, behavior: how() });
+        pageScroller().scrollTo({ top: 0, behavior: how() });
         await pause(450);
       },
       /** Sign in as someone without the sign-in screen (between scenes of a short demo) */

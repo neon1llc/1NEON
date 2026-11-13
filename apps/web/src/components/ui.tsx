@@ -201,6 +201,17 @@ export function daysSince(iso: string) {
   return Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 86_400_000));
 }
 
+/** How long a project has been in its stage, in words: "since today", "for 1 day", "for 12 days" */
+export function inStageFor(iso: string) {
+  const n = daysSince(iso);
+  return n === 0 ? "since today" : `for ${n} day${n === 1 ? "" : "s"}`;
+}
+/** The same, compact, for lists and cards: "today", "1d", "12d" */
+export function stageAge(iso: string) {
+  const n = daysSince(iso);
+  return n === 0 ? "today" : `${n}d`;
+}
+
 
 // --- Toasts ----------------------------------------------------------------
 

@@ -36,7 +36,10 @@ const SIZES = {
   phone: { width: 390, height: 844 },
   small: { width: 360, height: 640 },
   landscape: { width: 844, height: 390 },
+  // An iPhone in DuckDuckGo: its user agent turns on the page that stays still while the body scrolls (lib/edge.ts)
+  ddg: { width: 390, height: 844 },
 };
+const DDG_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 DuckDuckGo/7 Safari/605.1.15";
 const shows = arg("shows", [...SHORTS, ...CHAPTERS].join(",")).split(",").filter(Boolean);
 const sizes = arg("sizes", "desktop,phone").split(",").filter(Boolean);
 const scenarios = arg("scenarios", "play").split(",").filter(Boolean);
@@ -279,7 +282,7 @@ const retried = [];
 /** One walkthrough, one screen size, one scenario, in a fresh browser profile at double speed */
 async function run({ show, size, scenario }, tries = RETRIES) {
   const name = `${show} · ${size} · ${scenario}`;
-  const ctx = await browser.newContext({ viewport: SIZES[size], ignoreHTTPSErrors: true, hasTouch: ["phone", "small", "landscape", "tablet"].includes(size) });
+  const ctx = await browser.newContext({ viewport: SIZES[size], ignoreHTTPSErrors: true, hasTouch: ["phone", "small", "landscape", "tablet", "ddg"].includes(size), ...(size === "ddg" ? { userAgent: DDG_UA } : {}) });
   await ctx.addInitScript((speed) => { try { localStorage.setItem("1neon.liveSpeed", `2:${speed}`); } catch { /* blocked */ } }, SPEED);
   const page = await ctx.newPage();
   const problems = [];

@@ -2,7 +2,7 @@
 // approving an option into an immutable decision, and the advisory edit markers.
 
 
-import { AGREEMENT_EDITION, AcceptInput, AgreeInput, ApproveInput, canonical, finalLines, refundCredit, priceOf, initialsOf, sha256Hex, signature, depositLines, InvoiceFields, CreateItemInput, IssueInput, changeRecord, itemChanges, assessed, completionAfter, priceCheckDue, proposalRef, resolveTiming, revisions, DecisionFields, Item, OptionFields, PRICE_CHECK_DAYS, PurchaseFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, todayIn, type Project } from "@1neon/domain";
+import { AGREEMENT_EDITION, AcceptInput, AgreeInput, ApproveInput, canonical, finalLines, lineage, refundCredit, priceOf, initialsOf, sha256Hex, signature, depositLines, InvoiceFields, CreateItemInput, IssueInput, changeRecord, itemChanges, assessed, completionAfter, priceCheckDue, proposalRef, resolveTiming, revisions, DecisionFields, Item, OptionFields, PRICE_CHECK_DAYS, PurchaseFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, todayIn, type Project } from "@1neon/domain";
 import type { Context } from "hono";
 import { z } from "zod";
 import { actorId, body, byRank, check, defined, fail, label, need, now, validateFields, who, type Env } from "../lib/http.ts";
@@ -205,10 +205,18 @@ export function itemRoutes(app: App, k: Kit) {
     check(canApprove(who(c).actor, c.get("access"), p.people, isOwnOrg(c.get("tenant").slug)));
     const option = await repo.getItem(p.tenantId, p.id, c.req.param("iid"));
     if (!option || option.kind !== "option") fail(404, "not_found", "That option no longer exists.");
-    if (option.status !== "proposed") fail(409, "not_proposed", option.status === "approved" ? "This option is already approved." : "Only an option shared for approval can be approved.");
+    const items = await repo.listItems(p.tenantId, p.id);
+    // Changing course: the decision in force is replaced by this one. An option an earlier change
+    // replaced can be chosen again; the one in force can't be approved twice
+    const current = currentDecision(items);
+    const again = option.status === "approved" && current !== undefined && current.fields.optionId !== option.id;
+    if (option.status !== "proposed" && !again) fail(409, "not_proposed", option.status === "approved" ? "This option is already approved." : "Only an option shared for approval can be approved.");
     const input = await body(c, ApproveInput);
     if (input.version !== option.version) fail(409, "conflict", "The option changed since you read it. Review it again before approving.", option);
-    const items = await repo.listItems(p.tenantId, p.id);
+    // Once the handover is accepted the work is finished, and the decision it finished stays
+    if (current && items.some((i) => i.kind === "handoff" && i.fields.accepted)) fail(409, "handover_accepted", "The handover was accepted, so this project's work is finished and its decision stays. Ask neon1 to start a new project for more work.");
+    // A change says why, in the decision maker's words; it's signed and kept with the new decision
+    if (current && input.reason.length < 3) fail(400, "reason_required", "Say why you're changing the decision. It's kept with the new one, so everyone can see what changed and why.");
     // The revision it's approved from: the latest issued one, which must hold this exact version
     const rev = revisions(items).at(-1);
     if (!rev) fail(409, "not_issued", "neon1 hasn't issued this proposal yet. Options can be approved once it is.");
@@ -230,7 +238,8 @@ export function itemRoutes(app: App, k: Kit) {
     const name = approver.name || approver.email;
     // The approver signs this option ID over a hash of exactly what they agreed to; when neon1 buys
     // items, the same signature agrees to pay them back at cost, and its initials go on each purchase
-    const signed = signature("approval", snap.code, await sha256Hex(canonical({ code: snap.code, proposal: rev.title, terms, conditions: input.conditions })), input.signature, { id: by, name, email: approver.email }, ts, from(c));
+    const changed = current ? { replaces: current.id, reason: input.reason } : {};
+    const signed = signature("approval", snap.code, await sha256Hex(canonical({ code: snap.code, proposal: rev.title, terms, conditions: input.conditions, ...changed })), input.signature, { id: by, name, email: approver.email }, ts, from(c));
     const initials = input.initials || initialsOf(input.signature.typedName);
     const decision = Item.parse({
       tenantId: p.tenantId,
@@ -241,7 +250,7 @@ export function itemRoutes(app: App, k: Kit) {
       body: input.conditions,
       status: "approved",
       rank: ts,
-      fields: DecisionFields.parse({ optionId: option.id, optionVersion: option.version, approvedBy: by, approvedAt: ts, conditions: input.conditions, terms, approverName: approver.name || undefined, approverEmail: approver.email, supersedes: earlier.length ? earlier : undefined, proposalId: rev.id, code: snap.code, initials: neon1Buys.length ? initials : undefined, signature: signed }),
+      fields: DecisionFields.parse({ optionId: option.id, optionVersion: option.version, approvedBy: by, approvedAt: ts, conditions: input.conditions, terms, approverName: approver.name || undefined, approverEmail: approver.email, supersedes: earlier.length ? earlier : undefined, reason: current ? input.reason : undefined, proposalId: rev.id, code: snap.code, initials: neon1Buys.length ? initials : undefined, signature: signed }),
       version: 1,
       createdAt: ts,
       updatedAt: ts,
@@ -261,15 +270,25 @@ export function itemRoutes(app: App, k: Kit) {
         version: 1, createdAt: ts, updatedAt: ts, updatedBy: by,
       });
     });
+    // A change drops neon1's unissued deposit drafts for the decision it replaces: nobody was asked
+    // for that money, and the new deposit takes their place
+    const replaced = current ? lineage(current, items) : new Set<string>();
+    const stale = items.filter((i) => i.kind === "invoice" && i.status === "draft" && i.fields.type === "deposit" && InvoiceFields.parse(i.fields).lines.some((l) => replaced.has(l.ref ?? "")));
+    const kept = items.filter((i) => !stale.includes(i));
     // A price in numbers (fixed, or an hourly estimate) asks for a deposit: neon1 gets a draft to check
-    // and issue, never sent on its own
-    const deposit = priceOf(of) ? draftInvoice(p, "deposit", depositLines(decision), ts, by) : undefined;
+    // and issue, never sent on its own. After a change, what was invoiced for the earlier decision
+    // counts toward it, so the draft asks only for the difference, or nothing
+    const deposit = priceOf(of) ? draftInvoice(p, "deposit", depositLines(decision, undefined, [...kept, decision]), ts, by) : undefined;
+    const was = current && (current.fields.code ? `${String(current.fields.code)} ` : "") + current.title.replace(/^Approved: /, "");
     await repo.table.write([
       repo.itemOp(approved, { version: option.version }),
       repo.itemOp(decision, { create: true }),
       ...buys.map((b) => repo.itemOp(b, { create: true })),
+      ...stale.map((i) => ({ delete: keys.item(p.tenantId, p.id, i.id), guard: { version: i.version } })),
       ...(deposit ? [repo.itemOp(deposit, { create: true })] : []),
-      repo.auditOp({ tenantId: p.tenantId, actorId: by, action: "decision.approved", target: decision.id, summary: `${p.key}: approved ${snap.code} "${option.title}" (version ${option.version}), signed by ${input.signature.typedName}` }),
+      current
+        ? repo.auditOp({ tenantId: p.tenantId, actorId: by, action: "decision.changed", target: decision.id, summary: `${p.key}: changed the decision from ${was} to ${snap.code} "${option.title}" (version ${option.version}), signed by ${input.signature.typedName}. Why: ${input.reason}` })
+        : repo.auditOp({ tenantId: p.tenantId, actorId: by, action: "decision.approved", target: decision.id, summary: `${p.key}: approved ${snap.code} "${option.title}" (version ${option.version}), signed by ${input.signature.typedName}` }),
     ]);
     await keep(`t/${p.tenantId}/p/${p.id}/decisions/${decision.id}.json`, decision);
     return c.json({ decision, option: approved, purchases: buys }, 201);
@@ -419,14 +438,15 @@ export function currentDecision<T extends Pick<Item, "kind" | "id" | "fields" | 
 /** A draft invoice for neon1 to check and issue; none when there is nothing to bill */
 /**
  * What neon1 gets a draft of when a handover is accepted: the final invoice for what's left on the
- * price or, when an estimate's hours came to less than the deposit, the credit that refunds the
- * difference, as the service agreement promises. Nothing when the work is already billed in full
+ * price or, when the work came to less than what was invoiced (an estimate's hours under the deposit,
+ * or a change to a smaller option), the credit that refunds the difference, as the service agreement
+ * promises. Nothing when the work is already billed in full
  */
 function closingDraft(p: Project, decision: Item, items: Item[], ts: string, by: string): Item | undefined {
   const final = draftInvoice(p, "final", finalLines(decision, items), ts, by);
   if (final) return final;
   const back = refundCredit(decision, items);
-  return back && draftInvoice(p, "credit", back.lines, ts, by, { appliesTo: back.appliesTo, note: "The work took fewer hours than the deposit covered, so the difference is refunded, as the service agreement says." });
+  return back && draftInvoice(p, "credit", back.lines, ts, by, { appliesTo: back.appliesTo, note: back.note });
 }
 
 export function draftInvoice(p: Project, type: "deposit" | "final" | "progress" | "reimbursement" | "retainer" | "credit", lines: InvoiceFields["lines"], ts: string, by: string, extra: Partial<InvoiceFields> = {}): Item | undefined {

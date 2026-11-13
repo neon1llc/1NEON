@@ -7,7 +7,10 @@
 /* --- Tokens for the live layer -------------------------------------------------
    Its z-indexes sit at the very top of the range, above the portal's tour (driver.js), so the
    cursor, thoughts, and controls are never dimmed under anything the story opens */
-:root { --live-bg: #0d0208; --live-ink: #d8f5e1; --live-hi: #9AFF9A; --live-glow: #6cffa8; --live-dim: #a3c2aa; --live-line: rgba(108, 255, 168, .35); --demo-h: 100px; }
+:root { --live-bg: #0d0208; --live-ink: #d8f5e1; --live-hi: #9AFF9A; --live-glow: #6cffa8; --live-dim: #a3c2aa; --live-line: rgba(108, 255, 168, .35); --demo-h: 100px;
+  /* The narration band under the bar: two lines' room, so a longer line never moves the page; the page starts below both */
+  --sub-h: 50px; --live-top: calc(var(--demo-h) + var(--sub-h)); }
+@media (max-width: 359px) { :root { --sub-h: 66px; } }
 
 
 /* --- The bar: content centered as one group, top to bottom --------------------- */
@@ -98,9 +101,9 @@
 
 
 /* --- Room for the bar above the portal ---------------------------------------- */
-body:has(.live-bar) { padding-top: var(--demo-h); }
-body:has(.live-bar) .side { top: var(--demo-h); }
-body:has(.live-bar) .top { top: var(--demo-h); }
+body:has(.live-bar) { padding-top: var(--live-top); }
+body:has(.live-bar) .side { top: var(--live-top); }
+body:has(.live-bar) .top { top: var(--live-top); }
 body:has(.live-bar) #root { cursor: default; }
 /* While playing, the portal takes no clicks; no hint follows the mouse around */
 .live-shield { position: fixed; inset: var(--demo-h) 0 0 0; z-index: 2147483639; cursor: default; }
@@ -119,20 +122,16 @@ body:has(.signin) .live-veil { background: var(--live-bg); }
 @media (prefers-reduced-motion: reduce) { .live-load { animation: none; opacity: 1; } .live-load-bar i { transition: none; } }
 
 
-/* --- The narration: one line at the bottom of the screen, like a film's subtitles ---------------
-   What's happening on screen, in type large enough to catch without looking for it. Above the phone's
-   tab bar; below the cursor and her thoughts, which stay clear of it (player.ts) */
-.live-sub { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); z-index: 2147483636; translate: -50% 0; width: max-content; max-width: min(760px, calc(100vw - 32px)); box-sizing: border-box; padding: 10px 18px 11px; border-radius: 12px;
-  background: rgba(13, 2, 8, .93); border: 1px solid var(--live-line); box-shadow: 0 10px 30px rgba(0, 0, 0, .28); color: #f1fff4; font: 500 16px/1.4 var(--sans, system-ui); text-align: center; text-wrap: balance; pointer-events: none;
-  opacity: 0; transform: translateY(6px); transition: opacity .25s ease, transform .25s ease; }
-.live-sub.on { opacity: 1; transform: none; }
-.live-sub span { display: block; animation: sub-in .35s ease both; }
-@keyframes sub-in { from { opacity: 0; transform: translateY(4px); } }
-/* Phones: above the tab bar when the portal shows one, a little smaller, and nearly edge to edge */
-@media (max-width: 640px) {
-  .live-sub { bottom: calc(12px + env(safe-area-inset-bottom)); max-width: calc(100vw - 20px); padding: 8px 12px 9px; font-size: 14.5px; }
-  body:has(.tabbar) .live-sub { bottom: calc(76px + env(safe-area-inset-bottom)); }
-}
+/* --- The narration: a band under the controls, above the page ---------------------------------
+   What's happening, in one place that never covers the page: the page starts below it. Calm and
+   steady, so Maria's thoughts beside the cursor stay the voice to follow; the player never changes
+   the two at the same moment (player.ts). Two lines' room at every width, so a longer line never
+   moves anything */
+.live-sub { position: fixed; inset: var(--demo-h) 0 auto 0; z-index: 2147483636; height: var(--sub-h); box-sizing: border-box; display: grid; place-items: center; padding: 0 16px; background: #14200f; background: color-mix(in srgb, var(--live-bg) 88%, #1f5130); border-bottom: 1px solid rgba(0, 255, 65, .22); color: #f1fff4; font: 500 15px/1.35 var(--sans, system-ui); text-align: center; text-wrap: balance; pointer-events: none; }
+.live-sub span { display: block; max-width: 820px; opacity: 0; transition: opacity .25s ease; }
+.live-sub.on span { opacity: 1; animation: sub-in .35s ease both; }
+@keyframes sub-in { from { opacity: 0; transform: translateY(3px); } }
+@media (max-width: 640px) { .live-sub { padding: 0 10px; font-size: 14px; line-height: 1.3; } }
 @media (prefers-reduced-motion: reduce) { .live-sub, .live-sub span { transition: none; animation: none; transform: none; } }
 
 
@@ -159,7 +158,9 @@ body:has(.signin) .live-veil { background: var(--live-bg); }
 @keyframes card-back { from { opacity: 0; } }
 @keyframes card-in { from { opacity: 0; transform: translateY(8px); } }
 @media (max-width: 640px) {
+  /* Centered in the space that shows, and from the top when it's taller than that (auto margins give way) */
   .live-card-back { padding: 10px; place-items: start center; }
+  .live-card, .live-load { margin-block: auto; }
   .live-card { padding: 18px 18px 14px; font-size: 14.5px; }
   .live-card h2 { font-size: 19px; margin-bottom: 8px; }
   .live-card-acts { gap: 8px; margin: 14px 0 12px; }
@@ -210,7 +211,8 @@ body:has(.signin) .live-veil { background: var(--live-bg); }
 .chip.vhover, .search-btn.vhover, .icon-btn.vhover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .side a.vhover, .tabbar a.vhover, .tabs a.vhover { color: var(--accent); background: var(--accent-soft); }
 .item.vhover, .ptr.vhover, .pcard.vhover, .options article.vhover { background: color-mix(in srgb, var(--accent-soft) 60%, transparent); }
-.linkish.vhover, a.vhover { color: var(--accent); }
+/* Links turn the accent color; a link drawn as a button keeps its own colors (a dark label on the dark accent was unreadable) */
+.linkish.vhover, a.vhover:not(.btn) { color: var(--accent); }
 
 
 /* --- Dragging ------------------------------------------------------------------ */
@@ -222,7 +224,7 @@ body:has(.signin) .live-veil { background: var(--live-bg); }
 
 
 /* --- A note from the other side (Pradeep, in his own browser), by the bell ------------ */
-.live-pop { position: fixed; right: 20px; top: calc(var(--demo-h) + 70px); z-index: 2147483636; max-width: min(320px, calc(100vw - 40px)); padding: 10px 14px; border-radius: 10px; background: var(--live-bg); border: 1px solid var(--live-line); box-shadow: 0 12px 28px rgba(0, 0, 0, .25); font: 13px var(--mono); color: var(--live-ink); animation: pop-in 3.6s ease both; }
+.live-pop { position: fixed; right: 20px; top: calc(var(--live-top) + 70px); z-index: 2147483636; max-width: min(320px, calc(100vw - 40px)); padding: 10px 14px; border-radius: 10px; background: var(--live-bg); border: 1px solid var(--live-line); box-shadow: 0 12px 28px rgba(0, 0, 0, .25); font: 13px var(--mono); color: var(--live-ink); animation: pop-in 3.6s ease both; }
 .live-pop::before { content: "● "; color: var(--live-glow); }
 @keyframes pop-in { 0% { opacity: 0; transform: translateY(-6px); } 8%, 88% { opacity: 1; transform: none; } 100% { opacity: 0; } }
 
@@ -230,7 +232,7 @@ body:has(.signin) .live-veil { background: var(--live-bg); }
 /* --- Dialogs, as plain dialogs drawn like modals (player.ts), under the live layer ------------
    :where() keeps the placement below the portal's own dialog rules, so the help sheet and the
    palette keep their shapes; a wide shadow stands in for the backdrop */
-:where(dialog.live-modal) { position: fixed; inset-block: var(--demo-h) 0; z-index: 2147483630; max-height: calc(100% - var(--demo-h) - 2em); overflow: auto; }
+:where(dialog.live-modal) { position: fixed; inset-block: var(--live-top) 0; z-index: 2147483630; max-height: calc(100% - var(--live-top) - 2em); overflow: auto; }
 dialog.live-modal { box-shadow: 0 24px 64px rgba(0, 0, 0, .25), 0 0 0 100vmax rgba(13, 2, 8, .45); }
 @media (min-width: 641px) { dialog.sheet.live-modal { height: auto; max-height: none; } }
 
@@ -242,7 +244,7 @@ dialog.live-modal { box-shadow: 0 24px 64px rgba(0, 0, 0, .25), 0 0 0 100vmax rg
 .live-prop button { font: inherit; cursor: pointer; }
 
 /* Mail: the list on the left, the open message on the right */
-.live-mail { position: fixed; z-index: 2147483632; top: calc(var(--demo-h) + 18px); bottom: 18px; left: 50%; width: min(980px, calc(100vw - 36px)); translate: -50% 0; transform: translateY(14px); display: flex; flex-direction: column; background: #fff; border: 1px solid var(--p-line); border-radius: 12px; box-shadow: 0 24px 60px rgba(0, 0, 0, .28); overflow: hidden; }
+.live-mail { position: fixed; z-index: 2147483632; top: calc(var(--live-top) + 18px); bottom: 18px; left: 50%; width: min(980px, calc(100vw - 36px)); translate: -50% 0; transform: translateY(14px); display: flex; flex-direction: column; background: #fff; border: 1px solid var(--p-line); border-radius: 12px; box-shadow: 0 24px 60px rgba(0, 0, 0, .28); overflow: hidden; }
 .mail-top { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--p-soft); border-bottom: 1px solid var(--p-line); }
 .mail-dots { display: inline-flex; gap: 6px; }
 .mail-dots i { width: 11px; height: 11px; border-radius: 50%; background: #ff5f57; }
@@ -274,7 +276,7 @@ dialog.live-modal { box-shadow: 0 24px 64px rgba(0, 0, 0, .25), 0 0 0 100vmax rg
 .mail-body { padding: 8px 0 24px; }
 
 /* The phone: at the side of the screen */
-.live-phone { position: fixed; z-index: 2147483632; right: 28px; bottom: 22px; width: 250px; height: min(500px, calc(100vh - var(--demo-h) - 44px)); box-sizing: border-box; padding: 12px; border-radius: 38px; background: #16181d; box-shadow: 0 24px 60px rgba(0, 0, 0, .35), inset 0 0 0 2px #2c3038; transform: translateY(30px); }
+.live-phone { position: fixed; z-index: 2147483632; right: 28px; bottom: 22px; width: 250px; height: min(500px, calc(100vh - var(--live-top) - 44px)); box-sizing: border-box; padding: 12px; border-radius: 38px; background: #16181d; box-shadow: 0 24px 60px rgba(0, 0, 0, .35), inset 0 0 0 2px #2c3038; transform: translateY(30px); }
 .ph-notch { position: absolute; left: 50%; top: 18px; width: 70px; height: 18px; translate: -50% 0; border-radius: 99px; background: #000; z-index: 1; }
 .ph-screen { height: 100%; border-radius: 28px; background: #fff; overflow: hidden; }
 .ph-app { height: 100%; display: flex; flex-direction: column; padding: 46px 14px 14px; box-sizing: border-box; }
@@ -299,7 +301,7 @@ dialog.live-modal { box-shadow: 0 24px 64px rgba(0, 0, 0, .25), 0 0 0 100vmax rg
 .ph-frame i:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; border-radius: 0 0 8px 0; }
 
 /* The browser's passkey prompt: a small sheet at the top, as browsers draw it */
-.live-sheet { position: fixed; inset: var(--demo-h) 0 0 0; z-index: 2147483633; display: grid; justify-items: center; align-items: start; padding-top: 18px; background: rgba(0, 0, 0, .18); }
+.live-sheet { position: fixed; inset: var(--live-top) 0 0 0; z-index: 2147483633; display: grid; justify-items: center; align-items: start; padding-top: 18px; background: rgba(0, 0, 0, .18); }
 .sh-card { width: min(360px, calc(100vw - 32px)); box-sizing: border-box; padding: 20px 20px 16px; border-radius: 14px; background: #fff; box-shadow: 0 24px 60px rgba(0, 0, 0, .3); text-align: center; transform: translateY(-10px); transition: transform .25s ease; }
 .live-sheet.on .sh-card { transform: none; }
 .sh-key { width: 40px; height: 40px; fill: none; stroke: var(--p-hi); stroke-width: 1.6; stroke-linecap: round; }
@@ -312,7 +314,7 @@ dialog.live-modal { box-shadow: 0 24px 64px rgba(0, 0, 0, .25), 0 0 0 100vmax rg
 
 /* Phones: the mail app shows the list or the message, and the phone is a shorter card at the bottom */
 @media (max-width: 640px) {
-  .live-mail { top: calc(var(--demo-h) + 8px); bottom: 8px; width: calc(100vw - 16px); border-radius: 10px; }
+  .live-mail { top: calc(var(--live-top) + 8px); bottom: 8px; width: calc(100vw - 16px); border-radius: 10px; }
   .mail-cols { grid-template-columns: minmax(0, 1fr); }
   .live-mail.reading aside, .live-mail:not(.reading) .mail-read { display: none; }
   .mail-me { display: none; }

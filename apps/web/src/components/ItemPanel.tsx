@@ -416,7 +416,7 @@ function KindFields({ kind, f, onChange }: { kind: ItemKind; f: Record<string, s
       </label>
       {estimate ? (
         <>
-          <label>Rate, dollars an hour<input inputMode="decimal" value={f.rateCents ?? ""} onChange={(e) => set("rateCents", e.target.value)} placeholder="e.g. 175" /></label>
+          <label>Rate, dollars an hour<input inputMode="decimal" value={f.rateCents ?? ""} onChange={(e) => set("rateCents", e.target.value)} placeholder="e.g. 100" /></label>
           <label>Hours, low end<input inputMode="decimal" value={f.hoursLow ?? ""} onChange={(e) => set("hoursLow", e.target.value)} placeholder="e.g. 20" /></label>
           <label>Hours, high end<input inputMode="decimal" value={f.hoursHigh ?? ""} onChange={(e) => set("hoursHigh", e.target.value)} placeholder="e.g. 24" /></label>
           <p className="small muted" style={{ gridColumn: "1 / -1", margin: 0 }}>{price ? `Shown as “${priceLine(price)}”, ${hoursRange(price as Extract<Price, { kind: "estimate" }>)}. Billed for the hours logged, never past the high end.` : "Add the rate and the high end of the hours to price this option."}</p>

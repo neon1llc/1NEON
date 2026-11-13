@@ -40,7 +40,7 @@ export const PREVIEW: Show = {
   intro: {
     text: [
       "Maria owns a fictional bakery. Every night she and Sam retype about 40 orders from email, voicemail, and Instagram into a spreadsheet, and she has asked Pradeep at neon1 for help.",
-      "In about two minutes you'll watch her sign in, ask for what she needs, compare three priced options, approve one, see the work and its hours, and take the handover. Her thoughts appear beside the cursor, and a line at the bottom says what's happening.",
+      "In about two minutes you'll watch her sign in, ask for what she needs, compare three priced options, approve one, see the work and its hours, and take the handover. A line under the controls says what's happening, and her thoughts appear beside the cursor.",
     ],
   },
   end: "That's the short version.",
