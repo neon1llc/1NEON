@@ -10,6 +10,9 @@ dist/
 *.tfstate*
 infra/**/.placeholder-*.zip
 
+# Screenshots the walkthrough check leaves when a run fails
+walkthrough-failure-*.png
+
 # Secrets and OS clutter
 .env*
 .DS_Store

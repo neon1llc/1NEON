@@ -32,7 +32,14 @@ export const PREVIEW: Show = {
   title: "The short preview",
   blurb: "Request, compare, approve, progress, and handover",
   length: "about two minutes",
-  end: "That's the short version. The full story, or the interactive demo, goes further.",
+  intro: {
+    text: [
+      "Maria owns a fictional bakery. Every night her team retypes about 40 orders from email and voicemail into a spreadsheet, and she has asked Pradeep at neon1 for help.",
+      "In about two minutes you'll watch her sign in, ask for what she needs, compare three options, approve one, see the work, and take the handover. Her thoughts appear beside the cursor, and a line at the bottom says what's happening.",
+    ],
+  },
+  end: "That's the short version.",
+  recap: "Maria asked for help in one sentence, compared three options with their estimates, signed for one, saw the work finished, and took over the accounts and the runbook. The full story shows every step in between.",
   sections: [
     // She comes in the front door: why she's here, the emailed code, and the walk to the project's Needs
     { ...IN, run: async (s) => { await s.others(startProject, 0); await IN.run(s); } },
@@ -107,7 +114,8 @@ export const PREVIEW: Show = {
         await s.think("And a runbook, so we can handle things ourselves.");
         await s.click('input[aria-label="Done: Docs delivered and walked through"]', 900);
         await s.say("From a request to a handover, in one place");
-        await s.wait(2600);
+        await s.think("That's it. The orders run themselves now, and it's all ours.");
+        await s.wait(1200);
       },
     },
   ],

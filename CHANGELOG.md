@@ -2,6 +2,29 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.6.0 - 2026-11-13
+
+### Changed
+- Every guided walkthrough now waits for you. It opens on a card that says who Maria is, what you'll see, and how long it takes, and nothing moves until you press **Start**. Coming back after a refresh, the card offers to continue where you left off or start from the beginning.
+- Every walkthrough ends on a closing card that says what happened, with **Watch again**, the full story or the interactive demo, the other walkthroughs, help, and a way to get in touch.
+- The narration is a line at the bottom of the screen, like subtitles, and screen readers hear each new line. The bar at the top keeps only the chapter's name and the controls.
+- The full-screen chapter title between chapters is gone. Chapters follow one another without a cut.
+- Maria gets everywhere the way a person does. She opens the menu and picks the page, including her profile, and she reaches the service agreement from a notice above her options and returns with **Back to your options**.
+- Jumping ahead, or opening one chapter from help, shows a loading screen that names the chapter and fills a line while the story so far is set up. That setup takes about half the time it did.
+- If a walkthrough can't play a step, it stops on a card that says so and offers to play the chapter again, start over, or try the demo, in place of looping.
+- **Exit** returns to the page and the question you came from.
+
+### Added
+- A notice above the options tells a decision maker when the service agreement needs signing first, with a link to read and sign it and a button back to the options afterwards.
+- A check that plays every walkthrough in a real browser, on a desktop and a phone screen, and stops a release if any of them doesn't reach its end. It also jumps between chapters, reloads partway, pauses and clicks around, turns the phone, and leaves the tab.
+
+### Fixed
+- The short walkthrough no longer redraws the page a moment after it opens.
+- Maria's cursor no longer rests on top of the opening card.
+- On a phone with the mini menu, the walkthrough picked the wrong menu item for People and Projects and stopped. It now finds each page by where its link leads.
+- In the "Texts and text codes" walkthrough, the menu stayed open over the profile and the walkthrough stopped.
+- A measure that starts at zero keeps its zero in the "Measure it" chapter.
+
 ## v0.5.2 - 2026-11-12
 
 ### Fixed

@@ -1,4 +1,4 @@
-# .github/workflows/ci.yml - Check every push and pull request: types, tests, build, and Terraform.
+# .github/workflows/ci.yml - Check every push and pull request: types, tests, build, the guided walkthroughs, and Terraform.
 
 name: ci
 
@@ -54,6 +54,39 @@ jobs:
       # Exact lockfile install, then typecheck, tests, and production builds of API and web
       - run: npm ci
       - run: npm run check
+
+  # Every guided walkthrough, played in a real browser on a desktop and a phone screen, has to reach
+  # its end card. This is the check that catches a walkthrough stopping partway
+  walkthroughs:
+    # A name no other workflow uses, so branch rules can require exactly this check
+    name: ci-walkthroughs
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      # Actions are pinned to commit SHAs; the checkout keeps no token
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      # The web build, then Chromium for the Playwright version in the lockfile
+      - run: npm ci
+      - run: npm run build --workspace @1neon/web
+      - run: npx playwright install --with-deps chromium
+      - run: npm run walkthroughs
+
+      # A failed run leaves a screenshot of where it stopped
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: walkthrough-failures
+          path: walkthrough-failure-*.png
+          if-no-files-found: ignore
+          retention-days: 14
 
   # Terraform checks without touching AWS
   terraform:

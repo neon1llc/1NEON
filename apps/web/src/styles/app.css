@@ -1300,3 +1300,7 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
 /* The printed invoice's totals sit right under the lines */
 .inv-lines td:nth-child(n + 2), .inv-lines tfoot td { text-align: right; white-space: nowrap; }
 .inv-lines tfoot th { text-align: right; font-weight: 500; }
+
+/* The agreement note reads as one sentence with its link; the way back sits beside the confirmation */
+.notice.agreement-needed { display: block; }
+.notice .agreement-back { flex: none; }

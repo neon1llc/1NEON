@@ -1134,6 +1134,8 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
   return (
     <>
       <ProposalStrip all={all} path={path} project={project} decider={decider} />
+      {/* The one thing that stands between a decision maker and Approve, said before they press it */}
+      {!signed && decider && !decided && items.some((o) => o.status === "proposed") && <AgreementNeeded />}
       <div className="options">
         {items.map((o) => {
           // Fields are validated on read, so a malformed option can't break the board

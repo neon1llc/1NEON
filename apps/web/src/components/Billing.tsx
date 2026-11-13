@@ -5,7 +5,7 @@
 
 import { AGREEMENT_EDITION, InvoiceFields, PaymentFields, SIGN_CONSENT, balanceOf, invoiceState, invoiceTotal, isOwnOrg, lineCents, money, todayIn, type InvoiceLine, type InvoiceType, type Item, type PaymentMethod, type Project } from "@1neon/domain";
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useLocation, useSearchParams } from "react-router";
 import { api, DEMO, HttpError } from "../lib/api.ts";
 import { problem, useRefresh } from "../lib/hooks.ts";
 import { useOrg, useSession } from "./Shell.tsx";
@@ -55,16 +55,18 @@ export function useAgreementSigned() {
   return isOwnOrg(org.slug) || (org.agreements ?? []).some((a) => a.ref === AGREEMENT_EDITION);
 }
 
-/** Before an approval: the agreement still needs signing, by an admin of the organization */
+/** Before an approval: the agreement still needs signing, by an admin of the organization. The link
+ * carries the page it was on, so the agreement can lead straight back once it's signed */
 export function AgreementNeeded() {
   const { org, access } = useOrg();
   const me = useSession();
-  const base = `/o/${org.slug}`;
+  const loc = useLocation();
+  const to = `/o/${org.slug}/agreement?back=${encodeURIComponent(loc.pathname + "#options")}`;
   return (
-    <p className="notice small">
+    <p className="notice small agreement-needed">
       {access === "admin" && !me.operator
-        ? <>Before approving, sign neon1's service agreement (edition {AGREEMENT_EDITION}). You sign it once, and it covers every project. <Link to={`${base}/agreement`}>Read and sign it</Link></>
-        : <>Approving waits until an admin of {org.name} signs neon1's service agreement. <Link to={`${base}/agreement`}>Read it</Link></>}
+        ? <>Before approving, sign neon1's service agreement (edition {AGREEMENT_EDITION}). You sign it once, and it covers every project. <Link to={to}>Read and sign it</Link></>
+        : <>Approving waits until an admin of {org.name} signs neon1's service agreement. <Link to={to}>Read it</Link></>}
     </p>
   );
 }

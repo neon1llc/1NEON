@@ -6,7 +6,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Signature } from "@1neon/domain";
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { SignBox, signReady, type SignValue } from "../components/Billing.tsx";
 import { Markdown } from "../components/Markdown.tsx";
 import { gate } from "../components/Reads.tsx";
@@ -30,6 +30,12 @@ export function AgreementPage() {
   const q = useQuery({ queryKey: ["agreement", org.id], queryFn: () => api<AgreementResponse>(`/t/${org.id}/agreement`) });
   const [sign, setSign] = useState<SignValue>({ typedName: "", consent: false });
   const [busy, setBusy] = useState(false);
+  // Where the reader came from (an approval waiting on this signature), so the page can lead back
+  // there. Only a path inside this organization counts; anything else is ignored
+  const [params] = useSearchParams();
+  const asked = params.get("back") ?? "";
+  const back = asked.startsWith(`/o/${org.slug}/`) && !asked.includes("//") ? asked : undefined;
+  const backLabel = back?.includes("#options") ? "Back to your options" : "Back to where you were";
   const wait = gate([q]);
   if (wait || !q.data) return wait;
   const a = q.data;
@@ -51,7 +57,7 @@ export function AgreementPage() {
     <div className="content agreement" style={{ maxWidth: 760 }}>
       {/* Where it stands: signed (by whom, when), waiting on an admin, or not needed */}
       {a.signed ? (
-        <p className="notice ok small" role="status">Signed for {org.name} by {a.signed.typedName} ({a.signed.email}) on {dateLabel(a.signed.at.slice(0, 10))}, edition {a.edition}.</p>
+        <p className="notice ok small" role="status">Signed for {org.name} by {a.signed.typedName} ({a.signed.email}) on {dateLabel(a.signed.at.slice(0, 10))}, edition {a.edition}.{back && <> You can approve an option now. <Link className="btn btn-primary btn-sm agreement-back" to={back}>{backLabel}</Link></>}</p>
       ) : !a.required ? (
         <p className="notice small" role="status">neon1's own organization doesn't sign its own agreement.</p>
       ) : maySign ? (
@@ -73,6 +79,8 @@ export function AgreementPage() {
           <ul className="small">{a.history.map((h, i) => <li key={i}>Edition {h.ref}: {h.typedName} ({h.email}), {dateLabel(h.at.slice(0, 10))} <span className="opt-code">{h.hash.slice(0, 12)}</span></li>)}</ul>
         </section>
       )}
+      {/* Signed with somewhere to return to: the way back is at the bottom too, where the signing happened */}
+      {a.signed && back && <p><Link className="btn btn-primary agreement-back" to={back}>{backLabel}</Link></p>}
       <p className="small muted"><Link to="/terms">Portal terms</Link> · <Link to="/privacy">Privacy</Link></p>
     </div>
   );
