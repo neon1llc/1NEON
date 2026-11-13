@@ -12,8 +12,8 @@ import { Repo } from "../store/repo.ts";
 
 // TABLE_NAME is set by Terraform on the trigger function
 const repo = new Repo(new DynamoTable(process.env.TABLE_NAME!));
-// The sign-in page that codes are entered on
-const PORTAL = "https://neon1.tech/1NEON/";
+// The sign-in page that codes are entered on (PUBLIC_URL is set by Terraform; dev.neon1.tech in dev)
+const PORTAL = `${process.env.PUBLIC_URL ?? "https://neon1.tech"}/1NEON/`;
 
 
 /** One function serves both triggers; Cognito names the trigger in triggerSource */
