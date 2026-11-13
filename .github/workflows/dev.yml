@@ -82,4 +82,6 @@ jobs:
         if: env.DISTRIBUTION_ID != ''
         run: aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths '/1NEON/*' >/dev/null
 
-      - run: echo "### On dev: https://dev.neon1.tech/1NEON/ (${GITHUB_SHA::7})" >> "$GITHUB_STEP_SUMMARY"
+      - name: Where to look
+        run: |
+          echo "### On dev: https://dev.neon1.tech/1NEON/ (${GITHUB_SHA::7})" >> "$GITHUB_STEP_SUMMARY"
