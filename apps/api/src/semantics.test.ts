@@ -241,7 +241,8 @@ describe("calendar events", () => {
     const p = await newProject();
     const i = await call("POST", `${base()}/projects/${p.id}/items`, { kind: "task", title: "Synthetic task" });
     await call("PATCH", `${base()}/projects/${p.id}/items/${i.json.id}`, { version: i.json.version, status: "done", dueDate: "2026-11-20" });
-    const a = (await call("GET", `${base()}/activity`)).json.find((e: { target: string; action: string }) => e.target === i.json.id && e.action !== "item.created");
+    // The create and the edit can share a millisecond, so the edit is found by its action, not by order
+    const a = (await call("GET", `${base()}/activity`)).json.find((e: { target: string; action: string }) => e.target === i.json.id && e.action === "task.updated");
     expect(a.summary).toContain("status To do → Done");
     expect(a.details).toContain("due none → Nov 20, 2026");
   });
