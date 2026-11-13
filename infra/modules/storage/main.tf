@@ -11,6 +11,12 @@ variable "malware_scan" {
 }
 variable "allowed_origin" { type = string }
 
+# The permission ceiling on the scanner's role; dev has its own
+variable "boundary" {
+  type    = string
+  default = "neon1-boundary-1neon"
+}
+
 
 # Client files outlive any apply; never force-destroy
 resource "aws_s3_bucket" "docs" {
@@ -133,7 +139,7 @@ resource "aws_iam_role" "scan" {
   name               = "${var.name}-malware-scan"
   assume_role_policy = data.aws_iam_policy_document.scan_trust.json
   # The ceiling set in neon1-aws-infrastructure; this stack can't create or change the role without it
-  permissions_boundary = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/neon1-boundary-1neon"
+  permissions_boundary = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/${var.boundary}"
 }
 
 

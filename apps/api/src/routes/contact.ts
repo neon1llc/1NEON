@@ -75,7 +75,9 @@ export function contactRoutes(app: App, k: Kit) {
       body: rows.map(([k2, v]) => `<p style="margin:0 0 14px"><b>${esc(k2)}</b><br>${esc(v).replace(/\n/g, "<br>")}</p>`).join(""),
       note: "Reply to this email to answer them directly.",
     });
-    await d.mailer.send(CONTACT_TO, `neon1.tech: ${topic} (${m.name})`, text, html, m.email);
+    // A message sent from dev.neon1.tech says so in its subject
+    const where = process.env.APP_ENV === "dev" ? "[dev] neon1.tech" : "neon1.tech";
+    await d.mailer.send(CONTACT_TO, `${where}: ${topic} (${m.name})`, text, html, m.email);
     return c.json({ ok: true });
   });
 }
