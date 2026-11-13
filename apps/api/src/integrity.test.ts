@@ -99,7 +99,7 @@ describe("approved terms", () => {
   it("gives one consistent result when an edit and an approval race", async () => {
     const { option, path, p } = await flowOption();
     const [edit, approve] = await Promise.all([
-      call(OP, "PATCH", `${path}/items/${option.id}`, { version: option.version, fields: { cost: "$1" } }),
+      call(OP, "PATCH", `${path}/items/${option.id}`, { version: option.version, fields: { pricing: "fixed", cost: "$1" } }),
       call(s.raj.email, "POST", `${path}/items/${option.id}/approve`, { version: option.version, signature: SIGN }),
     ]);
     const stored = (await repo.getItem(p.tenantId, p.id, option.id))!;

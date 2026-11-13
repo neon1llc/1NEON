@@ -5,7 +5,7 @@
 
 import { KIND_LAYER, type ItemKind } from "@1neon/domain";
 import { useQuery } from "@tanstack/react-query";
-import { Check, CircleCheck, FileUp, ListTodo } from "lucide-react";
+import { Check, CircleCheck, FileUp, ListTodo, PenLine, Receipt } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import { ComingUp } from "../components/ComingUp.tsx";
 import { Problem, Stale } from "../components/Reads.tsx";
@@ -21,7 +21,10 @@ import type { Workspace } from "../lib/types.ts";
 
 // The words and icon for each kind of thing waiting on someone
 const ACTION = {
+  pay: { label: "See and pay", icon: Receipt },
+  issue: { label: "Check it", icon: Receipt },
   choose: { label: "Compare options", icon: CircleCheck },
+  accept: { label: "Review and accept", icon: PenLine },
   upload: { label: "Upload file", icon: FileUp },
   do: { label: "Open", icon: ListTodo },
 } as const;
@@ -74,11 +77,15 @@ export function WorkspacePage() {
               const a = ACTION[w.action] ?? ACTION.do;
               const layer = KIND_LAYER[w.kind as ItemKind] ?? "needs";
               // A choice opens the options side by side; anything else opens the item itself
-              const to = w.action === "choose" ? `${base}/projects/${w.projectKey}/needs#options` : `${base}/projects/${w.projectKey}/${layerSlug(layer)}#item-${w.itemId}`;
+              const to = w.action === "choose" ? `${base}/projects/${w.projectKey}/needs#options`
+                : w.action === "pay" ? `${base}/projects/${w.projectKey}/invoices/${w.itemId}`
+                : w.action === "issue" ? `${base}/projects/${w.projectKey}/execute#billing`
+                : w.action === "accept" ? `${base}/projects/${w.projectKey}/normalize`
+                : `${base}/projects/${w.projectKey}/${layerSlug(layer)}#item-${w.itemId}`;
               return (
                 <li key={w.itemId}>
                   <a.icon size={18} aria-hidden="true" className="todo-ico" />
-                  <span className="todo-t">{w.action === "choose" ? `Choose one of ${w.count} options` : w.title}<small><span className="mono">{w.projectKey}</span> {w.projectName}</small></span>
+                  <span className="todo-t">{w.action === "choose" ? `Choose one of ${w.count} options` : w.title}{w.action === "pay" && w.dueDate && !w.overdue ? `, due ${dateLabel(w.dueDate)}` : ""}<small><span className="mono">{w.projectKey}</span> {w.projectName}</small></span>
                   <Link className="btn btn-ghost btn-sm" to={to}>{a.label}</Link>
                 </li>
               );

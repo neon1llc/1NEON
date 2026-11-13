@@ -136,6 +136,8 @@ export function itemRoutes(app: App, k: Kit) {
     // Statuses follow each kind's list; an approval is final and only the approve route grants it
     if (input.status !== undefined && input.status !== item.status) {
       if (item.status === "approved") fail(400, "immutable", "This option is approved. Propose a new option to change course.");
+      // A signed acceptance is a record: the step it accepted stays done
+      if (item.kind === "handoff" && item.fields.accepted) fail(400, "immutable", "This step was accepted and signed, so it stays done. Add a new step if something needs doing again.");
       if (!settableStatus(item.kind, input.status)) fail(400, "invalid_status", `"${input.status}" isn't a status for this kind of item.`);
     }
     if (input.assigneeId) await activeMembers(p.tenantId, [input.assigneeId]);
@@ -338,6 +340,42 @@ export function itemRoutes(app: App, k: Kit) {
     await repo.table.write([repo.itemOp(next, { version: it.version }), ...(final ? [repo.itemOp(final, { create: true })] : []), repo.auditOp({ tenantId: p.tenantId, actorId: by, action: "handoff.accepted", target: it.id, summary: `${p.key}: ${u.name || u.email} accepted "${it.title}"${input.note ? `: ${input.note}` : ""}, signed by ${input.signature.typedName}` })]);
     await keep(`t/${p.tenantId}/p/${p.id}/acceptances/${it.id}-v${next.version}.json`, next);
     return c.json(next);
+  });
+
+  /**
+   * Accept the whole handover with one signature: every step that's done and not yet accepted. Each
+   * step still gets its own signed record, over its own text, so one can be read without the others
+   */
+  app.post("/t/:tid/projects/:pid/handover/accept", async (c) => {
+    const p = await project(c);
+    check(canApprove(who(c).actor, c.get("access"), p.people, isOwnOrg(c.get("tenant").slug)));
+    const input = await body(c, AcceptInput.omit({ version: true }));
+    const items = await repo.listItems(p.tenantId, p.id);
+    const steps = items.filter((i) => i.kind === "handoff");
+    const open = steps.filter((i) => i.status !== "done");
+    if (open.length) fail(409, "not_done", `${open.length === 1 ? "One step isn't" : `${open.length} steps aren't`} done yet. Accept the finished ones one by one, or come back when every step is done.`);
+    const waiting = steps.filter((i) => !i.fields.accepted);
+    if (!waiting.length) fail(409, "nothing_to_accept", "Every handover step is already accepted.");
+    const u = who(c).user;
+    const ts = now();
+    const by = actorId(c);
+    const name = u.name || u.email;
+    const accepted: Item[] = [];
+    for (const it of waiting) {
+      const signed = signature("acceptance", it.title, await sha256Hex(canonical({ id: it.id, version: it.version, title: it.title, body: it.body, note: input.note })), input.signature, { id: by, name, email: u.email }, ts, from(c));
+      accepted.push({ ...it, fields: { ...it.fields, accepted: { by, name, at: ts, note: input.note, signature: signed } }, version: it.version + 1, updatedAt: ts, updatedBy: by });
+    }
+    // With the handover accepted, neon1 gets a draft of the final invoice for what's left on the price
+    const decision = currentDecision(items);
+    const hasFinal = items.some((i) => i.kind === "invoice" && i.status !== "void" && i.fields.type === "final");
+    const final = decision && !hasFinal ? draftInvoice(p, "final", finalLines(decision, items), ts, by) : undefined;
+    await repo.table.write([
+      ...accepted.map((next, n) => repo.itemOp(next, { version: waiting[n]!.version })),
+      ...(final ? [repo.itemOp(final, { create: true })] : []),
+      repo.auditOp({ tenantId: p.tenantId, actorId: by, action: "handoff.accepted", target: accepted[0]!.id, summary: `${p.key}: ${name} accepted the handover (${accepted.length} ${accepted.length === 1 ? "step" : "steps"})${input.note ? `: ${input.note}` : ""}, signed by ${input.signature.typedName}` }),
+    ]);
+    for (const next of accepted) await keep(`t/${p.tenantId}/p/${p.id}/acceptances/${next.id}-v${next.version}.json`, next);
+    return c.json({ accepted, final: Boolean(final) });
   });
 }
 

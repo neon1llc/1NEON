@@ -1301,6 +1301,9 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
 .sign-box .sign-consent input { margin-top: 2px; flex: none; }
 .sign-card { margin-top: 24px; display: grid; gap: 8px; }
 .accept-form { display: grid; gap: 8px; margin-top: 6px; max-width: 520px; }
+/* Under the handover steps: how many are left, or the one signature that accepts them all */
+.handover-all { margin: 10px 0 0; }
+.handover-all.card { padding: 12px 14px; max-width: 640px; }
 .notice.ok { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
 /* How a price adds up: closed to one line on an option card, open in the approval */
 .option-why { margin: 0 0 8px; }

@@ -2,7 +2,7 @@
 // its workflow stages, the workspace landing, Coming up, Insights, and the audit trail.
 
 
-import { RECORD_KINDS, Stage, canApprove, changeRecord, occurrences, stageChanges, dateIn, isClosed, isOwnOrg, metricReached, mondayOf, plusDays, todayIn, type Tenant } from "@1neon/domain";
+import { InvoiceFields, RECORD_KINDS, Stage, balanceOf, canApprove, dollars, invoiceState, changeRecord, occurrences, stageChanges, dateIn, isClosed, isOwnOrg, metricReached, mondayOf, plusDays, todayIn, type Tenant } from "@1neon/domain";
 import { z } from "zod";
 import { actorId, body, fail, need, now, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
@@ -50,13 +50,30 @@ export function workspaceRoutes(app: App, k: Kit) {
     const live = projects.filter((p) => !p.archived);
     const me = actorId(c);
     const { actor } = who(c);
-    // Needs you: a choice between options you may approve, files the client is asked for, and your
-    // open work. A project's proposed options are one decision, so they wait as one entry
-    const waiting: { projectId: string; projectKey: string; projectName: string; itemId: string; title: string; kind: string; action: "choose" | "upload" | "do"; count?: number; dueDate?: string }[] = [];
+    // Needs you: an invoice to pay (for neon1, a draft to check and issue), a choice between options
+    // you may approve, a finished handover to accept, files the client is asked for, and your open
+    // work. A project's proposed options are one decision, so they wait as one entry
+    const waiting: { projectId: string; projectKey: string; projectName: string; itemId: string; title: string; kind: string; action: "pay" | "issue" | "choose" | "accept" | "upload" | "do"; count?: number; dueDate?: string; overdue?: boolean }[] = [];
+    const today = todayIn(t.timeZone, new Date(now()));
     for (const p of live) {
       const items = await repo.listItems(t.id, p.id);
       // A project with an approved option no longer asks anyone to approve the others
-      const decider = canApprove(actor, c.get("access"), p.people, isOwnOrg(t.slug)).ok && !items.some((i) => i.kind === "option" && i.status === "approved");
+      const mayDecide = canApprove(actor, c.get("access"), p.people, isOwnOrg(t.slug)).ok;
+      const decider = mayDecide && !items.some((i) => i.kind === "option" && i.status === "approved");
+      // Money first: each invoice with a balance waits on the client; each draft waits on neon1
+      for (const i of items.filter((x) => x.kind === "invoice")) {
+        if (actor.operator && i.status === "draft") waiting.push({ projectId: p.id, projectKey: p.key, projectName: p.name, itemId: i.id, title: `Check and issue the draft: ${i.title.toLowerCase()}`, kind: "invoice", action: "issue" });
+        const left = actor.operator || isOwnOrg(t.slug) ? 0 : balanceOf(i, items);
+        if (left > 0) {
+          const f = InvoiceFields.parse(i.fields);
+          const overdue = invoiceState(i, items, today) === "overdue";
+          waiting.push({ projectId: p.id, projectKey: p.key, projectName: p.name, itemId: i.id, title: `Pay ${f.number ?? "the invoice"}: ${dollars(left)}${overdue ? ", overdue" : ""}`, kind: "invoice", action: "pay", dueDate: f.dueDate, overdue });
+        }
+      }
+      // A handover with every step done waits on the decision maker's signature
+      const steps = items.filter((i) => i.kind === "handoff");
+      const unsigned = steps.filter((i) => !i.fields.accepted);
+      if (mayDecide && !actor.operator && steps.length && unsigned.length && steps.every((i) => i.status === "done")) waiting.push({ projectId: p.id, projectKey: p.key, projectName: p.name, itemId: unsigned[0]!.id, title: "Accept the handover", kind: "handoff", action: "accept", count: unsigned.length });
       const options = decider ? items.filter((i) => i.kind === "option" && i.status === "proposed").sort((a, b) => a.title.localeCompare(b.title)) : [];
       if (options.length) waiting.push({ projectId: p.id, projectKey: p.key, projectName: p.name, itemId: options[0]!.id, title: "Choose an option", kind: "option", action: "choose", count: options.length });
       for (const i of items) {
@@ -65,9 +82,9 @@ export function workspaceRoutes(app: App, k: Kit) {
         if (action) waiting.push({ projectId: p.id, projectKey: p.key, projectName: p.name, itemId: i.id, title: i.title, kind: i.kind, action, dueDate: i.dueDate });
       }
     }
-    // Choices first, then files to send, then work; within each, the earliest due date first and
+    // Money first, then choices, a handover to accept, files to send, and work; within each, the earliest due date first and
     // undated last, so the preview shows what's most pressing
-    const order = { choose: 0, upload: 1, do: 2 };
+    const order = { pay: 0, issue: 0, choose: 1, accept: 2, upload: 3, do: 4 };
     waiting.sort((a, b) => order[a.action] - order[b.action] || (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999") || a.title.localeCompare(b.title));
     // Home shows a preview of ten; ?waiting=all (the View all list) returns up to WAITING_ALL. The total
     // is always the true count, so the page never presents a preview as everything
@@ -82,7 +99,6 @@ export function workspaceRoutes(app: App, k: Kit) {
     const stageName = new Map(t.stages.map((s) => [s.id, s]));
     // Projects at a glance: each live project's stage, health, how much of its work is done, what's
     // overdue or blocked, and its next date, so Home shows where everything stands without a click
-    const today = todayIn(t.timeZone, new Date(now()));
     const glance = [];
     for (const p of live) {
       const work = (await repo.listItems(t.id, p.id)).filter((i) => i.kind !== "metric" && !RECORD_KINDS.has(i.kind));

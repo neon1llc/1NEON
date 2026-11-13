@@ -186,6 +186,8 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
   const proposed = approved ? [] : options.filter((i) => i.status === "proposed");
   const files = items.filter((i) => i.kind === "file_request" && i.status !== "done");
   const mine = items.filter((i) => i.assigneeId === me.user.id && i.status !== "done");
+  const handover = items.filter((i) => i.kind === "handoff");
+  const unsigned = handover.filter((i) => !i.fields.accepted);
   const deciders = p.people.filter((x) => x.role === "decision_maker").map((x) => names.get(x.userId) ?? "the decision maker");
   // Moving on past Decide needs an approved option (or a reason, given on the board)
   const gated = Boolean(ahead) && decideAt >= 0 && at <= decideAt && org.stages.indexOf(ahead!) > decideAt && !approved;
@@ -226,6 +228,10 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
   } else if (files.length && !me.operator) {
     text = <>Send {files.length} {files.length === 1 ? "file" : "files"} so the work can go on.</>;
     action = { to: `${base}/needs#files`, label: "Upload" };
+  } else if (handover.length && unsigned.length && handover.every((i) => i.status === "done") && !me.operator && canApprove(actor, access, p.people, isOwnOrg(org.slug)).ok) {
+    // Every handover step is done: the decision maker's one signature accepts them
+    text = <>Every handover step is done. Check them, then accept the handover with one signature.</>;
+    action = { to: `${base}/normalize`, label: "Review and accept" };
   } else if (mine.length) {
     text = <>You have {mine.length} open {mine.length === 1 ? "item" : "items"} here.</>;
     action = { to: `${base}/${layerSlug(KIND_LAYER[mine[0]!.kind])}#item-${mine[0]!.id}`, label: "Open" };
@@ -673,7 +679,7 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
               ))}</div> : null
             ) : (
               <div>{list.map((i) => (
-                <ItemRow key={i.id} item={i} path={path} marker={edits.find((e) => e.recordId === i.id)} onToggle={CHECKABLE.has(kind) && canWrite ? () => void patch(i, { status: i.status === "done" ? "open" : "done" }) : undefined}
+                <ItemRow key={i.id} item={i} path={path} marker={edits.find((e) => e.recordId === i.id)} locked={kind === "handoff" && Boolean(i.fields.accepted)} onToggle={CHECKABLE.has(kind) && canWrite ? () => void patch(i, { status: i.status === "done" ? "open" : "done" }) : undefined}
                   extra={kind === "file_request" ? <FileAsk item={i} docs={docs.filter((d) => d.itemId === i.id)} />
                     : kind === "discovery" && !i.body.trim() && canWrite ? <Answer question={i.title} onSave={(text) => void patch(i, { body: text, status: "done" })} />
                     : kind === "handoff" ? <Accept item={i} path={path} project={project} />
@@ -682,6 +688,8 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
                     : undefined} />
               ))}</div>
             )}
+            {/* Once every handover step is done, the decision maker accepts them all with one signature */}
+            {kind === "handoff" && <AcceptHandover steps={list} path={path} project={project} />}
             {/* Anyone may add a request; options come from neon1; everything else from editors */}
             {(kind === "request" || (canWrite && (kind !== "option" || me.operator))) && <AddItem kind={kind} path={path} taken={list.map((i) => i.title)} decided={Boolean(currentDecision(items).option)} />}
           </section>
@@ -718,7 +726,7 @@ function FileAsk({ item, docs }: { item: Item; docs: DocumentRecord[] }) {
 
 
 /** One item in a list: check it off, or tap it to open its panel with details and comments */
-function ItemRow({ item, path, marker, onToggle, extra }: { item: Item; path: string; marker?: EditMarker; onToggle?: () => void; extra?: ReactNode }) {
+function ItemRow({ item, path, marker, onToggle, locked, extra }: { item: Item; path: string; marker?: EditMarker; onToggle?: () => void; locked?: boolean; extra?: ReactNode }) {
   const { org } = useOrg();
   const me = useSession();
   const members = useMembers(org.id);
@@ -730,7 +738,8 @@ function ItemRow({ item, path, marker, onToggle, extra }: { item: Item; path: st
   return (
     <div className="item" id={`item-${item.id}`}>
       {/* A checkbox for checkable kinds, an empty cell otherwise */}
-      {onToggle ? <input type="checkbox" checked={item.status === "done"} onChange={onToggle} aria-label={`Done: ${item.title}`} /> : <span style={{ width: 18 }} />}
+      {/* A step accepted with a signature stays ticked: the box shows it and no longer changes */}
+      {locked ? <input type="checkbox" checked disabled aria-label={`Done and accepted: ${item.title}`} /> : onToggle ? <input type="checkbox" checked={item.status === "done"} onChange={onToggle} aria-label={`Done: ${item.title}`} /> : <span style={{ width: 18 }} />}
       <div>
         <button type="button" className={`item-open title${item.status === "done" ? " is-done" : ""}`} onClick={() => setOpen(true)}>{item.title}</button>
         {item.body && <div className="body clamp">{item.body}</div>}
@@ -1322,7 +1331,56 @@ function Accept({ item, path, project }: { item: Item; path: string; project: Pr
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
       </div>
     </form>
-  ) : <button type="button" className="chip" onClick={() => setOpen(true)}>Check it and accept</button>;
+  ) : <button type="button" className="chip" onClick={() => setOpen(true)}>{item.status === "done" ? "Accept with your signature" : "Check it and accept"}</button>;
+}
+
+
+/**
+ * Under the handover steps, for the decision maker: once every step is done, one signature accepts
+ * them all (each step keeps its own signed record). Until then it says how many steps are left
+ */
+function AcceptHandover({ steps, path, project }: { steps: Item[]; path: string; project: Project }) {
+  const { org, access } = useOrg();
+  const me = useSession();
+  const toast = useToast();
+  const refresh = useRefresh(org.id);
+  const [note, setNote] = useState("");
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [sign, setSign] = useState<SignValue>({ typedName: "", consent: false });
+  const waiting = steps.filter((i) => !i.fields.accepted);
+  const left = steps.filter((i) => i.status !== "done").length;
+  const decider = canApprove({ userId: me.user.id, operator: me.operator, strongSession: false }, access, project.people, isOwnOrg(org.slug)).ok;
+  if (!steps.length || !waiting.length) return steps.length ? <p className="accepted-note handover-all">The handover is accepted: every step is signed for.</p> : null;
+  if (!decider) return null;
+  if (left) return <p className="small muted handover-all">When all {steps.length} steps are done, you can accept the handover with one signature. {left} to go.</p>;
+  const accept = async () => {
+    setBusy(true);
+    try {
+      await api(`${path}/handover/accept`, { method: "POST", body: { note, signature: { typedName: sign.typedName.trim(), consent: sign.consent } } });
+      toast("Handover accepted");
+      setOpen(false);
+    } catch (e) {
+      toast(problem(e));
+    }
+    setBusy(false);
+    refresh();
+  };
+  return (
+    <div className="handover-all card">
+      <p style={{ margin: 0 }}><b>Every step is done.</b> Accept the handover with one signature: it signs for {waiting.length === steps.length ? `all ${steps.length} steps` : `the ${waiting.length} ${waiting.length === 1 ? "step" : "steps"} not yet accepted`}, and neon1 prepares the final invoice.</p>
+      {open ? (
+        <form className="accept-form" onSubmit={(e) => { e.preventDefault(); if (signReady(sign) && !busy) void accept(); }}>
+          <input aria-label="What you checked (optional)" placeholder="What you checked (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} />
+          <SignBox id="accept-handover" value={sign} onChange={setSign} />
+          <div className="line">
+            <button className="btn btn-primary btn-sm" disabled={!signReady(sign) || busy}>Sign and accept the handover</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+          </div>
+        </form>
+      ) : <div className="actions" style={{ marginTop: 8 }}><button type="button" className="btn btn-primary btn-sm" onClick={() => setOpen(true)}>Accept the handover</button></div>}
+    </div>
+  );
 }
 
 

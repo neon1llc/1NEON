@@ -201,6 +201,40 @@ describe("invoices", () => {
     expect(r.json.fields.accepted.signature).toMatchObject({ doc: "acceptance", typedName: "Raj Patel" });
     const final = (await flow()).items.find((i) => i.kind === "invoice" && i.fields.type === "final")!;
     expect(final).toMatchObject({ status: "draft", fields: { lines: [{ unitCents: 325_000 }] } });
+    // A signed acceptance is a record: the step stays done
+    const again = (await flow()).items.find((i) => i.id === h.id)!;
+    expect((await call(OP, "PATCH", `${path}/items/${h.id}`, { version: again.version, status: "open" })).json.error).toBe("immutable");
+  });
+
+  it("accepts the whole handover with one signature once every step is done, each step signed for", async () => {
+    const { draft, path } = await approveB();
+    await call(OP, "POST", `${path}/invoices/${draft.id}/issue`, { version: draft.version });
+    const first = (await flow()).items.find((i) => i.kind === "handoff")!;
+    const second = (await call(OP, "POST", `${path}/items`, { kind: "handoff", title: "Docs delivered and walked through" })).json;
+    // Not while a step is still open, and only for the decision maker
+    expect((await call(s.raj.email, "POST", `${path}/handover/accept`, { signature: SIGN })).json.error).toBe("not_done");
+    await call(OP, "PATCH", `${path}/items/${first.id}`, { version: first.version, status: "done" });
+    await call(OP, "PATCH", `${path}/items/${second.id}`, { version: second.version, status: "done" });
+    expect((await call(s.dana.email, "POST", `${path}/handover/accept`, { signature: SIGN })).status).toBe(403);
+    expect((await flow()).items.some((i) => i.kind === "invoice" && i.fields.type === "final")).toBe(false);
+    // Home lists what waits on Raj: the deposit to pay first, then the handover to accept
+    const before = (await call(s.raj.email, "GET", `/t/${s.acme.id}/workspace?waiting=all`)).json.waiting as { action: string; title: string; projectKey: string }[];
+    expect(before.filter((w) => w.projectKey === "FLOW-1").map((w) => w.action).slice(0, 2)).toEqual(["pay", "accept"]);
+    expect(before.find((w) => w.action === "pay" && w.projectKey === "FLOW-1")!.title).toBe("Pay INV-0039-01: $3,250");
+    // neon1 is asked for nothing on a client's invoice
+    expect(((await call(OP, "GET", `/t/${s.acme.id}/workspace?waiting=all`)).json.waiting as { action: string }[]).some((w) => w.action === "pay" || w.action === "accept")).toBe(false);
+    const r = await call(s.raj.email, "POST", `${path}/handover/accept`, { note: "Dana ran a day on her own", signature: SIGN });
+    expect(r.status).toBe(200);
+    expect(r.json).toMatchObject({ final: true });
+    const steps = (await flow()).items.filter((i) => i.kind === "handoff");
+    expect(steps).toHaveLength(2);
+    for (const step of steps) expect(step.fields.accepted).toMatchObject({ name: "Raj Patel", note: "Dana ran a day on her own", signature: { doc: "acceptance", ref: step.title, typedName: "Raj Patel" } });
+    expect((await flow()).items.filter((i) => i.kind === "invoice" && i.fields.type === "final")).toHaveLength(1);
+    // Home's "Needs you" asked Raj for it while it waited, and no longer does
+    const needs = async () => ((await call(s.raj.email, "GET", `/t/${s.acme.id}/workspace?waiting=all`)).json.waiting as { action: string; title: string }[]);
+    expect((await needs()).some((w) => w.action === "accept")).toBe(false);
+    // Nothing left to accept, and no second final invoice
+    expect((await call(s.raj.email, "POST", `${path}/handover/accept`, { signature: SIGN })).json.error).toBe("nothing_to_accept");
   });
 });
 
