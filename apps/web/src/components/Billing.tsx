@@ -425,7 +425,7 @@ function RecordPayment({ invoice, items, onClose, onSave }: { invoice?: Item; it
         <Money id="pay-amount" value={amount} onChange={setAmount} required style={{ maxWidth: 220 }} />
         <label htmlFor="pay-method">How it arrived</label>
         <select id="pay-method" value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>
-          {(Object.keys(METHOD_WORDS) as PaymentMethod[]).map((m) => <option key={m} value={m}>{METHOD_WORDS[m]}</option>)}
+          {(Object.keys(METHOD_WORDS) as PaymentMethod[]).map((m) => <option key={m} value={m}>{METHOD_WORDS[m].charAt(0).toUpperCase() + METHOD_WORDS[m].slice(1)}</option>)}
         </select>
         <label htmlFor="pay-ref">Check number or confirmation (optional)</label>
         <input id="pay-ref" value={ref} onChange={(e) => setRef(e.target.value)} maxLength={120} />

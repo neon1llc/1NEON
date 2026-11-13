@@ -521,4 +521,17 @@ describe("terms agreed after the proposal", () => {
     expect(ok.status).toBe(201);
     expect(ok.json.decision.fields).toMatchObject({ supersedes: [decision.id], reason: "We agreed a 20% deposit", terms: { depositPercent: 20 } });
   });
+
+  it("asks for a reason to move the project back to Decide once an option is approved", async () => {
+    const { path } = await approveB();
+    const p0 = (await flow()).p;
+    const on = await call(OP, "POST", `${path}/move`, { version: p0.version, stageId: "build" });
+    expect(on.status).toBe(200);
+    const back = await call(OP, "POST", `${path}/move`, { version: on.json.version, stageId: "decide" });
+    expect(back.status).toBe(428);
+    expect(back.json.error).toBe("reason_required_back");
+    const ok = await call(OP, "POST", `${path}/move`, { version: on.json.version, stageId: "decide", reason: "Client wants to rethink the scope" });
+    expect(ok.status).toBe(200);
+    expect(ok.json.stageId).toBe("decide");
+  });
 });

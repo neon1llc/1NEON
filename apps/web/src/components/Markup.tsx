@@ -34,6 +34,8 @@ export function MarkupReview({ doc, rev, all, path, onClose }: { doc: DocumentRe
   // Which suggestions neon1 keeps, per option code and line; all are kept to begin with
   const [off, setOff] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState("");
+  // Options already applied from this copy; the review stays open until every one is done
+  const [applied, setApplied] = useState<Set<string>>(new Set());
   const ref = proposalRef(rev.p.number, rev.p.rev);
   // The option as it stands now, by its code in this revision
   const byCode = new Map(rev.p.snapshot.options.map((o) => [o.code, all.find((i) => i.id === o.id)]));
@@ -91,7 +93,9 @@ export function MarkupReview({ doc, rev, all, path, onClose }: { doc: DocumentRe
         toast(`Applied to ${u.code}. Check it, then issue r${rev.p.rev + 1}.`);
       }
       refresh();
-      onClose();
+      const now = new Set(applied).add(u.code);
+      setApplied(now);
+      if (state && "updates" in state && state.updates.every((x) => now.has(x.code) || !byCode.get(x.code))) onClose();
     } catch (e) {
       toast(problem(e));
     }
@@ -121,8 +125,9 @@ export function MarkupReview({ doc, rev, all, path, onClose }: { doc: DocumentRe
                 </li>
               ))}
             </ul>
-            {mayApply && opt && <div className="actions"><button type="button" className="btn btn-primary btn-sm" disabled={Boolean(busy)} onClick={() => void apply(u)}>{busy === u.code ? "Applying…" : opt.status === "approved" ? "Make revised terms with these" : `Apply to ${u.code.split("-").at(-1)}`}</button></div>}
-            {mayApply && opt?.status === "approved" && <p className="small muted">{u.code} is approved, so its terms stay as signed. The revised terms go out as a new option in r{rev.p.rev + 1}, and the client approves them in its place.</p>}
+            {applied.has(u.code) && <p className="small" role="status">Applied. {opt?.status === "approved" ? "The revised terms are a draft option, ready to check and share." : "Check the option, then issue the next revision."}</p>}
+            {mayApply && opt && !applied.has(u.code) && <div className="actions"><button type="button" className="btn btn-primary btn-sm" disabled={Boolean(busy)} onClick={() => void apply(u)}>{busy === u.code ? "Applying…" : opt.status === "approved" ? "Make revised terms with these" : `Apply to ${u.code.split("-").at(-1)}`}</button></div>}
+            {mayApply && opt?.status === "approved" && !applied.has(u.code) && <p className="small muted">{u.code} is approved, so its terms stay as signed. The revised terms go out as a new option in r{rev.p.rev + 1}, and the client approves them in its place.</p>}
           </section>
         );
       })}

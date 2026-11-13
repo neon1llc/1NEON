@@ -191,6 +191,8 @@ export function suggest(changes: Change[], options: OptionNow[]): { updates: Opt
       }
     } else if ((ch.field === "result" || ch.field === "why") && ch.kind === "changed" && after) {
       const text = ch.field === "result" ? after.replace(/^Target result:\s*/i, "") : after.replace(/^(Why I recommend it|When to pick it):\s*/i, "");
+      // Already applied from this copy: nothing left to do
+      if (norm(String(o.fields[ch.field] ?? "")) === norm(text)) continue;
       u.fields[ch.field] = text;
       u.says.push({ label: ch.field === "result" ? "Target result" : "Why pick it", before: before.replace(/^[^:]+:\s*/, ""), after: text, change: ch });
       used = true;
@@ -204,6 +206,8 @@ export function suggest(changes: Change[], options: OptionNow[]): { updates: Opt
       }
     } else if (ch.field === "body") {
       const cur = bodies.get(o.code) ?? "";
+      // Already applied from this copy (the new wording is there and the old is gone): nothing left to do
+      if (ch.after && norm(cur).includes(norm(ch.after)) && (!ch.before || !norm(cur).includes(norm(ch.before)) || norm(ch.after).includes(norm(ch.before)))) continue;
       const next = ch.kind === "added" ? `${cur.trim()}${cur.trim() ? "\n\n" : ""}${ch.after}` : replaceInBody(cur, ch.before ?? "", ch.kind === "removed" ? undefined : ch.after);
       if (next !== undefined) {
         bodies.set(o.code, next);

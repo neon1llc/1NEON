@@ -207,6 +207,28 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
   const drives = canWrite && (me.operator || isOwnOrg(org.slug));
   const gated = Boolean(ahead) && decideAt >= 0 && at <= decideAt && org.stages.indexOf(ahead!) > decideAt && !approved;
   const nextName = ahead?.name;
+  // Where the records say the work is, when the board is behind them: an approved option (and invoices
+  // or hours) means the work is past Decide; an issued proposal means the client is deciding
+  const shown = (from: number) => org.stages.slice(from).find((s) => !s.hidden);
+  const issuedBills = items.filter((i) => i.kind === "invoice" && i.status !== "draft" && i.status !== "void").length;
+  const logged = items.some((i) => i.kind === "time");
+  const proposeAt = org.stages.findIndex((s) => s.id === "propose");
+  const catchUp: { to: Stage; why: string } | undefined = (() => {
+    if (closed || at < 0) return undefined;
+    if (approved && decideAt >= 0 && at <= decideAt) {
+      const to = shown(decideAt + 1);
+      return to ? { to, why: `${approved.title} is approved${issuedBills ? `, ${issuedBills} ${issuedBills === 1 ? "invoice is" : "invoices are"} issued` : ""}${logged ? ", hours are logged" : ""}` } : undefined;
+    }
+    if (!approved && revisions(items).length && decideAt >= 0 && at < decideAt) {
+      const to = shown(decideAt);
+      return to ? { to, why: "The proposal is issued and the client can approve an option" } : undefined;
+    }
+    if (!approved && options.some((o) => o.status === "proposed") && proposeAt >= 0 && at < proposeAt) {
+      const to = shown(proposeAt);
+      return to ? { to, why: "Options are shared with the client" } : undefined;
+    }
+    return undefined;
+  })();
   // The most pressing step first: a decision, then files, then the caller's own work, then the stage
   let text: ReactNode;
   let action: { to: string; label: string } | undefined;
@@ -231,6 +253,10 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
   } else if (me.operator && drafts.length) {
     text = <>{drafts.length === 1 ? `A ${String(drafts[0]!.fields.type)} invoice is` : `${drafts.length} invoices are`} drafted. Check {drafts.length === 1 ? "it" : "them"}, then issue.</>;
     action = { to: `${base}/execute#billing`, label: "Check invoices" };
+  } else if (drives && catchUp) {
+    // The work ran ahead of the board: say what's done, and move it to where the work is in one step
+    text = <>{catchUp.why}, so this project's work is in <b>{catchUp.to.name}</b>. The board still shows <b>{stage?.name ?? "an earlier stage"}</b>.</>;
+    move = catchUp.to;
   } else if (unissued && me.operator && canWrite) {
     text = <>Issue the proposal{cur ? `'s next revision, r${cur.p.rev + 1},` : ""} so the client can approve an option.</>;
     action = { to: `${base}/needs#options`, label: cur ? `Issue r${cur.p.rev + 1}` : "Issue the proposal" };
@@ -1249,6 +1275,12 @@ function Options({ items, all, docs, path, project }: { items: Item[]; all: Item
               <h4><button type="button" className="item-open" onClick={() => setOpenId(o.id)}>{o.title}</button></h4>
               {/* The card shows the first paragraph; the panel and the proposal show every detail */}
               {o.body && <p className="small muted" style={{ marginTop: 0, whiteSpace: "pre-wrap" }}>{o.body.split(/\n\s*\n/)[0]}</p>}
+              {/* Revised terms say what they change from the option they replace, so the client sees the difference at a glance */}
+              {f.revises && (() => {
+                const was = all.find((i) => i.id === f.revises);
+                const diff = was ? termChanges(OptionFields.parse(was.fields), f, was, o) : [];
+                return <div className="notice revised-terms"><p className="small" style={{ margin: 0 }}><b>Revised terms for {was ? `${inRev(was)?.code ?? ""} ${was.title}`.trim() : "an approved option"}.</b> {diff.length ? "What changes:" : "Nothing differs yet from the approved terms."}</p>{diff.length > 0 && <ul className="small" style={{ margin: "4px 0 0", paddingLeft: 18 }}>{diff.map((d) => <li key={d}>{d}</li>)}</ul>}</div>;
+              })()}
               {f.cost && <p className="mono small" style={{ margin: "0 0 8px" }}>{f.cost}{f.timeline ? ` · ${f.timeline}` : ""}{DEMO && <span className="tag" style={{ marginLeft: 6 }}>illustrative</span>}</p>}
               {(f.hours || f.outsideCosts) && <p className="small muted" style={{ margin: "0 0 8px" }}>{[f.hours && `neon1's time: ${f.hours}${f.rateCents && f.pricing === "estimate" ? ` at ${wholeDollars(f.rateCents)} an hour` : ""}`, f.outsideCosts && `Paid directly: ${f.outsideCosts}`].filter(Boolean).join(" · ")}</p>}
               {f.purchases.length > 0 && <p className="small muted" style={{ margin: "0 0 8px" }}>To buy: {f.purchases.map((x) => `${x.name}${x.estimate ? ` (${x.estimate})` : ""}${x.buyer === "neon1" ? ", neon1 buys" : ""}`).join("; ")}</p>}
@@ -1264,7 +1296,7 @@ function Options({ items, all, docs, path, project }: { items: Item[]; all: Item
               <Meter label="Effort" value={f.effortScore} />
               {/* The decision maker approves a proposed option of the issued revision; editors move drafts along */}
               <div className="option-acts">
-                {o.status === "proposed" && decider && !why && !finished && <button className={`btn ${decided ? "btn-ghost" : "btn-primary"}`} onClick={() => startApprove(o)}>{decided ? "Choose this instead" : "Approve this option"}</button>}
+                {o.status === "proposed" && decider && !why && !finished && <button className={`btn ${decided ? "btn-ghost" : "btn-primary"}`} onClick={() => startApprove(o)}>{f.revises && inForce?.fields.optionId === f.revises ? "Approve the revised terms" : decided ? "Choose this instead" : "Approve this option"}</button>}
                 {o.status === "proposed" && decider && why && !finished && <span className="small muted">Approval waits: {why}.</span>}
                 {/* A replaced option can be chosen again, once neon1 confirms it in a fresh revision */}
                 {replacedOpt(o) && decider && !finished && (heldAgain(o) ? <span className="small muted">Going back to it waits: {heldAgain(o)}.</span> : <button className="btn btn-ghost" onClick={() => startApprove(o)}>Go back to this option</button>)}
@@ -1339,6 +1371,26 @@ function Options({ items, all, docs, path, project }: { items: Item[]; all: Item
 
 /** An option's history from the records: added, each revision it was issued in, approved and signed,
  * replaced, revised, and billed. Folded, with the latest moment in its summary */
+/** What revised terms change from the option they replace, one line each: "Deposit up front: 20%, was 50%" */
+type OptionFieldsT = ReturnType<typeof OptionFields.parse>;
+function termChanges(was: OptionFieldsT, now: OptionFieldsT, wasItem: Item, nowItem: Item): string[] {
+  const out: string[] = [];
+  const say = (label: string, a: string | undefined, b: string | undefined) => { if ((a ?? "") !== (b ?? "")) out.push(b ? `${label}: ${b}${a ? `, was ${a}` : ""}` : `${label}: removed (was ${a})`); };
+  const pct = (x?: number) => `${x ?? 50}%`;
+  if (was.depositPercent !== now.depositPercent && pct(was.depositPercent) !== pct(now.depositPercent)) say("Deposit up front", pct(was.depositPercent), pct(now.depositPercent));
+  say("Price", was.cost, now.cost);
+  say("Timeline", was.timeline, now.timeline);
+  say("neon1's time", was.hours, now.hours);
+  if (was.rateCents !== now.rateCents) say("Hourly rate", was.rateCents === undefined ? undefined : wholeDollars(was.rateCents), now.rateCents === undefined ? undefined : wholeDollars(now.rateCents));
+  say("Paid directly", was.outsideCosts, now.outsideCosts);
+  say("Target result", was.result, now.result);
+  const buys = (f: OptionFieldsT) => f.purchases.map((x) => `${x.name}${x.estimate ? ` (${x.estimate})` : ""}`).join("; ");
+  say("To buy", buys(was) || undefined, buys(now) || undefined);
+  if (wasItem.title.trim() !== nowItem.title.replace(/\s*\(revised\)\s*$/, "").trim()) out.push(`Name: ${nowItem.title}`);
+  if (wasItem.body.trim() !== nowItem.body.trim()) out.push("The description is reworded (open it to read)");
+  return out;
+}
+
 function OptionStory({ option, all }: { option: Item; all: Item[] }) {
   const moments = optionHistory(option, all);
   if (moments.length < 2) return null;

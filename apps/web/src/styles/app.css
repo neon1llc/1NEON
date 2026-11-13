@@ -1399,8 +1399,13 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
    overhang above can't reach the strip there. There the page stays still and the body scrolls inside
    it (lib/edge.ts), and the strip shows the page's own background: the tab bar's color, or the dark
    of the sign-in and of a walkthrough's card */
-html.body-scrolls { overflow: hidden; background: var(--frame); }
-html.body-scrolls body { box-sizing: border-box; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: none; }
+html.body-scrolls { height: 100%; overflow: hidden; background: linear-gradient(to bottom, var(--bg) 50%, var(--frame) 50%); }
+html.body-scrolls body { position: fixed; inset: 0; box-sizing: border-box; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: none; }
+/* The body is pinned between the browser's bars, so the strips past them show the page's own
+   background: the top bar's color above (the bar is solid here, so the two match), the tab bar's below,
+   and the dark of the sign-in on that page */
+html.body-scrolls .top { background: var(--bg); backdrop-filter: none; }
+html.body-scrolls:has(.signin) { background: var(--void); }
 html.body-scrolls:has(.live-card-back) { background: color-mix(in srgb, #0d0208 60%, var(--bg)); }
 
 
@@ -1469,3 +1474,22 @@ ul.md-says { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; 
 .md-line del { color: var(--red); text-decoration-thickness: 1.5px; }
 .md-line ins { text-decoration: none; background: var(--accent-soft); color: var(--text); border-radius: 3px; padding: 0 2px; }
 .markup-list ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+
+
+/* --- Above the keyboard (lib/keyboard.ts, 2026-11-13) ---
+   On a phone, a dialog stays inside the part of the screen that's showing: between the browser's
+   bars, and above the keyboard when it's up (--vvt and --vvh are that area's top and height). A tall
+   dialog scrolls inside itself, and a panel's head (its name and the close button) stays put at its
+   top, so it can always be closed. With the keyboard up, every dialog sits at the top of what's
+   showing, as a box above the keyboard, and the line being typed is kept in view inside it */
+:root { --chrome-top: 0px; }
+@media (pointer: coarse) {
+  dialog[open] { max-height: calc(var(--vvh, 100dvh) - var(--chrome-top) - 16px); overflow-y: auto; overscroll-behavior: contain; }
+  dialog.sheet[open] { max-height: calc(var(--vvh, 100dvh) - var(--chrome-top) - 12px); }
+  html.kb-open dialog[open] { position: fixed; inset: calc(var(--vvt, 0px) + var(--chrome-top) + 8px) 0 auto 0; margin: 0 auto; max-height: calc(var(--vvh, 100dvh) - var(--chrome-top) - 16px); }
+  html.kb-open dialog.sheet[open] { width: calc(100% - 16px); border-radius: var(--r); }
+  dialog.item-panel .panel-head { position: sticky; top: -24px; z-index: 2; margin: -24px -24px -6px; padding: 14px 24px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+}
+
+/* Revised terms on their option card: what they change from the approved option */
+.notice.revised-terms { display: block; margin: 0 0 10px; padding: 8px 12px; }

@@ -52,6 +52,14 @@ describe("an edited proposal", () => {
     expect(replaceInBody(body, "Nothing like it", "x")).toBeUndefined();
   });
 
+  it("leaves out a change already applied from the same copy", () => {
+    const edited = printed.map((p) => p.text.replace("Centralize site in AWS with chatbot", "Move the site to AWS and add the chatbot"));
+    const changes = compare(printed, edited);
+    expect(suggest(changes, [option]).updates[0]!.body).toBe("Move the site to AWS and add the chatbot");
+    const applied = { ...option, body: "Move the site to AWS and add the chatbot" };
+    expect(suggest(changes, [applied])).toEqual({ updates: [], manual: [] });
+  });
+
   it("shows a changed paragraph word by word", () => {
     expect(words("pay 50% now", "pay 20% now").filter((w) => w.op !== "same")).toEqual([{ op: "del", text: "50%" }, { op: "ins", text: "20%" }]);
   });
