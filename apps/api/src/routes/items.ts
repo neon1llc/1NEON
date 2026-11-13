@@ -2,7 +2,7 @@
 // approving an option into an immutable decision, and the advisory edit markers.
 
 
-import { AGREEMENT_EDITION, AcceptInput, AgreeInput, ApproveInput, canonical, finalLines, priceOf, initialsOf, sha256Hex, signature, depositLines, InvoiceFields, CreateItemInput, IssueInput, changeRecord, itemChanges, assessed, completionAfter, priceCheckDue, proposalRef, resolveTiming, revisions, DecisionFields, Item, OptionFields, PRICE_CHECK_DAYS, PurchaseFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, todayIn, type Project } from "@1neon/domain";
+import { AGREEMENT_EDITION, AcceptInput, AgreeInput, ApproveInput, canonical, finalLines, refundCredit, priceOf, initialsOf, sha256Hex, signature, depositLines, InvoiceFields, CreateItemInput, IssueInput, changeRecord, itemChanges, assessed, completionAfter, priceCheckDue, proposalRef, resolveTiming, revisions, DecisionFields, Item, OptionFields, PRICE_CHECK_DAYS, PurchaseFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, todayIn, type Project } from "@1neon/domain";
 import type { Context } from "hono";
 import { z } from "zod";
 import { actorId, body, byRank, check, defined, fail, label, need, now, validateFields, who, type Env } from "../lib/http.ts";
@@ -336,7 +336,7 @@ export function itemRoutes(app: App, k: Kit) {
     const steps = items.filter((i) => i.kind === "handoff").map((i) => (i.id === it.id ? next : i));
     const decision = currentDecision(items);
     const hasFinal = items.some((i) => i.kind === "invoice" && i.status !== "void" && i.fields.type === "final");
-    const final = steps.every((i) => i.status === "done") && decision && !hasFinal ? draftInvoice(p, "final", finalLines(decision, items), ts, by) : undefined;
+    const final = steps.every((i) => i.status === "done") && decision && !hasFinal ? closingDraft(p, decision, items, ts, by) : undefined;
     await repo.table.write([repo.itemOp(next, { version: it.version }), ...(final ? [repo.itemOp(final, { create: true })] : []), repo.auditOp({ tenantId: p.tenantId, actorId: by, action: "handoff.accepted", target: it.id, summary: `${p.key}: ${u.name || u.email} accepted "${it.title}"${input.note ? `: ${input.note}` : ""}, signed by ${input.signature.typedName}` })]);
     await keep(`t/${p.tenantId}/p/${p.id}/acceptances/${it.id}-v${next.version}.json`, next);
     return c.json(next);
@@ -368,7 +368,7 @@ export function itemRoutes(app: App, k: Kit) {
     // With the handover accepted, neon1 gets a draft of the final invoice for what's left on the price
     const decision = currentDecision(items);
     const hasFinal = items.some((i) => i.kind === "invoice" && i.status !== "void" && i.fields.type === "final");
-    const final = decision && !hasFinal ? draftInvoice(p, "final", finalLines(decision, items), ts, by) : undefined;
+    const final = decision && !hasFinal ? closingDraft(p, decision, items, ts, by) : undefined;
     await repo.table.write([
       ...accepted.map((next, n) => repo.itemOp(next, { version: waiting[n]!.version })),
       ...(final ? [repo.itemOp(final, { create: true })] : []),
@@ -417,6 +417,18 @@ export function currentDecision<T extends Pick<Item, "kind" | "id" | "fields" | 
 }
 
 /** A draft invoice for neon1 to check and issue; none when there is nothing to bill */
+/**
+ * What neon1 gets a draft of when a handover is accepted: the final invoice for what's left on the
+ * price or, when an estimate's hours came to less than the deposit, the credit that refunds the
+ * difference, as the service agreement promises. Nothing when the work is already billed in full
+ */
+function closingDraft(p: Project, decision: Item, items: Item[], ts: string, by: string): Item | undefined {
+  const final = draftInvoice(p, "final", finalLines(decision, items), ts, by);
+  if (final) return final;
+  const back = refundCredit(decision, items);
+  return back && draftInvoice(p, "credit", back.lines, ts, by, { appliesTo: back.appliesTo, note: "The work took fewer hours than the deposit covered, so the difference is refunded, as the service agreement says." });
+}
+
 export function draftInvoice(p: Project, type: "deposit" | "final" | "progress" | "reimbursement" | "retainer" | "credit", lines: InvoiceFields["lines"], ts: string, by: string, extra: Partial<InvoiceFields> = {}): Item | undefined {
   if (!lines.length) return undefined;
   const names = { deposit: "Deposit", final: "Final invoice", progress: "Progress invoice", reimbursement: "Purchases at cost", retainer: "Care plan", credit: "Credit" } as const;

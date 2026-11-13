@@ -320,6 +320,24 @@ export function finalLines(d: Decision, items: Rec[]): InvoiceLine[] {
   return lines;
 }
 
+/**
+ * The refund the service agreement promises on an estimate: when the hours worked come to less than
+ * what issued invoices already asked for (a deposit larger than the finished work), a credit for the
+ * difference against the largest of them. Credits already made for it count, so it is suggested once
+ */
+export function refundCredit(d: Decision, items: Rec[]): { appliesTo: string; lines: InvoiceLine[] } | undefined {
+  const at = hoursStanding((d.fields.terms ?? {}) as Terms, items);
+  if (!at) return undefined;
+  const sums = (i: Rec) => InvoiceFields.parse(i.fields).lines.filter((l) => l.ref === d.id).reduce((n, l) => n + lineCents(l), 0);
+  const before = items.filter((i) => i.kind === "invoice" && (i.status === "issued" || i.status === "paid") && i.fields.type !== "credit" && i.fields.type !== "reimbursement" && sums(i) > 0);
+  const billed = before.reduce((n, i) => n + sums(i), 0);
+  const credited = items.filter((i) => i.kind === "invoice" && i.status !== "void" && i.fields.type === "credit" && before.some((b) => b.id === i.fields.appliesTo)).reduce((n, i) => n - invoiceTotal(InvoiceFields.parse(i.fields)), 0);
+  const due = billed - at.earnedCents - credited;
+  if (due <= 0) return undefined;
+  const target = [...before].sort((a, b) => sums(b) - sums(a))[0]!;
+  return { appliesTo: target.id, lines: [{ text: `Refund on ${named(d)}: ${hoursText(at.billable)} worked comes to ${money(at.earnedCents)}, less than the ${money(billed)} invoiced earlier`.slice(0, 200), qty: 1, unitCents: due, ref: d.id }] };
+}
+
 /** Items neon1 bought for the client, at the receipt's cost, not yet on any invoice */
 export function reimbursementLines(items: (Rec & { title: string })[]): InvoiceLine[] {
   const billed = new Set(items.filter((i) => i.kind === "invoice" && i.status !== "void").flatMap((i) => InvoiceFields.parse(i.fields).lines.map((l) => l.ref)));

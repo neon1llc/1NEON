@@ -302,6 +302,33 @@ describe("an hourly estimate", () => {
 });
 
 
+describe("a deposit larger than the finished work", () => {
+  it("drafts a credit for the difference when the handover is accepted, once", async () => {
+    const { opt, path } = await flow();
+    const c = opt("C");
+    await call(OP, "PATCH", `${path}/items/${c.id}`, { version: c.version, fields: { pricing: "estimate", rateCents: 17_500, hoursLow: 20, hoursHigh: 24, cost: "", basis: [{ work: "All of it", hours: 22 }] } });
+    await call(OP, "POST", `${path}/proposals`, {});
+    const fresh = (await flow()).opt("C");
+    await call(s.raj.email, "POST", `${path}/items/${fresh.id}/approve`, { version: fresh.version, signature: SIGN });
+    const dep = (await flow()).items.find((i) => i.kind === "invoice")!;
+    await call(OP, "POST", `${path}/invoices/${dep.id}/issue`, { version: dep.version });
+    await call(OP, "POST", `${path}/invoices/${dep.id}/payments`, { amountCents: 175_000, method: "check", ref: "1041", receivedAt: "2026-11-12" });
+    // The work turned out far smaller: 6 hours, $1,050, against a $1,750 deposit
+    await call(OP, "POST", `${path}/items`, { kind: "time", title: "Order form", fields: { date: "2026-11-12", hours: 6 } });
+    const h = (await flow()).items.find((i) => i.kind === "handoff")!;
+    await call(s.raj.email, "POST", `${path}/items/${h.id}/accept`, { version: h.version, signature: SIGN });
+    const { items } = await flow();
+    expect(items.some((i) => i.kind === "invoice" && i.fields.type === "final")).toBe(false);
+    const credit = items.find((i) => i.kind === "invoice" && i.fields.type === "credit")!;
+    expect(credit).toMatchObject({ status: "draft", fields: { appliesTo: dep.id, lines: [{ unitCents: 70_000 }] } });
+    expect(String((credit.fields.lines as { text: string }[])[0]!.text)).toContain("6 hours worked comes to $1,050.00, less than the $1,750.00 invoiced earlier");
+    // Issued, the client sees it against the deposit; a second one isn't suggested
+    expect((await call(OP, "POST", `${path}/invoices/${credit.id}/issue`, { version: credit.version })).status).toBe(200);
+    expect((await call(OP, "POST", `${path}/invoices`, { type: "final" })).json.error).toBe("no_lines");
+  });
+});
+
+
 describe("paying online", () => {
   it("is off without Stripe, and points people to the other ways to pay", async () => {
     await start(false);
