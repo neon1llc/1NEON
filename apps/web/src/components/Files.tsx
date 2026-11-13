@@ -129,14 +129,14 @@ export function useUpload(target: FileTarget, onDone?: () => void) {
     const detail = await api<{ items: Item[] }>(`/t/${org.id}/projects/${target.projectId}`).catch(() => undefined);
     const rev = detail && revisions(detail.items).find((r) => r.p.number === ref.number && r.p.rev === ref.rev);
     if (!rev) return undefined;
-    const yes = await ask({ title: `Is this a revision of Proposal ${proposalRef(ref.number, ref.rev)}?`, body: `${file.name} looks like a marked-up copy. Filed as a markup, it's kept with that revision and neon1 answers with the next one.`, yes: "Yes, it's a markup", no: "No, an ordinary file" });
+    const yes = await ask({ title: `Is this an edited copy of Proposal ${proposalRef(ref.number, ref.rev)}?`, body: `${file.name} carries that proposal's ID, so it looks like a copy someone changed (in Word, Google Docs, or Pages). Kept with r${ref.rev}, 1NEON compares it with what was issued and shows neon1 each change, ready to apply to the options; neon1 answers with the next revision.`, yes: "Yes, compare it", no: "No, keep it as an ordinary file" });
     return yes ? rev.id : undefined;
   };
   const run = async (files: File[]) => {
     const plain: File[] = [];
     for (const file of files) {
       const rev = await markupOf(file);
-      if (rev) await uploadFiles(org.id, [{ file }], { ...target, layer: "needs", itemId: rev }).then((r) => toast(r[0]?.error ? `${file.name} didn't upload: ${r[0].error}` : `Filed ${file.name} as a markup`));
+      if (rev) await uploadFiles(org.id, [{ file }], { ...target, layer: "needs", itemId: rev }).then((r) => toast(r[0]?.error ? `${file.name} didn't upload: ${r[0].error}` : `Kept ${file.name} with the proposal. Under Needs, Options, choose See what changed.`));
       else plain.push(file);
     }
     if (plain.length) await go(plain.map((file) => ({ file })));

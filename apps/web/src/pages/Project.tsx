@@ -2,13 +2,14 @@
 // Execute, Observe, Normalize).
 
 
-import { balanceOf, billedOn, depositLines, hoursLogged, hoursText, lineage, lineCents, dollars as wholeDollars, failedOn, invoiceState, InvoiceFields, money as dollars, payableOn, paymentPlan, priceMeaning, priceOf, betterWhen, canApprove, changedSince, currentDecision, todayIn, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, priceCheckDue, ProjectRole, proposalRef, PurchaseFields, HandoffFields, revisions, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
+import { balanceOf, billedOn, depositLines, hoursLogged, hoursText, lineage, lineCents, dollars as wholeDollars, failedOn, invoiceState, InvoiceFields, money as dollars, payableOn, paymentPlan, priceMeaning, priceOf, betterWhen, canApprove, changedSince, currentDecision, todayIn, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, priceCheckDue, ProjectRole, proposalRef, PurchaseFields, HandoffFields, optionHistory, revisions, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
 import { ArrowRight, ExternalLink, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
 import { GUIDE, Pick, RequestBuilder, Starters } from "../components/Guide.tsx";
 import { ItemPanel, STATUS_WORDS, statusWord, useDeleteItem, useMayDelete } from "../components/ItemPanel.tsx";
 import { downloadDocx, FICTIONAL } from "../lib/docx.ts";
+import { MarkupList } from "../components/Markup.tsx";
 import { gate, Stale } from "../components/Reads.tsx";
 import { Link, NavLink, useLocation, useNavigate, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
@@ -699,7 +700,7 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
             <h2 className="section-h">{KIND_LABEL[kind][1]} <small>{CHECKABLE.has(kind) && list.length ? `${list.filter((i) => i.status === "done").length}/${list.length}` : list.length}</small></h2>
             {/* Options compare side by side, measures show as cards, everything else as rows */}
             {kind === "option" ? (
-              <Options items={list} all={items} path={path} project={project} />
+              <Options items={list} all={items} docs={docs} path={path} project={project} />
             ) : kind === "purchase" ? (
               <div>{list.map((i) => <PurchaseRow key={i.id} item={i} path={path} project={project} receipts={docs.filter((d) => d.itemId === i.id)} onStatus={(status) => void patch(i, { status })} />)}</div>
             ) : kind === "metric" ? (
@@ -1030,7 +1031,7 @@ function DecisionCard({ d, names, superseded }: { d: Item; names?: Map<string, s
  * changed since, scope changes waiting), and its actions: read or download it, ask for a refresh, or for
  * neon1, issue the next revision. Earlier revisions stay listed, grayed, and open
  */
-function ProposalStrip({ all, path, project, decider }: { all: Item[]; path: string; project: Project; decider: boolean }) {
+function ProposalStrip({ all, docs, path, project, decider }: { all: Item[]; docs: DocumentRecord[]; path: string; project: Project; decider: boolean }) {
   const { org, canWrite } = useOrg();
   const me = useSession();
   const toast = useToast();
@@ -1086,6 +1087,8 @@ function ProposalStrip({ all, path, project, decider }: { all: Item[]; path: str
       ) : (
         <div><b>Proposal draft</b> <span className="small muted">not issued yet. {mayIssue ? "Issuing freezes a numbered copy the client approves from." : "Options can be read now and approved once neon1 issues it."}</span></div>
       )}
+      {/* Edited copies the client (or neon1) filed against a revision, each comparable with it */}
+      <MarkupList docs={docs} all={all} path={path} />
       {scopeAsks.length > 0 && <div className="small"><span className="tag warn">{scopeAsks.length} {scopeAsks.length === 1 ? "request changes" : "requests change"} the agreed scope</span> {mayIssue ? "Answer with the next revision." : "neon1 answers with the next revision."}</div>}
       <div className="acts">
         <Link className="btn btn-ghost btn-sm" to={`${base}/proposal${cur ? "" : "?draft=1"}`} {...NEW_TAB}>{cur ? "Read the proposal" : "Preview the draft"} <ExternalLink size={13} aria-hidden="true" /></Link>
@@ -1111,7 +1114,7 @@ function ProposalStrip({ all, path, project, decider }: { all: Item[]; path: str
 
 
 /** Options side by side: draft, shared for approval, approved; approving one from the issued revision records a decision */
-function Options({ items, all, path, project }: { items: Item[]; all: Item[]; path: string; project: Project }) {
+function Options({ items, all, docs, path, project }: { items: Item[]; all: Item[]; docs: DocumentRecord[]; path: string; project: Project }) {
   const { org, access, canWrite } = useOrg();
   const me = useSession();
   const members = useMembers(org.id);
@@ -1139,7 +1142,7 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
   const cur = revisions(all).at(-1);
   const stale = cur && priceCheckDue(cur.p, todayIn(org.timeZone));
   const inRev = (o: Item) => cur?.p.snapshot.options.find((x) => x.id === o.id);
-  if (!items.length) return <ProposalStripMaybe all={all} path={path} project={project} decider={decider} />;
+  if (!items.length) return <ProposalStripMaybe all={all} docs={docs} path={path} project={project} decider={decider} />;
   // After a decision, the other options can still be chosen instead, but quietly. Choosing one changes
   // the decision: the one in force is replaced and stays on record. Once the handover is accepted the
   // work is finished, and its decision stays
@@ -1156,6 +1159,21 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
       toast(problem(e));
     }
     refresh();
+  };
+  // An approved option's revised copy still in the works (not yet approved in its place)
+  const revisedBy = (o: Item) => all.find((i) => i.kind === "option" && i.fields.revises === o.id && i.status !== "approved" && i.status !== "declined");
+  // A revised copy of the approved option: the same terms as a draft, opened for editing. The approved
+  // one stays the decision until the client approves the copy in a new revision
+  const revise = async (o: Item) => {
+    const f = OptionFields.parse(o.fields);
+    try {
+      const copy = await api<Item>(`${path}/items`, { method: "POST", body: { kind: "option", title: o.title.endsWith("(revised)") ? o.title : `${o.title} (revised)`.slice(0, 160), body: o.body, status: "draft", fields: { ...f, recommended: f.recommended, revises: o.id } } });
+      toast("Revised copy made. Change its terms, share it, then issue the next revision for the client to approve.");
+      refresh();
+      setOpenId(copy.id);
+    } catch (e) {
+      toast(problem(e));
+    }
   };
   // Approve the exact version on screen; if it changed meanwhile, the API refuses and we say so
   const approve = async () => {
@@ -1209,7 +1227,7 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
   })() : undefined;
   return (
     <>
-      <ProposalStrip all={all} path={path} project={project} decider={decider} />
+      <ProposalStrip all={all} docs={docs} path={path} project={project} decider={decider} />
       {/* The one thing that stands between a decision maker and Approve, said before they press it */}
       {!signed && decider && !decided && items.some((o) => o.status === "proposed") && <AgreementNeeded />}
       <div className="options">
@@ -1254,7 +1272,12 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
                 {/* Sharing an option and taking it back are neon1's to do; the client approves */}
                 {canWrite && me.operator && o.status === "draft" && <button className="btn btn-ghost" onClick={() => void setStatus(o, "proposed")}>Share with client</button>}
                 {canWrite && me.operator && o.status === "proposed" && <button className="btn btn-ghost" onClick={() => void setStatus(o, "draft")}>Back to draft</button>}
+                {/* Terms change after approval (a smaller deposit, a new date): a revised copy goes out in the
+                    next revision, and the client approves it in place of this one */}
+                {canWrite && me.operator && inForce?.fields.optionId === o.id && !finished && !revisedBy(o) && <button className="btn btn-ghost" onClick={() => void revise(o)}>Revise terms</button>}
+                {revisedBy(o) && <span className="small muted">Revised terms: <button type="button" className="linkish" onClick={() => setOpenId(revisedBy(o)!.id)}>{revisedBy(o)!.title}</button> ({STATUS_WORDS[revisedBy(o)!.status]?.toLowerCase() ?? revisedBy(o)!.status})</span>}
               </div>
+              <OptionStory option={o} all={all} />
             </article>
           );
         })}
@@ -1314,8 +1337,24 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
   );
 }
 
+/** An option's history from the records: added, each revision it was issued in, approved and signed,
+ * replaced, revised, and billed. Folded, with the latest moment in its summary */
+function OptionStory({ option, all }: { option: Item; all: Item[] }) {
+  const moments = optionHistory(option, all);
+  if (moments.length < 2) return null;
+  const last = moments.at(-1)!;
+  return (
+    <details className="history option-story">
+      <summary>History · {last.text.split(". Why:")[0]}, {dateLabel(last.at.slice(0, 10))}</summary>
+      <ol className="story">
+        {moments.map((m, i) => <li key={i} className={`is-${m.tone}`}><time dateTime={m.at}>{new Date(m.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</time><span>{m.text}</span></li>)}
+      </ol>
+    </details>
+  );
+}
+
 /** With no options shared yet, the strip shows only once there's a revision to talk about */
-function ProposalStripMaybe(props: { all: Item[]; path: string; project: Project; decider: boolean }) {
+function ProposalStripMaybe(props: { all: Item[]; docs: DocumentRecord[]; path: string; project: Project; decider: boolean }) {
   return revisions(props.all).length ? <ProposalStrip {...props} /> : null;
 }
 

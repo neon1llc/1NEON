@@ -1448,3 +1448,24 @@ input[type="date"], input[type="time"], input[type="datetime-local"] { -webkit-a
 input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
 .hours-add > div { min-width: 0; }
 .hours-add input[type="date"] { width: 170px; }
+
+/* An option's history: a quiet fold under the card, each moment with its time and a colored mark */
+.option-story { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 4px; }
+.option-story summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+ol.story { list-style: none; margin: 6px 0 0; padding: 0 0 0 12px; border-left: 2px solid var(--line); display: grid; gap: 8px; }
+ol.story li { position: relative; display: grid; gap: 1px; font-size: 13px; }
+ol.story li::before { content: ""; position: absolute; left: -18px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--panel); border: 2px solid var(--line-strong); }
+ol.story li.is-approved::before, ol.story li.is-paid::before { background: var(--accent); border-color: var(--accent); }
+ol.story li.is-replaced::before, ol.story li.is-void::before { border-color: var(--red); }
+ol.story time { font: 11px var(--mono); color: var(--muted); }
+
+/* An edited proposal copy, compared: each option's changes with a box to keep each, then the rest */
+dialog.markup-review { max-width: 720px; }
+.md-opt { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 14px; }
+.md-opt h3 { font-size: 15px; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+ul.md-says { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.md-pick { display: flex !important; align-items: center; gap: 8px; margin: 0 0 2px !important; font: 12px var(--mono) !important; color: var(--text) !important; }
+.md-line { margin: 0; font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.md-line del { color: var(--red); text-decoration-thickness: 1.5px; }
+.md-line ins { text-decoration: none; background: var(--accent-soft); color: var(--text); border-radius: 3px; padding: 0 2px; }
+.markup-list ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 4px; }

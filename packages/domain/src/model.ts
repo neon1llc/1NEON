@@ -404,6 +404,11 @@ export const OptionFields = z.object({
   ...priceFields,
   // Why neon1 recommends this option, or when it's the right one to pick, in a sentence or two
   why: z.string().max(400).default(""),
+  // A revised copy of an approved option (its terms changed after approval, such as a smaller
+  // deposit): the option it revises, which stays approved until the client approves this one instead
+  revises: id.optional(),
+  // A marked-up copy of the proposal this revision answers, when it came from one
+  fromMarkup: id.optional(),
 });
 
 

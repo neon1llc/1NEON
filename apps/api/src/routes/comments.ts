@@ -16,8 +16,10 @@ export function commentRoutes(app: App, k: Kit) {
     need(c, "read");
     const p = await project(c);
     const iid = c.req.param("iid")!;
-    const [comments, audit] = await Promise.all([repo.listComments(p.tenantId, p.id, iid), repo.listAudit(p.tenantId, 300)]);
-    return c.json({ comments, history: audit.filter((e) => e.target === iid).slice(0, 30) });
+    const [comments, audit, items] = await Promise.all([repo.listComments(p.tenantId, p.id, iid), repo.listAudit(p.tenantId, 1000), repo.listItems(p.tenantId, p.id)]);
+    // An option's history includes its decisions (approved, changed) as well as its own edits
+    const related = new Set([iid, ...items.filter((i) => i.kind === "decision" && i.fields.optionId === iid).map((i) => i.id)]);
+    return c.json({ comments, history: audit.filter((e) => e.target !== undefined && related.has(e.target)).slice(0, 40) });
   });
 
   app.post("/t/:tid/projects/:pid/items/:iid/comments", async (c) => {
