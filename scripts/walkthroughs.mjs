@@ -119,10 +119,11 @@ const state = (page) => page.evaluate(() => {
 }).catch(() => ({ title: "", line: "", eye: "", card: "", paused: false, chapter: 0, of: 0 }));
 
 // The intro card says how long the walkthrough takes ("about two minutes"). Read as seconds, with the
-// range that still counts as true: 40% either way, or the two ends of "a minute or two"
+// range that still counts as true: 40% either way, or the two ends of "a minute or two" or "a few minutes"
 const WORDS = { a: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
 function statedLength(eye) {
   if (/a minute or two/.test(eye)) return { said: "a minute or two", low: 40, high: 160 };
+  if (/a few minutes/.test(eye)) return { said: "a few minutes", low: 60, high: 240 };
   const m = /about (a|one|two|three|four|five|six|seven|eight|nine|ten|\d+) minutes?( and a half)?/.exec(eye);
   if (!m) return undefined;
   const sec = ((WORDS[m[1]] ?? Number(m[1])) + (m[2] ? 0.5 : 0)) * 60;
@@ -161,6 +162,8 @@ const SCENARIOS = {
     const took = ((Date.now() - t0) / 1000) * SPEED;
     const stated = statedLength(intro.eye);
     if (stated && (took < stated.low || took > stated.high)) throw new Error(`says it takes "${stated.said}" but took ${Math.round(took)} seconds at the default speed; correct its length`);
+    // With --verbose, the measured length is printed, for setting what each intro card says
+    if (verbose) console.log(`      ${Math.round(took)}s at the default speed; says "${stated?.said ?? "nothing"}"`);
   },
 
   /** Skip ahead a chapter at a time as soon as each begins, then step back through every one, then on to the end */

@@ -10,7 +10,7 @@
 - A question before archiving a project or deactivating a person, saying what happens and how to undo it.
 
 ### Changed
-- The walkthrough's narration sits in a band under the controls, above the page, so it never covers what's happening. Every walkthrough plays about 15% slower, and Maria's thoughts wait until the narration has had time to be read.
+- The walkthrough's narration sits in a band under the controls, above the page, so it never covers what's happening. Every walkthrough plays about 15% slower, and Maria's thoughts wait until the narration has had time to be read. Each says its new length: the preview about three minutes, the whole story about 17, and a chapter on its own a few minutes.
 - The bakery example and the demo are priced at $100 an hour, the rate for small-business workflow work: Maria's chosen option is now $1,200 to $1,500, and her final invoice comes to $775 after a $600 deposit.
 - A project's stage says how long it's been there in words ("Decide for 4 days", "since today"), not "0d".
 

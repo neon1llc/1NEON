@@ -456,7 +456,7 @@ export class Player {
     if (sec?.why) {
       this.prep = project.slice(0, at);
       this.show = {
-        id: PROJECT, title: sec.title, blurb: "One part of the story, on its own", length: "a minute or two",
+        id: PROJECT, title: sec.title, blurb: "One part of the story, on its own", length: "a few minutes",
         intro: { text: [
           `One part of a longer story, on its own: “${sec.title}”. Maria owns a fictional bakery, and Pradeep at neon1 is helping her stop retyping orders every night.`,
           "The story up to this point is set up first, out of sight, which takes a few seconds. Then she signs in and does this one thing.",
