@@ -443,7 +443,7 @@ export const STORY: Section[] = [
       await s.click(".options article:nth-child(2) .basis summary", 900);
       await s.think(`Task by task, ${MONEY.expected} at ${MONEY.rate} an hour. I pay for the hours he works, and never more than ${MONEY.high} unless I agree first.`);
       await s.hover(".options article:nth-child(2) .basis-table", 1500);
-      await s.think(`${MONEY.deposit} when I approve, the rest at handover. And an hour a night back for Sam and me: it pays for itself by spring.`);
+      await s.think(`${MONEY.deposit} when I approve, the rest at handover. And an hour a night back for Sam and me: it pays for itself in a few months.`);
       await s.hover(".options article:nth-child(2) .basis-pay", 1300);
       await s.say("The full proposal: what he learned, what's in and out, the hours, and what each side will do");
       await s.think("Let me read the whole proposal before I say yes.");
@@ -604,7 +604,7 @@ export const STORY: Section[] = [
       await s.go(`${base}/projects`, "Projects");
       // The page remembers List or Timeline; the project row is in List
       await s.click({ sel: ".switch button", text: "List" }, 500);
-      await s.click({ sel: ".ptr", text: PROJECT.name }, 1000);
+      await s.click({ sel: ".ptr a", text: PROJECT.name }, 1000);
       await s.think("Normalize is where it becomes ours for good.");
       await s.click({ sel: "nav.tabs a", text: "Normalize" }, 1000);
       await s.say("She checks off the handover as each step is done");
@@ -709,7 +709,7 @@ export const FULL: Show = {
     heading: "Meet Maria",
     text: [
       "Maria owns Maple Street Bakery, a neighborhood bakery with a team of eight. Every night she and Sam retype about 40 orders from email, voicemail, and Instagram into a spreadsheet, and a few go wrong each week. Pradeep at neon1 has invited her to 1NEON, the portal where they'll fix that together.",
-      "You'll watch her sign in with a code from her email, set up her alerts, invite her team, start a project, compare three priced options, sign for one, pay the deposit, follow the work and its hours, check the result, take the handover, and pay the final invoice. Her thoughts appear beside the cursor, and a line at the bottom says what's happening.",
+      "You'll watch her sign in with a code from her email, set up her alerts, invite her team, start a project, compare three priced options, sign for one, pay the deposit, follow the work and its hours, check the result, take the handover, and pay the final invoice. A line under the controls says what's happening, and her thoughts appear beside the cursor.",
     ],
   },
   end: "That's a whole project, start to finish.",

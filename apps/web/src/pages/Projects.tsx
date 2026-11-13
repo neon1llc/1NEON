@@ -3,12 +3,14 @@
 
 
 import { isClosed, type Layer, type Project } from "@1neon/domain";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { gate, Stale } from "../components/Reads.tsx";
+import { RowMenu } from "../components/RowMenu.tsx";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
-import { dateLabel, daysSince, Empty, Health, LayerBadge, LAYERS, layerName } from "../components/ui.tsx";
-import { useProjects } from "../lib/hooks.ts";
+import { dateLabel, Empty, stageAge, Health, LayerBadge, LAYERS, layerName, useAsk, useToast } from "../components/ui.tsx";
+import { api } from "../lib/api.ts";
+import { problem, useProjects, useRefresh } from "../lib/hooks.ts";
 import { slide } from "../lib/motion.ts";
 import { prefs } from "../lib/prefs.ts";
 
@@ -56,6 +58,27 @@ export function Projects() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [projects.data, archived, layer, q, sort, org.stages]);
 
+  // Archive from the list, after the same question the project page asks; restore at once. Behind each
+  // row's quiet dots menu, for editors only
+  const ask = useAsk();
+  const toast = useToast();
+  const refresh = useRefresh(org.id);
+  const setArchived_ = async (p: Project, on: boolean) => {
+    if (on && !(await ask({
+      title: `Archive ${p.key}?`,
+      body: `${p.name} leaves the project list, the Board, Coming up, and search, and can't be changed or take new files while it's archived. Nothing is deleted: its items, files, invoices, and history stay readable, and you can restore it at any time from the Archived list.`,
+      yes: "Archive it",
+    }))) return;
+    try {
+      await api(`/t/${org.id}/projects/${p.id}`, { method: "PATCH", body: { version: p.version, archived: on } });
+      toast(on ? `${p.key} archived` : `${p.key} restored`);
+    } catch (e) {
+      toast(problem(e));
+    }
+    refresh();
+  };
+  const menu = (p: Project) => canWrite && <RowMenu label={`More for ${p.key}`} actions={[p.archived ? { label: "Restore from archive", run: () => void setArchived_(p, false) } : { label: "Archive…", run: () => void setArchived_(p, true) }]} />;
+
   // List sits left of Timeline, so switching pans that way
   const pick = (v: "list" | "timeline") => { if (v === view) return; write(VIEW_KEY, v); slide(v === "timeline" ? "next" : "back", () => setView(v)); };
   const order = (s: Sort) => { setSort(s); write(`${VIEW_KEY}.sort`, s); };
@@ -99,23 +122,25 @@ export function Projects() {
         <div className="ptable slide-stage" data-tour="project-list" role="table" aria-label="Projects">
           {list.length > 0 && (
             <div className="ptr head" role="row">
-              <span role="columnheader">Project</span><span role="columnheader">Stage</span><span role="columnheader">Health</span><span role="columnheader">Target</span>
+              <span role="columnheader">Project</span><span role="columnheader">Stage</span><span role="columnheader">Health</span><span role="columnheader">Target</span><span role="columnheader"><span className="sr">Actions</span></span>
             </div>
           )}
           {list.map((p) => {
             const s = stage.get(p.stageId);
             return (
-              <Link key={p.id} className="ptr" role="row" to={`/o/${summary.slug}/projects/${p.key}`}>
-                <span role="cell"><span className="s">{p.key}</span><span className="t">{p.name}</span></span>
-                <span role="cell" className="small stage-cell">{s && <LayerBadge layer={s.layer} />}{s?.name ?? p.stageId} <span className="muted">{daysSince(p.stageEnteredAt)}d</span></span>
+              // The whole row opens the project (its link stretches over it); the dots menu sits above that
+              <div key={p.id} className="ptr" role="row">
+                <span role="cell"><Link className="ptr-link" to={`/o/${summary.slug}/projects/${p.key}`}><span className="s">{p.key}</span><span className="t">{p.name}</span></Link></span>
+                <span role="cell" className="small stage-cell">{s && <LayerBadge layer={s.layer} />}{s?.name ?? p.stageId} <span className="muted">{stageAge(p.stageEnteredAt)}</span></span>
                 <span role="cell"><Health value={p.health} /></span>
                 <span role="cell" className="small muted">{p.targetDate ? dateLabel(p.targetDate) : "–"}</span>
-              </Link>
+                <span role="cell" className="ptr-more">{menu(p)}</span>
+              </div>
             );
           })}
         </div>
       ) : (
-        <Timeline projects={list} slug={summary.slug} stageOf={(p) => { const st = stage.get(p.stageId); return { name: st?.name ?? "", layer: st?.layer ?? "needs", last: isClosed(org.stages, p.stageId) }; }} />
+        <Timeline projects={list} slug={summary.slug} menu={menu} stageOf={(p) => { const st = stage.get(p.stageId); return { name: st?.name ?? "", layer: st?.layer ?? "needs", last: isClosed(org.stages, p.stageId) }; }} />
       )}
     </>
   );
@@ -127,7 +152,7 @@ export function Projects() {
  * when the span is long), today as a dashed line, time still ahead lighter, each target as a
  * diamond, and time past a target in red. Each row says its stage and how the date stands, and a legend explains the colors
  */
-function Timeline({ projects, slug, stageOf }: { projects: Project[]; slug: string; stageOf: (p: Project) => { name: string; layer: Layer; last: boolean } }) {
+function Timeline({ projects, slug, stageOf, menu }: { projects: Project[]; slug: string; stageOf: (p: Project) => { name: string; layer: Layer; last: boolean }; menu: (p: Project) => ReactNode }) {
   const day = 86_400_000;
   const today = new Date(new Date().toDateString()).getTime();
   // Projects without a target date run to today (at least two weeks), faded at the end
@@ -183,9 +208,10 @@ function Timeline({ projects, slug, stageOf }: { projects: Project[]; slug: stri
           const late = target !== undefined && target < today && !stage.last;
           const words = `${p.name}: started ${short(start)}, ${stage.name}, ${standing(target, stage.last)}`;
           return (
-            <Link key={p.id} className="tl-row" to={`/o/${slug}/projects/${p.key}`} aria-label={words}>
+            // The row opens the project (its link stretches over it); the dots menu sits above that
+            <div key={p.id} className="tl-row">
               <span className="tl-name">
-                <span><span className="s">{p.key}</span> {p.name}</span>
+                <Link className="tl-link" to={`/o/${slug}/projects/${p.key}`} aria-label={words}><span className="s">{p.key}</span> {p.name}</Link>
                 <span className={`tl-sub${late ? " late" : ""}`}>{stage.name} · {standing(target, stage.last)}</span>
               </span>
               <span className="tl-track" title={words}>
@@ -200,7 +226,8 @@ function Timeline({ projects, slug, stageOf }: { projects: Project[]; slug: stri
                 {late && <span className="tl-late" style={{ left: `${pct(target)}%`, width: `${pct(today) - pct(target)}%` }} aria-hidden="true" />}
                 {target !== undefined && <i className="tl-target" style={{ left: `${pct(target)}%` }} aria-hidden="true" />}
               </span>
-            </Link>
+              <span className="tl-more">{menu(p)}</span>
+            </div>
           );
         })}
       </div>

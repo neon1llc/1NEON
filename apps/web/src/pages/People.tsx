@@ -6,7 +6,7 @@ import type { AccessLevel } from "@1neon/domain";
 import { useState } from "react";
 import { gate, Stale } from "../components/Reads.tsx";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
-import { ago, Avatar, useToast } from "../components/ui.tsx";
+import { ago, Avatar, useAsk, useToast } from "../components/ui.tsx";
 import { api } from "../lib/api.ts";
 import { problem, useMembers, useRefresh } from "../lib/hooks.ts";
 import type { MemberRow } from "../lib/types.ts";
@@ -42,6 +42,19 @@ export function People() {
       toast(problem(e));
     }
     refresh();
+  };
+
+  // Deactivating asks first: the person loses access at once. Reactivating restores it without asking
+  const ask = useAsk();
+  const toggleActive = async (m: MemberRow) => {
+    const off = m.status !== "deactivated";
+    if (off && !(await ask({
+      title: `Deactivate ${m.name || m.email}?`,
+      body: `They can't sign in to ${org.name} or get its emails and texts from now on, and any invitation they haven't accepted stops working. What they did here stays, with their name on it, and you can reactivate them at any time.`,
+      yes: "Deactivate",
+      danger: true,
+    }))) return;
+    await change(m, { status: off ? "deactivated" : "joined" });
   };
 
   // Send someone's invitation again; the API limits how often, and the row shows how it went
@@ -90,7 +103,7 @@ export function People() {
                   {canAdmin && m.status === "invited" && <button className="linkish small" style={{ marginLeft: 10 }} onClick={() => void resend(m)}>Resend</button>}
                   {/* Deactivate keeps the person's history; reactivate restores their access */}
                   {editable && (
-                    <button className="linkish small" style={{ marginLeft: 10 }} onClick={() => void change(m, { status: m.status === "deactivated" ? "joined" : "deactivated" })}>
+                    <button className="linkish small" style={{ marginLeft: 10 }} onClick={() => void toggleActive(m)}>
                       {m.status === "deactivated" ? "Reactivate" : "Deactivate"}
                     </button>
                   )}

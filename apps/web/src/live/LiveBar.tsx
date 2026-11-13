@@ -1,8 +1,8 @@
 // apps/web/src/live/LiveBar.tsx - The live playback's controls, above the portal: one segment per
 // chapter showing where the story is, the last chapter on the left, the next on the right, and
 // between them play, speed, and the chapter's name, which opens every chapter plus the other
-// walkthroughs. Around it: the card before Start, the narration line at the bottom of the screen,
-// and the card at the end. Space plays or pauses; the arrow keys step between chapters.
+// walkthroughs. Around it: the card before Start, the narration band under the controls, and the
+// card at the end. Space plays or pauses; the arrow keys step between chapters.
 
 
 import { ChevronDown, ChevronLeft, ChevronRight, Gauge, Pause, Play, RotateCcw } from "lucide-react";
@@ -155,7 +155,7 @@ export function LiveBar({ player }: { player: Player }) {
               )}
             </span>
             {/* The chapter playing, which opens the list of them. Under it, only the player's own state
-                (paused, skipping ahead): the narration itself is the line at the bottom of the screen */}
+                (paused, skipping ahead): the narration itself is the band under the controls */}
             <button className="live-now" onClick={openList} aria-expanded={list} aria-controls="live-list">
               <span className="live-title">{v.idle || (v.skipping && player.focused) ? show.title : v.done ? `${show.title} · the end` : `${v.index + 1}/${player.sections.length} · ${v.title}`}</span>
               {v.note && !v.idle && !v.done && !v.skipping && <span className="live-note">{v.note}</span>}
@@ -182,8 +182,8 @@ export function LiveBar({ player }: { player: Player }) {
             <div className="live-load-bar" aria-hidden="true"><i style={{ transform: `scaleX(${Math.max(0.04, v.loading)})` }} /></div>
           </div>
         </div>, document.body)}
-      {/* The narration: what's happening on screen, in one line at the bottom, like a film's subtitles.
-          Screen readers hear each new line */}
+      {/* The narration: what's happening on screen, in a band under the controls that the page starts
+          below, so it never covers anything. Screen readers hear each new line */}
       {createPortal(<div className={`live-sub${narration ? " on" : ""}`} role="status" aria-live="polite"><span key={narration}>{narration}</span></div>, document.body)}
 
       {/* Before Start: who this is, what's coming, and how long it takes. Nothing moves until the

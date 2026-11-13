@@ -278,23 +278,57 @@ type Terms = PriceTerms & { title?: string };
 
 // "0039-r1-B Solid setup": the option's ID in the proposal, then its name
 const named = (d: Decision) => `${typeof d.fields.code === "string" ? `${d.fields.code} ` : ""}${((d.fields.terms ?? {}) as Terms).title ?? d.title}`;
-// The earlier invoices for this decision's work (deposit and progress lines name it), oldest first
-const earlier = (d: Decision, items: Rec[]) => items
-  .filter((i) => i.kind === "invoice" && i.status !== "void" && i.fields.type !== "credit" && i.fields.type !== "reimbursement")
-  .map((i) => InvoiceFields.parse(i.fields))
-  .filter((f) => f.lines.some((l) => l.ref === d.id))
-  .sort((a, b) => String(a.issuedAt ?? "~").localeCompare(String(b.issuedAt ?? "~")));
-// What those invoices already asked for
-const billedOn = (d: Decision, items: Rec[]) => earlier(d, items).flatMap((f) => f.lines).filter((l) => l.ref === d.id).reduce((s, l) => s + lineCents(l), 0);
+/**
+ * A decision and every earlier one it replaced, directly or through another. Money invoiced on any of
+ * them counts toward it, so changing to a different option never asks for the same money twice
+ */
+export function lineage(d: Decision, items: Rec[]): Set<string> {
+  const byId = new Map(items.filter((i) => i.kind === "decision").map((i) => [i.id, i]));
+  const ids = new Set<string>();
+  const todo = [d.id];
+  while (todo.length) {
+    const id = todo.pop()!;
+    if (ids.has(id)) continue;
+    ids.add(id);
+    const replaced = (id === d.id ? d : byId.get(id))?.fields.supersedes;
+    if (Array.isArray(replaced)) todo.push(...(replaced as string[]));
+  }
+  return ids;
+}
+// The earlier invoices for this decision's work, or an earlier decision's it replaced (deposit and
+// progress lines name it), oldest first
+const earlier = (d: Decision, items: Rec[]) => {
+  const ids = lineage(d, items);
+  return items
+    .filter((i) => i.kind === "invoice" && i.status !== "void" && i.fields.type !== "credit" && i.fields.type !== "reimbursement")
+    .map((i) => InvoiceFields.parse(i.fields))
+    .filter((f) => f.lines.some((l) => ids.has(l.ref ?? "")))
+    .sort((a, b) => String(a.issuedAt ?? "~").localeCompare(String(b.issuedAt ?? "~")));
+};
+/** What invoices already asked for on this decision's work, including any decision it replaced */
+export const billedOn = (d: Decision, items: Rec[]) => {
+  const ids = lineage(d, items);
+  return earlier(d, items).flatMap((f) => f.lines).filter((l) => ids.has(l.ref ?? "")).reduce((s, l) => s + lineCents(l), 0);
+};
 // "INV-0039-01 and INV-0039-02": the earlier invoices by number, so the subtraction can be checked
 const listed = (names: string[]) => (names.length > 2 ? `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}` : names.join(" and "));
 
-/** A deposit line for an approved option with a price in numbers; none when the price is only words */
-export function depositLines(d: Decision, percent = DEPOSIT_PERCENT): InvoiceLine[] {
+/**
+ * The deposit lines for an approved option with a price in numbers; none when the price is only words.
+ * When it replaces an earlier decision, what was already invoiced for that one counts toward the
+ * deposit, and no deposit is asked when it already covers it
+ */
+export function depositLines(d: Decision, percent = DEPOSIT_PERCENT, items: Rec[] = []): InvoiceLine[] {
   const price = priceOf((d.fields.terms ?? {}) as Terms);
   if (!price) return [];
-  if (price.kind === "fixed") return [{ text: `${percent}% deposit on ${named(d)}`.slice(0, 200), qty: 1, unitCents: Math.round((price.totalCents * percent) / 100), ref: d.id }];
-  return [{ text: `Deposit on ${named(d)}: ${percent}% of the estimate's low end (${dollars(price.lowCents)})`.slice(0, 200), qty: 1, unitCents: Math.round((price.lowCents * percent) / 100), ref: d.id }];
+  const ask: InvoiceLine = price.kind === "fixed"
+    ? { text: `${percent}% deposit on ${named(d)}`.slice(0, 200), qty: 1, unitCents: Math.round((price.totalCents * percent) / 100), ref: d.id }
+    : { text: `Deposit on ${named(d)}: ${percent}% of the estimate's low end (${dollars(price.lowCents)})`.slice(0, 200), qty: 1, unitCents: Math.round((price.lowCents * percent) / 100), ref: d.id };
+  const billed = items.length ? billedOn(d, items) : 0;
+  if (billed <= 0) return [ask];
+  if (ask.unitCents - billed <= 0) return [];
+  const numbers = earlier(d, items).flatMap((f) => (f.number ? [f.number] : []));
+  return [ask, { text: `Less ${numbers.length ? listed(numbers) : "what was invoiced"} for the option this one replaces`.slice(0, 200), qty: 1, unitCents: -billed, ref: d.id }];
 }
 
 /**
@@ -321,21 +355,33 @@ export function finalLines(d: Decision, items: Rec[]): InvoiceLine[] {
 }
 
 /**
- * The refund the service agreement promises on an estimate: when the hours worked come to less than
- * what issued invoices already asked for (a deposit larger than the finished work), a credit for the
- * difference against the largest of them. Credits already made for it count, so it is suggested once
+ * The refund the service agreement promises: when the work comes to less than what issued invoices
+ * already asked for, a credit for the difference against the largest of them. On an estimate the work
+ * is the hours worked (a deposit larger than the finished work); on a fixed price it's the price, which
+ * can be less than what was paid after changing to a smaller option. Invoices on a decision this one
+ * replaced count. Credits already made for it count too, so it is suggested once
  */
-export function refundCredit(d: Decision, items: Rec[]): { appliesTo: string; lines: InvoiceLine[] } | undefined {
-  const at = hoursStanding((d.fields.terms ?? {}) as Terms, items);
-  if (!at) return undefined;
-  const sums = (i: Rec) => InvoiceFields.parse(i.fields).lines.filter((l) => l.ref === d.id).reduce((n, l) => n + lineCents(l), 0);
+export function refundCredit(d: Decision, items: Rec[]): { appliesTo: string; lines: InvoiceLine[]; note: string } | undefined {
+  const terms = (d.fields.terms ?? {}) as Terms;
+  const price = priceOf(terms);
+  if (!price) return undefined;
+  const at = hoursStanding(terms, items);
+  const earned = price.kind === "fixed" ? price.totalCents : at!.earnedCents;
+  const ids = lineage(d, items);
+  const sums = (i: Rec) => InvoiceFields.parse(i.fields).lines.filter((l) => ids.has(l.ref ?? "")).reduce((n, l) => n + lineCents(l), 0);
   const before = items.filter((i) => i.kind === "invoice" && (i.status === "issued" || i.status === "paid") && i.fields.type !== "credit" && i.fields.type !== "reimbursement" && sums(i) > 0);
   const billed = before.reduce((n, i) => n + sums(i), 0);
   const credited = items.filter((i) => i.kind === "invoice" && i.status !== "void" && i.fields.type === "credit" && before.some((b) => b.id === i.fields.appliesTo)).reduce((n, i) => n - invoiceTotal(InvoiceFields.parse(i.fields)), 0);
-  const due = billed - at.earnedCents - credited;
+  const due = billed - earned - credited;
   if (due <= 0) return undefined;
   const target = [...before].sort((a, b) => sums(b) - sums(a))[0]!;
-  return { appliesTo: target.id, lines: [{ text: `Refund on ${named(d)}: ${hoursText(at.billable)} worked comes to ${money(at.earnedCents)}, less than the ${money(billed)} invoiced earlier`.slice(0, 200), qty: 1, unitCents: due, ref: d.id }] };
+  const text = price.kind === "fixed"
+    ? `Refund on ${named(d)}: its fixed price of ${money(earned)} is less than the ${money(billed)} invoiced earlier`
+    : `Refund on ${named(d)}: ${hoursText(at!.billable)} worked comes to ${money(earned)}, less than the ${money(billed)} invoiced earlier`;
+  const note = price.kind === "fixed"
+    ? "The option you changed to costs less than what was already invoiced, so the difference is refunded, as the service agreement says."
+    : "The work took fewer hours than the deposit covered, so the difference is refunded, as the service agreement says.";
+  return { appliesTo: target.id, lines: [{ text: text.slice(0, 200), qty: 1, unitCents: due, ref: d.id }], note };
 }
 
 /** Items neon1 bought for the client, at the receipt's cost, not yet on any invoice */

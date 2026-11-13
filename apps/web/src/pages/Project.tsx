@@ -2,7 +2,7 @@
 // Execute, Observe, Normalize).
 
 
-import { balanceOf, dollars as wholeDollars, failedOn, invoiceState, InvoiceFields, money as dollars, payableOn, paymentPlan, priceMeaning, priceOf, betterWhen, canApprove, changedSince, currentDecision, todayIn, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, priceCheckDue, ProjectRole, proposalRef, PurchaseFields, HandoffFields, revisions, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
+import { balanceOf, billedOn, depositLines, hoursLogged, hoursText, lineage, lineCents, dollars as wholeDollars, failedOn, invoiceState, InvoiceFields, money as dollars, payableOn, paymentPlan, priceMeaning, priceOf, betterWhen, canApprove, changedSince, currentDecision, todayIn, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, priceCheckDue, ProjectRole, proposalRef, PurchaseFields, HandoffFields, revisions, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
 import { ArrowRight, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
@@ -12,7 +12,7 @@ import { downloadDocx, FICTIONAL } from "../lib/docx.ts";
 import { gate, Stale } from "../components/Reads.tsx";
 import { Link, NavLink, useLocation, useNavigate, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
-import { Avatar, ConflictDialog, Dialog, Empty, Health, HEALTH_LABEL, LayerBadge, LAYERS, layerHint, layerName, layerProgress, OnionProgress, Trend, ago, dateLabel, daysSince, layerFromSlug, layerSlug, useToast } from "../components/ui.tsx";
+import { Avatar, ConflictDialog, Dialog, Empty, Health, HEALTH_LABEL, LayerBadge, LAYERS, layerHint, layerName, layerProgress, OnionProgress, Trend, ago, dateLabel, daysSince, inStageFor, layerFromSlug, layerSlug, useAsk, useToast } from "../components/ui.tsx";
 import { api, DEMO, HttpError } from "../lib/api.ts";
 import { AgreementNeeded, Hours, Invoices, PriceBasis, SignBox, signReady, useAgreementSigned, type Priced, type SignValue } from "../components/Billing.tsx";
 import { firstYear, money, parseCost, type Recurring } from "../lib/cost.ts";
@@ -109,7 +109,7 @@ export function ProjectPage() {
       {/* Shown data that a refresh couldn't update is marked, so nobody acts on it unknowingly */}
       <Stale reads={[projects, detail]} />
       {/* Key, current stage with its age, then the name with health and archive state */}
-      <p className="mono small muted" style={{ margin: 0 }}>{p.key} · {org.stages[stageAt]?.name} for {daysSince(p.stageEnteredAt)}d</p>
+      <p className="mono small muted" style={{ margin: 0 }}>{p.key} · {org.stages[stageAt]?.name} {inStageFor(p.stageEnteredAt)}</p>
       <h1 className="page-title" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         {p.name} <Health value={p.health} />
         <OnionProgress progress={prog} size={44} />
@@ -354,6 +354,16 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
     }
     refresh();
   };
+  // Archive after a yes; restore at once
+  const ask = useAsk();
+  const archive = async () => {
+    if (!p.archived && !(await ask({
+      title: `Archive ${p.key}?`,
+      body: `${p.name} leaves the project list, the Board, Coming up, and search, and can't be changed or take new files while it's archived. Nothing is deleted: its items, files, invoices, and history stay readable here, and you can restore it from this page at any time.`,
+      yes: "Archive it",
+    }))) return;
+    await save(p.version, { archived: !p.archived });
+  };
   // The summary edit started from an older version than the one now on screen
   const newerWhileEditing = editing && p.version > editBase && JSON.stringify(draft) !== JSON.stringify(basics());
   // What the basics still lack, for the reminder to finish them
@@ -461,7 +471,8 @@ function Overview({ project: p, items }: { project: Project; items: Item[] }) {
         )}
         {canWrite && (
           <p className="small" style={{ marginTop: 18 }}>
-            <button className="linkish" onClick={() => void save(p.version, { archived: !p.archived })}>{p.archived ? "Restore from archive" : "Archive this project"}</button>
+            {/* Archiving asks first, as deleting does: the project leaves every list and locks. Restoring doesn't need to */}
+            <button className="linkish" onClick={() => void archive()}>{p.archived ? "Restore from archive" : "Archive this project"}</button>
           </p>
         )}
       </aside>
@@ -989,7 +1000,7 @@ function Meter({ label, value }: { label: keyof typeof SCORE_WORDS; value: numbe
  * made before terms were copied say so plainly rather than showing today's option as the agreement
  */
 function DecisionCard({ d, names, superseded }: { d: Item; names?: Map<string, string>; superseded?: boolean }) {
-  const f = d.fields as { approvedBy?: string; approvedAt?: string; optionVersion?: number; approverName?: string; code?: string; initials?: string; signature?: { typedName: string; at: string; hash: string }; terms?: { title: string; body?: string; cost?: string; timeline?: string } };
+  const f = d.fields as { approvedBy?: string; approvedAt?: string; optionVersion?: number; approverName?: string; code?: string; initials?: string; reason?: string; signature?: { typedName: string; at: string; hash: string }; terms?: { title: string; body?: string; cost?: string; timeline?: string } };
   const by = f.approverName || names?.get(String(f.approvedBy)) || "a member";
   return (
     <div className={`decision${superseded ? " superseded" : ""}`} id={`item-${d.id}`}>
@@ -1005,6 +1016,7 @@ function DecisionCard({ d, names, superseded }: { d: Item; names?: Map<string, s
       ) : (
         <p className="small muted" style={{ margin: "6px 0 0" }}>This decision was recorded before 1NEON kept a copy of the approved terms, so only the option and version are on record.</p>
       )}
+      {f.reason && <p className="small" style={{ margin: "6px 0 0" }}><b>Why it changed:</b> {f.reason}</p>}
       {d.body && <p className="small" style={{ margin: "6px 0 0" }}>Conditions: {d.body}</p>}
     </div>
   );
@@ -1110,12 +1122,14 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
   // The option waiting on approval, the conditions being typed, and initials when neon1 buys something
   const [approving, setApproving] = useState<Item>();
   const [conditions, setConditions] = useState("");
+  // Why the decision changes, when one is already in force: required, signed, and kept with it
+  const [reason, setReason] = useState("");
   const [sign, setSign] = useState<SignValue>({ typedName: "", consent: false });
   const signed = useAgreementSigned();
   // Which option the typed conditions belong to: reopening the same one keeps them (after a lost
   // reply, say), and another option starts blank
   const [draftFor, setDraftFor] = useState<string>();
-  const startApprove = (o: Item) => { if (draftFor !== o.id) { setConditions(""); setSign({ typedName: "", consent: false }); setDraftFor(o.id); } setApproving(o); };
+  const startApprove = (o: Item) => { if (draftFor !== o.id) { setConditions(""); setReason(""); setSign({ typedName: "", consent: false }); setDraftFor(o.id); } setApproving(o); };
   // The option open in its panel (details, comments, and for neon1 the edit fields)
   const [openId, setOpenId] = useState<string>();
   const opened = items.find((o) => o.id === openId);
@@ -1124,8 +1138,14 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
   const stale = cur && priceCheckDue(cur.p, todayIn(org.timeZone));
   const inRev = (o: Item) => cur?.p.snapshot.options.find((x) => x.id === o.id);
   if (!items.length) return <ProposalStripMaybe all={all} path={path} project={project} decider={decider} />;
-  // After a decision, the other options can still be chosen instead, but quietly
+  // After a decision, the other options can still be chosen instead, but quietly. Choosing one changes
+  // the decision: the one in force is replaced and stays on record. Once the handover is accepted the
+  // work is finished, and its decision stays
   const decided = items.some((o) => o.status === "approved");
+  const inForce = currentDecision(all).decision;
+  const finished = all.some((i) => i.kind === "handoff" && Boolean(i.fields.accepted));
+  // An option an earlier change replaced: approved once, no longer the decision in force
+  const replacedOpt = (o: Item) => o.status === "approved" && Boolean(inForce) && inForce?.fields.optionId !== o.id;
   // Move an option between draft, proposed, and declined
   const setStatus = async (o: Item, status: string) => {
     try {
@@ -1142,8 +1162,8 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
     if (!o) return;
     try {
       // Approvals are never retried on their own; a lost reply says so and the page re-reads
-      await api(`${path}/items/${o.id}/approve`, { method: "POST", body: { version: o.version, conditions, signature: { typedName: sign.typedName.trim(), consent: sign.consent } } });
-      toast(`Approved: ${inRev(o)?.code ?? ""} ${o.title}`);
+      await api(`${path}/items/${o.id}/approve`, { method: "POST", body: { version: o.version, conditions, reason: inForce ? reason.trim() : "", signature: { typedName: sign.typedName.trim(), consent: sign.consent } } });
+      toast(`${inForce ? "Changed to" : "Approved"}: ${inRev(o)?.code ?? ""} ${o.title}`);
       setDraftFor(undefined);
     } catch (e) {
       if (e instanceof HttpError && e.status === 409 && e.body.error === "conflict") toast("That option changed since you opened it. Review it again, then approve.");
@@ -1160,9 +1180,31 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
     if (stale) return "prices may have changed; ask neon1 to refresh";
     return undefined;
   };
+  // Why a replaced option can't be chosen again yet: its approval moved it past the issued revision,
+  // so neon1 confirms it, with today's prices, in the next one
+  const heldAgain = (o: Item) => {
+    const snap = inRev(o);
+    if (!cur || !snap || snap.version !== o.version) return "neon1 confirms it in the next revision of the proposal";
+    if (stale) return "prices may have changed; ask neon1 to refresh";
+    return undefined;
+  };
   const a = approving && OptionFields.parse(approving.fields);
   const aCode = approving && inRev(approving)?.code;
   const neon1Buys = a?.purchases.filter((x) => x.buyer === "neon1") ?? [];
+  // A change, in money and hours, before it's signed: what was already invoiced for the decision in
+  // force (it counts toward the new option), the hours logged so far, and the deposit asked now. The
+  // same rules the API applies, so the dialog never promises a figure the invoice won't show
+  const change = approving && a && inForce ? (() => {
+    const next = { id: "next", title: approving.title, fields: { terms: a, supersedes: [inForce.id], code: aCode } };
+    const ids = lineage(next, all);
+    const pool = all.filter((i) => !(i.kind === "invoice" && i.status === "draft" && i.fields.type === "deposit" && InvoiceFields.parse(i.fields).lines.some((l) => ids.has(l.ref ?? ""))));
+    const price = priceOf(a);
+    const invoiced = billedOn(next, pool);
+    const deposit = depositLines(next, undefined, pool).reduce((n, l) => n + lineCents(l), 0);
+    const ceiling = price?.kind === "fixed" ? price.totalCents : price?.highCents;
+    const was = inForce.fields as { code?: string; approvedAt?: string; approverName?: string };
+    return { was: `${was.code ? `${was.code} ` : ""}${inForce.title.replace(/^Approved: /, "")}`, when: String(was.approvedAt ?? "").slice(0, 10), by: was.approverName, price, invoiced, deposit, hours: hoursLogged(all), over: ceiling !== undefined && invoiced > ceiling };
+  })() : undefined;
   return (
     <>
       <ProposalStrip all={all} path={path} project={project} decider={decider} />
@@ -1179,7 +1221,7 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
               <div className="card-head">
                 <span style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                   {f.recommended && <span className="tag rec">recommended</span>}
-                  <span className={`tag${o.status === "approved" ? " client" : ""}`}>{STATUS_WORDS[o.status]?.toLowerCase() ?? o.status}</span>
+                  {replacedOpt(o) ? <span className="tag" title="Approved once, then the decision changed to another option">replaced</span> : <span className={`tag${o.status === "approved" ? " client" : ""}`}>{STATUS_WORDS[o.status]?.toLowerCase() ?? o.status}</span>}
                   {code && <span className="opt-code" title="This option's ID in the issued proposal">{code}</span>}
                 </span>
                 <DeleteItem item={o} path={path} label="Option" />
@@ -1202,8 +1244,10 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
               <Meter label="Effort" value={f.effortScore} />
               {/* The decision maker approves a proposed option of the issued revision; editors move drafts along */}
               <div className="option-acts">
-                {o.status === "proposed" && decider && !why && <button className={`btn ${decided ? "btn-ghost" : "btn-primary"}`} onClick={() => startApprove(o)}>{decided ? "Choose this instead" : "Approve this option"}</button>}
-                {o.status === "proposed" && decider && why && <span className="small muted">Approval waits: {why}.</span>}
+                {o.status === "proposed" && decider && !why && !finished && <button className={`btn ${decided ? "btn-ghost" : "btn-primary"}`} onClick={() => startApprove(o)}>{decided ? "Choose this instead" : "Approve this option"}</button>}
+                {o.status === "proposed" && decider && why && !finished && <span className="small muted">Approval waits: {why}.</span>}
+                {/* A replaced option can be chosen again, once neon1 confirms it in a fresh revision */}
+                {replacedOpt(o) && decider && !finished && (heldAgain(o) ? <span className="small muted">Going back to it waits: {heldAgain(o)}.</span> : <button className="btn btn-ghost" onClick={() => startApprove(o)}>Go back to this option</button>)}
                 {o.status === "proposed" && !decider && !decided && <span className="small muted">Waiting on {deciders.length ? deciders.join(" or ") : "a client admin"}</span>}
                 {/* Sharing an option and taking it back are neon1's to do; the client approves */}
                 {canWrite && me.operator && o.status === "draft" && <button className="btn btn-ghost" onClick={() => void setStatus(o, "proposed")}>Share with client</button>}
@@ -1220,13 +1264,14 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
       {opened && <ItemPanel item={opened} label="Option" path={path} open onClose={() => setOpenId(undefined)} />}
       {/* Approval restates exactly what's being accepted, so nobody recalls terms from another screen */}
       <Dialog open={Boolean(approving)} onClose={() => setApproving(undefined)} label="Approve option">
-        <h2>Approve {aCode ?? "this option"}?</h2>
+        <h2>{inForce ? `Change to ${aCode ?? "this option"}?` : `Approve ${aCode ?? "this option"}?`}</h2>
         {approving && a && (
           <dl className="terms-list">
             <dt>Option</dt><dd><b>{approving.title}</b>{aCode && <span className="opt-code"> · {aCode}</span>}</dd>
             {cur && <><dt>From</dt><dd>Proposal {proposalRef(cur.p.number, cur.p.rev)}, issued {dateLabel(cur.p.issuedAt.slice(0, 10))}</dd></>}
             <dt>Price</dt><dd>{a.cost || "not stated"}<CostSplit cost={a.cost} />{priceOf(a) && <div className="small muted">{priceMeaning(priceOf(a)!)}</div>}</dd>
-            {priceOf(a) && <><dt>When you pay</dt><dd>{paymentPlan(priceOf(a)!).map((l) => <div key={l}>{l}</div>)}</dd></>}
+            {/* After a change with money already invoiced, the change box below says what's asked now */}
+            {priceOf(a) && !(change && change.invoiced > 0) && <><dt>When you pay</dt><dd>{paymentPlan(priceOf(a)!).map((l) => <div key={l}>{l}</div>)}</dd></>}
             {a.timeline && <><dt>Timeline</dt><dd>{a.timeline}</dd></>}
             {a.hours && <><dt>neon1's time</dt><dd>{a.hours}</dd></>}
             {a.outsideCosts && <><dt>Paid directly by you</dt><dd>{a.outsideCosts}</dd></>}
@@ -1234,13 +1279,32 @@ function Options({ items, all, path, project }: { items: Item[]; all: Item[]; pa
             {a.result && <><dt>Result to check</dt><dd>{a.result}</dd></>}
           </dl>
         )}
+        {/* A change says what it replaces and what happens to the money before anyone signs */}
+        {change && (
+          <div className="change-box">
+            <p style={{ margin: "0 0 6px" }}><b>This replaces {change.was}</b>{change.when ? `, approved ${dateLabel(change.when)}` : ""}{change.by ? ` by ${change.by}` : ""}. That decision stays on record, marked replaced.</p>
+            <ul className="small">
+              <li>{change.invoiced > 0 ? `${dollars(change.invoiced)} already invoiced for it counts toward this option. Nothing is billed twice.` : "Nothing has been invoiced for it yet."}</li>
+              {change.price?.kind === "estimate" && change.hours > 0 && <li>{hoursText(change.hours)} already logged count toward this option's hours, and its high end still caps the total.</li>}
+              {change.price && <li>{change.deposit > 0 ? `Deposit asked now: ${dollars(change.deposit)}${change.invoiced > 0 ? ", the difference" : ""}.` : "No new deposit: what was already invoiced covers it."}</li>}
+              {change.over && <li>What's been invoiced is more than this option can cost, so the difference comes back to you as a credit at handover.</li>}
+              <li>Work already done stays on record. neon1 goes through the earlier option's open tasks and purchases with you before removing any.</li>
+            </ul>
+          </div>
+        )}
+        {inForce && (
+          <>
+            <label htmlFor="why">Why change? (required)</label>
+            <textarea id="why" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={1000} placeholder="e.g. the holiday rush moved up, so we need the smaller option first" />
+          </>
+        )}
         <label htmlFor="cond">Conditions (optional)</label>
         <textarea id="cond" value={conditions} onChange={(e) => setConditions(e.target.value)} maxLength={2000} placeholder="e.g. only if the work happens after 6pm" />
         {neon1Buys.length > 0 && <p className="small">Signing also agrees that neon1 buys {neon1Buys.map((x) => x.name).join(" and ")} for you and is paid back at cost, with the receipt.</p>}
         {signed ? <SignBox id="approve-sign" value={sign} onChange={setSign} /> : <AgreementNeeded />}
-        <p className="small muted">Signing approves this option's scope and price under your service agreement. 1NEON keeps a copy of these terms with your signature, who signed and when; none of it can be edited afterwards. Invoices follow as the proposal says.</p>
+        <p className="small muted">{inForce ? "Signing replaces the decision in force with this option's scope and price under your service agreement. 1NEON keeps both decisions, your reason, and your signature; none of it can be edited afterwards." : "Signing approves this option's scope and price under your service agreement. 1NEON keeps a copy of these terms with your signature, who signed and when; none of it can be edited afterwards."} Invoices follow as the proposal says.</p>
         <div className="actions">
-          <button className="btn btn-primary" disabled={!signed || !signReady(sign)} onClick={() => void approve()}>Sign and approve {aCode ?? ""}</button>
+          <button className="btn btn-primary" disabled={!signed || !signReady(sign) || (Boolean(inForce) && reason.trim().length < 3)} onClick={() => void approve()}>{inForce ? `Sign and change to ${aCode ?? ""}` : `Sign and approve ${aCode ?? ""}`}</button>
           <button className="btn btn-ghost" onClick={() => setApproving(undefined)}>Cancel</button>
         </div>
       </Dialog>

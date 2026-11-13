@@ -1,5 +1,5 @@
 // apps/web/src/live/preview.ts - The short preview /1NEON/live opens with: one fictional request
-// becoming a handover in about two minutes, signed in for real, on the real portal. Request, compare, approve,
+// becoming a handover in about three minutes, signed in for real, on the real portal. Request, compare, approve,
 // see progress, receive the handover. The full story (?play=full) and the short demos stay a pick
 // away in the controls' menu.
 
@@ -36,11 +36,11 @@ export const PREVIEW: Show = {
   id: "preview",
   title: "The short preview",
   blurb: "Request, compare, approve, progress, and handover",
-  length: "about two minutes",
+  length: "about three minutes",
   intro: {
     text: [
       "Maria owns a fictional bakery. Every night she and Sam retype about 40 orders from email, voicemail, and Instagram into a spreadsheet, and she has asked Pradeep at neon1 for help.",
-      "In about two minutes you'll watch her sign in, ask for what she needs, compare three priced options, approve one, see the work and its hours, and take the handover. Her thoughts appear beside the cursor, and a line at the bottom says what's happening.",
+      "In about three minutes you'll watch her sign in, ask for what she needs, compare three priced options, approve one, see the work and its hours, and take the handover. A line under the controls says what's happening, and her thoughts appear beside the cursor.",
     ],
   },
   end: "That's the short version.",

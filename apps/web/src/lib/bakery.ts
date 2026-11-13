@@ -63,8 +63,8 @@ export const FILE_ASK = { title: "Last week's order emails and voicemail transcr
 
 // --- The three options -------------------------------------------------------------------
 
-/** neon1's rate for business workflow work, in cents an hour */
-export const RATE_CENTS = 17_500;
+/** neon1's rate for small-business workflow work, in cents an hour (Knowledge Center, "How pricing works") */
+export const RATE_CENTS = 10_000;
 
 /** One option as Pradeep writes it: the title, the details, and its fields */
 export interface BakeryOption { title: string; body: string; fields: Record<string, unknown> & { hoursLow: number; hoursHigh: number; basis: BasisLine[] } }
@@ -74,19 +74,19 @@ const estimate = (hoursLow: number, hoursHigh: number, basis: BasisLine[]) => ({
 
 // The work in A, which B and C build on (B needs less of A's own testing: its dry run covers it)
 const FORM: BasisLine[] = [
-  { work: "Order form with pickup rules and a confirmation to the customer", hours: 3 },
-  { work: "One order list with a status for each order", hours: 1.5 },
-  { work: "The form's link on your website and Google profile, and in automatic replies", hours: 1 },
+  { work: "Order form with pickup rules and a confirmation to the customer", hours: 1.5 },
+  { work: "One order list with a status for each order", hours: 0.5 },
+  { work: "The form's link on your website and Google profile, and in automatic replies", hours: 0.5 },
 ];
 const SOLID: BasisLine[] = [
   ...FORM,
-  { work: "Order emails and voicemail transcripts read into the list, each marked to check", hours: 6 },
-  { work: "Staff form for phone and Instagram orders, and a flag on possible duplicates", hours: 1.5 },
-  { work: "7pm summary for you and Sam, and Dee's bake sheet for 4am", hours: 2 },
+  { work: "Order emails and voicemail transcripts read into the list, each marked to check", hours: 3.5 },
+  { work: "Staff form for phone and Instagram orders, and a flag on possible duplicates", hours: 1 },
+  { work: "7pm summary for you and Sam, and Dee's bake sheet for 4am", hours: 1.5 },
   { work: "Pickup tags from the label printer", hours: 1 },
-  { work: "Safety net: a nightly copy, an alert if orders stop arriving, and a sign-in for each person", hours: 1.5 },
-  { work: "Dry run on a past week of real orders, then a week side by side with the old way", hours: 2.5 },
-  { work: "Runbook, recorded walkthrough, and handover", hours: 2 },
+  { work: "Safety net: a nightly copy, an alert if orders stop arriving, and a sign-in for each person", hours: 1 },
+  { work: "Dry run on a past week of real orders, then a week side by side with the old way", hours: 2 },
+  { work: "Runbook, recorded walkthrough, and handover", hours: 1 },
 ];
 const sum = (b: BasisLine[]) => b.reduce((n, x) => n + x.hours, 0);
 
@@ -99,7 +99,7 @@ export const OPTIONS: BakeryOption[] = [
       "Not included:\n- Orders that still come by email, voicemail, or Instagram message, which are typed in as today\n- The 7pm summary and the kitchen's bake sheet",
     ].join("\n\n"),
     fields: {
-      ...estimate(6, 8, [...FORM, { work: "Ten test orders with you and Sam, and a walkthrough", hours: 1.5 }]),
+      ...estimate(3, 4, [...FORM, { work: "Ten test orders with you and Sam, and a walkthrough", hours: 1 }]),
       timeline: "1 week", outsideCosts: "None. It runs in the Google account you already pay for",
       result: "Orders from the form appear in the list within a minute, with nothing retyped.",
       why: "Pick this to try the form before paying for more. Emails, voicemails, and Instagram messages would still be retyped, and they are most of tonight's hour.",
@@ -115,7 +115,7 @@ export const OPTIONS: BakeryOption[] = [
       "Depends on:\n- Your phone service emailing voicemail transcripts. Most do, and if yours doesn't, a free Google Voice number can\n- Instagram messages can't be read automatically. An instant reply sends the order form's link, and staff use the staff form for the rest",
     ].join("\n\n"),
     fields: {
-      ...estimate(20, 24, SOLID),
+      ...estimate(12, 15, SOLID),
       timeline: "4 weeks, the last one side by side", outsideCosts: "Nothing each month. It runs in the Google account you already pay for",
       result: "Every order is in one list by 7pm, with under 10 minutes of checking a night, and no order missed.",
       why: "It ends the retyping without asking one customer to change how they order, and it's running before the holiday rush. The online order page in C can follow later, and nothing in B is redone.",
@@ -132,11 +132,11 @@ export const OPTIONS: BakeryOption[] = [
       "Depends on:\n- Your menu with prices, two weeks before go-live\n- Customers choosing to order online; the email, voicemail, and Instagram paths from B stay open",
     ].join("\n\n"),
     fields: {
-      ...estimate(31, 37, [
+      ...estimate(18, 23, [
         { work: "Everything in B", hours: sum(SOLID) },
-        { work: "Online order page with your menu, pickup times, and holiday cutoffs", hours: 6 },
-        { work: "Payment when ordering, deposits on custom cakes, and pickup reminders", hours: 3 },
-        { work: "Paid orders into the same list, then test orders and a refund end to end", hours: 3 },
+        { work: "Online order page with your menu, pickup times, and holiday cutoffs", hours: 3 },
+        { work: "Payment when ordering, deposits on custom cakes, and pickup reminders", hours: 2 },
+        { work: "Paid orders into the same list, then test orders and a refund end to end", hours: 2 },
       ]),
       timeline: "7 weeks", outsideCosts: "About $20 a month for the service that links Square to your order list, plus Square's card fees on each online order",
       result: "Most new orders arrive paid, with a pickup time, and never pass through the inbox.",
@@ -164,16 +164,16 @@ export const MILESTONE = "Side-by-side week starts";
 
 /** Every hour Pradeep logs, in order. `when` is days before the handover, for a believable date */
 export const HOURS: { work: string; hours: number; when: number; phase: "plan" | "build" | "test" | "handover" }[] = [
-  { work: "Order form with pickup rules and the customer's confirmation", hours: 3, when: 24, phase: "plan" },
-  { work: "Order list with statuses; form link and automatic replies", hours: 2.5, when: 23, phase: "plan" },
-  { work: "Order emails read into the list, each marked to check", hours: 4, when: 20, phase: "build" },
-  { work: "Voicemail transcripts read into the list", hours: 1.5, when: 19, phase: "build" },
-  { work: "Staff form for phone and Instagram orders; possible-duplicate flag", hours: 1.5, when: 18, phase: "build" },
-  { work: "7pm summary for Maria and Sam; Dee's bake sheet", hours: 2, when: 16, phase: "build" },
+  { work: "Order form with pickup rules and the customer's confirmation", hours: 1.5, when: 24, phase: "plan" },
+  { work: "Order list with statuses; form link and automatic replies", hours: 1, when: 23, phase: "plan" },
+  { work: "Order emails read into the list, each marked to check", hours: 2.5, when: 20, phase: "build" },
+  { work: "Voicemail transcripts read into the list", hours: 1, when: 19, phase: "build" },
+  { work: "Staff form for phone and Instagram orders; possible-duplicate flag", hours: 1, when: 18, phase: "build" },
+  { work: "7pm summary for Maria and Sam; Dee's bake sheet", hours: 1.5, when: 16, phase: "build" },
   { work: "Pickup tags on the label printer", hours: 1, when: 15, phase: "build" },
-  { work: "Nightly copy, the no-orders alert, and a sign-in for each person", hours: 1.5, when: 14, phase: "build" },
-  { work: `Dry run on ${DRY_RUN.orders} past orders, fixes for two-order emails and photo orders, and two check-ins in the side-by-side week`, hours: 2.5, when: 8, phase: "test" },
-  { work: "Runbook, recorded walkthrough with Sam and Dee, and handover", hours: 1.5, when: 1, phase: "handover" },
+  { work: "Nightly copy, the no-orders alert, and a sign-in for each person", hours: 1, when: 14, phase: "build" },
+  { work: `Dry run on ${DRY_RUN.orders} past orders, fixes for two-order emails and photo orders, and two check-ins in the side-by-side week`, hours: 2.25, when: 8, phase: "test" },
+  { work: "Runbook, recorded walkthrough with Sam and Dee, and handover", hours: 1, when: 1, phase: "handover" },
 ];
 
 /** The updates Pradeep posts: the plan, and the dry run with what it found */
@@ -214,7 +214,7 @@ export const MONEY = {
   depositCents, earnedCents, finalCents: earnedCents - depositCents,
 } as const;
 
-/** Each option's price line and hours, for pages that list the three ("$3,500 to $4,200 estimate") */
+/** Each option's price line and hours, for pages that list the three ("$1,200 to $1,500 estimate") */
 export const SUMMARY = OPTIONS.map((o) => {
   const p = priceOf(o.fields) as Extract<Price, { kind: "estimate" }>;
   return { title: o.title.replace(/^[A-C]\. /, ""), price: priceLine(p), hours: hoursRange(p), expected: sum(o.fields.basis) };
