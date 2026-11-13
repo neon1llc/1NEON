@@ -167,13 +167,16 @@ The high end is the most you pay for the work you approved. Hours past it are li
 Under the project's **Execute** layer, in **Invoices**, with what's paid and what's left on each. When one is ready or overdue, **Next step** at the top of the project says so and links to it. Each invoice opens on neon1's letterhead with its number, lines, due date, and how to pay, ready to print or save as a PDF. [Watch it](/1NEON/live?play=pay).
 
 ### How do I pay an invoice?
-Choose **Pay** on the invoice. Stripe's secure page opens, where you pay by bank transfer (ACH, preferred) or card; 1NEON never sees your bank or card details. A card payment shows as paid within a minute, and a bank transfer once it clears, usually in a few business days. You can also pay by check, Zelle, or wire, with the invoice number in the memo, and neon1 records it when it arrives. [Watch it](/1NEON/live?play=pay).
+Choose **Pay** on the invoice. Stripe's secure page opens, where you pay by bank transfer (ACH, preferred) or card; 1NEON never sees your bank or card details. A card payment shows as paid within a minute. A bank transfer shows on the invoice as started the day you make it, then as paid once your bank clears it, usually in a few business days; while it clears there's nothing more to pay, so **Pay** is gone until it does. You can also pay by check, Zelle, or wire, with the invoice number in the memo, and neon1 records it when it arrives. [Watch it](/1NEON/live?play=pay).
+
+### What if my bank payment doesn't go through?
+Then no money moved, and the invoice says so: it's open again, with the failed payment and its date listed. 1NEON tells you and neon1 the day your bank reports it, and **Next step** in the project and **Needs you** on Home both point to the invoice. Choose **Pay again** to pay by bank or card, or use one of the other ways on the invoice. Nothing is added to what you owe.
 
 ### When are invoices sent?
 As the option you approved says, under **When you pay**. Half of a fixed price, or half of an estimate's low end, is invoiced when you approve, as a deposit. The rest is invoiced when you accept the handover: the remainder of a fixed price, or the hours worked less the deposit for an estimate, with those hours listed on the invoice. Items neon1 buys for you are billed at cost with the receipt, and a care plan is billed monthly. Invoices are due in 15 days unless the option says otherwise, and each one emails whoever is set to get billing notices. Watch [the deposit](/1NEON/live?play=pay) and [the final invoice](/1NEON/live?play=final).
 
 ### Can an invoice be changed?
-Not once it's issued. An issued invoice is numbered and kept exactly as issued. A mistake is fixed with a credit that reduces it, or by voiding it with a reason, and both stay on record. An invoice that has a payment can't be voided.
+Not once it's issued. An issued invoice is numbered and kept exactly as issued. A mistake is fixed with a credit that reduces it, or by voiding it with a reason, and both stay on record. An invoice that has a payment, or a bank payment on its way, can't be voided.
 
 ### What is the service agreement?
 neon1's terms for all work with your organization: how work is agreed, paying, ownership, confidentiality, and how either of us can end it. An admin of your organization signs it once in 1NEON (open it from **Settings**), before the first option can be approved, and it covers every project. You can read it any time at [/1NEON/agreement](/1NEON/agreement). [Watch it](/1NEON/live?play=decide).
