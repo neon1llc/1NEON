@@ -15,3 +15,4 @@ export * from "./changes.ts";
 export * from "./proposal.ts";
 export * from "./agreement.ts";
 export * from "./billing.ts";
+export * from "./history.ts";

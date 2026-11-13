@@ -19,6 +19,21 @@ export function signature(doc: Signature["doc"], ref: string, hash: string, inpu
   return Signature.parse({ doc, ref, hash, typedName: input.typedName, consent: SIGN_CONSENT, by: who.id, name: who.name, email: who.email, at, ip: from.ip?.slice(0, 64), ua: from.ua?.slice(0, 300) });
 }
 
+/**
+ * Why a typed signature doesn't read as the signer's name, or undefined when it does. A name has no
+ * digits, and when the profile has a name, the signature carries at least one word of it (first or
+ * last name, any case), so "Raj Patel" signs for Raj Patel and "anything123" signs for no one
+ */
+export function signedNameProblem(typed: string, profileName: string | undefined): string | undefined {
+  const t = typed.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (/\d/.test(t) || !/\p{L}.*\p{L}/u.test(t)) return "Type your name as you'd sign it, in letters.";
+  const name = (profileName ?? "").includes("@") ? "" : (profileName ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const parts = name.split(/[^\p{L}]+/u).filter((w) => w.length >= 2);
+  if (!parts.length) return undefined;
+  const typedParts = new Set(t.split(/[^\p{L}]+/u).filter(Boolean));
+  return parts.some((w) => typedParts.has(w)) ? undefined : `Type your name as it is on your profile (${profileName}). To sign under another name, change it in your profile first.`;
+}
+
 /** Initials from a typed name: "Raj Patel" → "RP" (kept for purchases neon1 buys) */
 export const initialsOf = (name: string) => name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? "").join("").slice(0, 8) || "?";
 
@@ -193,24 +208,27 @@ export function invoiceState(invoice: Rec, items: Rec[], today: string): "draft"
 // the hours worked, and never above the high end unless a change is approved first.
 
 /** What a price is read from: an option's fields, or the terms copied into a decision */
-export type PriceTerms = { cost?: string; pricing?: "fixed" | "estimate"; rateCents?: number; hoursLow?: number; hoursHigh?: number };
+export type PriceTerms = { cost?: string; pricing?: "fixed" | "estimate"; rateCents?: number; hoursLow?: number; hoursHigh?: number; depositPercent?: number };
 
 /** A price invoices can be worked out from */
 export type Price =
-  | { kind: "fixed"; totalCents: number }
-  | { kind: "estimate"; rateCents: number; hoursLow: number; hoursHigh: number; lowCents: number; highCents: number };
+  | { kind: "fixed"; totalCents: number; depositPercent: number }
+  | { kind: "estimate"; rateCents: number; hoursLow: number; hoursHigh: number; lowCents: number; highCents: number; depositPercent: number };
+
+/** The share asked up front, in percent: what the terms agree, else the usual 50 */
+export const depositPercentOf = (t: PriceTerms) => (typeof t.depositPercent === "number" && t.depositPercent >= 0 && t.depositPercent <= 100 ? Math.round(t.depositPercent) : DEPOSIT_PERCENT);
 
 /** The price in numbers, or undefined when it's only words ("depends on seats") */
 export function priceOf(t: PriceTerms): Price | undefined {
   if (t.pricing === "estimate") {
     if (!t.rateCents || !t.hoursHigh) return undefined;
     const low = Math.min(t.hoursLow ?? t.hoursHigh, t.hoursHigh);
-    return { kind: "estimate", rateCents: t.rateCents, hoursLow: low, hoursHigh: t.hoursHigh, lowCents: Math.round(low * t.rateCents), highCents: Math.round(t.hoursHigh * t.rateCents) };
+    return { kind: "estimate", rateCents: t.rateCents, hoursLow: low, hoursHigh: t.hoursHigh, lowCents: Math.round(low * t.rateCents), highCents: Math.round(t.hoursHigh * t.rateCents), depositPercent: depositPercentOf(t) };
   }
   // Options written before prices had a kind say it in words: "$6,500 fixed"
   if (t.pricing === "fixed" || /fixed/i.test(t.cost ?? "")) {
     const total = parseMoney(t.cost ?? "");
-    return total ? { kind: "fixed", totalCents: total } : undefined;
+    return total ? { kind: "fixed", totalCents: total, depositPercent: depositPercentOf(t) } : undefined;
   }
   return undefined;
 }
@@ -243,7 +261,9 @@ export function priceMeaning(p: Price): string {
 }
 
 /** When the money is due, as short lines: the deposit at approval, and the rest at handover */
-export function paymentPlan(p: Price, percent = DEPOSIT_PERCENT): string[] {
+export function paymentPlan(p: Price, percent = p.depositPercent ?? DEPOSIT_PERCENT): string[] {
+  // Nothing up front: the whole of it is billed at handover
+  if (percent <= 0) return p.kind === "fixed" ? [`Nothing up front; ${money(p.totalCents)} when you accept the handover`] : ["Nothing up front; the hours worked when you accept the handover"];
   if (p.kind === "fixed") {
     const first = Math.round((p.totalCents * percent) / 100);
     return [`${money(first)} when you approve (${percent}% deposit)`, `${money(p.totalCents - first)} when you accept the handover`];
@@ -300,7 +320,8 @@ export function lineage(d: Decision, items: Rec[]): Set<string> {
 const earlier = (d: Decision, items: Rec[]) => {
   const ids = lineage(d, items);
   return items
-    .filter((i) => i.kind === "invoice" && i.status !== "void" && i.fields.type !== "credit" && i.fields.type !== "reimbursement")
+    // Issued ones only: a draft asks for nothing until it's issued, and a void one never did
+    .filter((i) => i.kind === "invoice" && i.status !== "void" && i.status !== "draft" && i.fields.type !== "credit" && i.fields.type !== "reimbursement")
     .map((i) => InvoiceFields.parse(i.fields))
     .filter((f) => f.lines.some((l) => ids.has(l.ref ?? "")))
     .sort((a, b) => String(a.issuedAt ?? "~").localeCompare(String(b.issuedAt ?? "~")));
@@ -318,9 +339,12 @@ const listed = (names: string[]) => (names.length > 2 ? `${names.slice(0, -1).jo
  * When it replaces an earlier decision, what was already invoiced for that one counts toward the
  * deposit, and no deposit is asked when it already covers it
  */
-export function depositLines(d: Decision, percent = DEPOSIT_PERCENT, items: Rec[] = []): InvoiceLine[] {
+export function depositLines(d: Decision, percent?: number, items: Rec[] = []): InvoiceLine[] {
   const price = priceOf((d.fields.terms ?? {}) as Terms);
   if (!price) return [];
+  // The share the decision agreed, unless the caller names another; none agreed asks for nothing
+  percent ??= price.depositPercent;
+  if (percent <= 0) return [];
   const ask: InvoiceLine = price.kind === "fixed"
     ? { text: `${percent}% deposit on ${named(d)}`.slice(0, 200), qty: 1, unitCents: Math.round((price.totalCents * percent) / 100), ref: d.id }
     : { text: `Deposit on ${named(d)}: ${percent}% of the estimate's low end (${dollars(price.lowCents)})`.slice(0, 200), qty: 1, unitCents: Math.round((price.lowCents * percent) / 100), ref: d.id };

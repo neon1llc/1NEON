@@ -34,6 +34,16 @@ export const NOTIFY_GROUPS: NotifyGroup[] = [
 ];
 
 
+/**
+ * Records a person signs: they get a copy too, though they did it themselves, so what they agreed to
+ * reaches their inbox and their bell (a notice about anything else skips the person who acted)
+ */
+export const RECEIPTS = new Set(["decision.approved", "decision.changed", "agreement.signed", "handoff.accepted", "purchase.agreed"]);
+
+/** Does the person who acted hear about it too? Signed records always; in neon1's own organization,
+ * where neon1 is its own client, the billing that a client would hear about as well */
+export const actorHears = (action: string, ownOrg: boolean) => RECEIPTS.has(action) || (ownOrg && groupOf(action).id === "billing");
+
 /** Actions only neon1 hears about: its own working drafts, which a client sees once issued */
 export const neon1Only = (action: string) => action === "invoice.drafted";
 

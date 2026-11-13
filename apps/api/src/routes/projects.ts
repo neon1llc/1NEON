@@ -154,6 +154,15 @@ export function projectRoutes(app: App, k: Kit) {
       const decided = (await repo.listItems(t.id, p.id)).some((i) => i.kind === "decision");
       if (!decided && !input.reason) fail(428, "reason_required", "No option has been approved yet. Add a reason to move on anyway.");
     }
+    // The same soft gate the other way: back to Decide or before, once an option is approved, the
+    // board would say the work is still being chosen while invoices and hours say otherwise
+    if (stageChanged && decideAt >= 0 && order <= decideAt && from >= decideAt && order < from && !input.reason) {
+      const items = await repo.listItems(t.id, p.id);
+      if (items.some((i) => i.kind === "decision")) {
+        const billed = items.filter((i) => i.kind === "invoice" && i.status !== "draft" && i.status !== "void").length;
+        fail(428, "reason_required_back", `An option is already approved${billed ? `, and ${billed} ${billed === 1 ? "invoice is" : "invoices are"} issued` : ""}. To change the decision, the client chooses another option instead. Add a reason to move it back anyway.`);
+      }
+    }
     const ts = now();
     // Moving stages is activity, not an assessment: health stays whatever the team last set
     const next: Project = { ...p, stageId: stage.id, rank: rankBetween(input.after ?? "", input.before ?? ""), stageEnteredAt: stageChanged ? ts : p.stageEnteredAt, version: p.version + 1, updatedAt: ts, updatedBy: actorId(c) };

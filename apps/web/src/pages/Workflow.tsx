@@ -18,7 +18,7 @@ export function Workflow() {
   const refresh = useRefresh(org.id);
   const toast = useToast();
   // A move waiting on a reason, and the reason being typed
-  const [pending, setPending] = useState<{ move: MoveRequest; message: string }>();
+  const [pending, setPending] = useState<{ move: MoveRequest; message: string; back: boolean }>();
   const [reason, setReason] = useState("");
   useTopBar(<span>{org.name} · Board</span>, [org.name]);
 
@@ -32,10 +32,10 @@ export function Workflow() {
       const to = org.stages.find((s) => s.id === m.stageId)?.name;
       if (m.stageId !== m.project.stageId) toast(`${m.project.key} moved to ${to}`);
     } catch (e) {
-      // Past Decide with no approved option: collect a reason and try again with it
+      // Past Decide with no approved option (or back before it with one): collect a reason and try again
       if (e instanceof HttpError && e.status === 428) {
         setReason("");
-        setPending({ move: m, message: e.body.message });
+        setPending({ move: m, message: e.body.message, back: e.body.error === "reason_required_back" });
         return;
       }
       if (e instanceof HttpError && e.status === 409) toast(`${m.project.key} changed while you were moving it. The board is up to date now.`);
@@ -63,7 +63,7 @@ export function Workflow() {
       ))}
       {/* The reason prompt for moving past Decide without a decision */}
       <Dialog open={Boolean(pending)} onClose={() => setPending(undefined)} label="Reason needed">
-        <h2>Move on without a decision?</h2>
+        <h2>{pending?.back ? "Move back before the decision?" : "Move on without a decision?"}</h2>
         <p className="muted small">{pending?.message}</p>
         <form
           onSubmit={(e) => {

@@ -6,6 +6,30 @@
 
 - Dev can hold a copy of production's data: `node scripts/dev-data.mjs --yes` (admin profile) replaces dev's table and documents with production's, leaving out queued messages, sessions, and sign-in links. Because that copy holds real clients, dev now admits only neon1's own people, sends mail only to them, and creates no dev accounts for anyone else.
 
+## v0.10.0 - 2026-11-13
+
+### Added
+- **A deposit share per option.** An option says how much is asked up front: the usual 50%, or what the client agreed (20%, or nothing). The proposal, the approval, and every deposit invoice follow it, including a second deposit draft made while the first is still a draft.
+- **Revise terms after approval.** neon1 drafts revised terms from the approved option; the card says what changes ("Deposit up front: 30%, was 20%"), they go out in the next revision, and the client approves them in place of the original. Money already invoiced counts toward them, so only the difference is drafted.
+- **Edited proposal copies.** A Word file carrying a proposal's ID (edited in Word, Google Docs, or Pages) is asked about on upload. Kept with that revision, it shows what changed word by word, maps each change to the option field it belongs to (deposit share, title, description, timeline, hours, result), and applies the checked ones, to a shared option directly or to revised terms for an approved one. Changes that fit no field are listed to answer by hand.
+- **Option history.** Each option shows when it was added, issued in each revision, approved and signed (with the signed name and reason), replaced, revised, invoiced, and paid.
+- **Pay from 1NEON.** The Pay button shows in neon1's own organization too, and neon1 can copy a client's pay link to send.
+- Copies of what you sign (approvals, changes, the agreement, handovers) reach you by email and in the bell; billing in neon1's own organization reaches neon1.
+- Moving a project back to Decide or before once an option is approved asks for a reason, and Next step says when the board is behind what's been done ("An option is approved: move to Build").
+
+### Changed
+- Proposals, previews, invoices, and documents open in a new tab.
+- Money boxes show a $ sign, the deposit box a % sign; new invoice lines come filled in from the approved option and can be changed or added to, with a running total.
+- Forms and dialogs have even spacing between fields and buttons; date boxes keep their width on phones.
+- On phones, the box being typed in, and the line being typed in a long one, stays above the keyboard as it wraps; scrolling away to read is left alone until the next keystroke. Dialogs stay in the part of the screen that's showing, and a panel's name and Close stay at its top.
+- A typed signature has to read as the signer's name.
+
+### Fixed
+- On iPhone browsers (DuckDuckGo included), the strips above the top bar and below the tab bar are solid, so nothing scrolls by under the browser's own bars.
+- An option panel no longer runs under the browser's top bar, out of reach of its Close button.
+- **Check invoices** under Next step goes to the invoices again when pressed a second time.
+- A new deposit draft no longer replaces a typed amount with the 50% suggestion.
+
 ## v0.9.0 - 2026-11-13
 
 ### Added

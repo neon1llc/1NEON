@@ -1,22 +1,26 @@
-// apps/web/src/lib/edge.ts - The bottom edge of the screen in DuckDuckGo on iPhone, and the one place
-// that knows which element scrolls the page.
+// apps/web/src/lib/edge.ts - The top and bottom edges of the screen in iPhone browsers, and the one
+// place that knows which element scrolls the page.
 //
 // DuckDuckGo on iPhone draws the page all the way down, under its floating toolbar, but stops
 // everything fixed (the tab bar, the menu, a walkthrough's backdrop) at the toolbar's top edge and
 // clips whatever runs past it. So the page scrolled by in that strip, in view, under the tab bar.
 // Nothing fixed can cover it. What can: the page itself doesn't scroll there. The body scrolls
 // inside a page that stays still, and the strip under the toolbar shows the page's own background,
-// which matches the tab bar. Only there: elsewhere the page scrolls as usual, so a phone's own
-// browser can still tuck its toolbar away and scroll to the top from the status bar.
+// which matches the tab bar. The same goes for the top: the body is pinned to the part of the screen
+// between the browser's own bars, so nothing scrolls by under a see-through bar at either end.
+//
+// DuckDuckGo often sends Safari's own user agent, so it can't be told apart from Safari. Every iPhone
+// browser gets this, then (they all run on Safari's engine, and Safari's own glass toolbar shows the
+// page through it too). Elsewhere the page scrolls as usual.
 
 
-// DuckDuckGo names itself in its user agent ("DuckDuckGo/7") on iPhone
-const DDG_IPHONE = /iPhone|iPod/.test(navigator.userAgent) && /\bDuckDuckGo\/\d/.test(navigator.userAgent);
+// Any browser on an iPhone or iPod, and an iPad, which says it's a Mac but has a touch screen
+const IPHONE = /iPhone|iPod|iPad/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 
-/** Set once at startup, before the first paint: the body scrolls instead of the page in DuckDuckGo
- * on iPhone (styles/app.css, "Under the browser's own controls") */
+/** Set once at startup, before the first paint: the body scrolls instead of the page on an iPhone
+ * (styles/app.css, "Under the browser's own controls") */
 export function keepEdgeStill() {
-  if (DDG_IPHONE) document.documentElement.classList.add("body-scrolls");
+  if (IPHONE) document.documentElement.classList.add("body-scrolls");
 }
 
 /** What scrolls the page: the body where it scrolls on its own, the window everywhere else */

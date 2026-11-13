@@ -4,15 +4,15 @@
 // client and draft, issue, void, credit, and record payment for neon1.
 
 
-import { AGREEMENT_EDITION, InvoiceFields, PaymentFields, SIGN_CONSENT, balanceOf, currentDecision, dollars, failedOn, hoursRange, hoursStanding, hoursText, invoiceState, invoiceTotal, isOwnOrg, lineCents, money, payableOn, paymentPlan, priceMeaning, priceOf, received, todayIn, type BasisLine, type InvoiceLine, type InvoiceType, type Item, type PaymentMethod, type PriceTerms, type Project } from "@1neon/domain";
+import { AGREEMENT_EDITION, InvoiceFields, PaymentFields, SIGN_CONSENT, balanceOf, currentDecision, depositLines, dollars, failedOn, finalLines, reimbursementLines, hoursRange, hoursStanding, hoursText, invoiceState, invoiceTotal, isOwnOrg, lineCents, money, payableOn, paymentPlan, priceMeaning, priceOf, received, signedNameProblem, todayIn, type BasisLine, type InvoiceLine, type InvoiceType, type Item, type PaymentMethod, type PriceTerms, type Project } from "@1neon/domain";
 import { Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useLocation, useSearchParams } from "react-router";
-import { api, DEMO, HttpError, send } from "../lib/api.ts";
+import { Link, useHref, useLocation, useSearchParams } from "react-router";
+import { api, DEMO, HttpError, NEW_TAB, send } from "../lib/api.ts";
 import { problem, useRefresh } from "../lib/hooks.ts";
 import { useDeleteItem } from "./ItemPanel.tsx";
 import { useOrg, useSession } from "./Shell.tsx";
-import { Dialog, dateLabel, useToast } from "./ui.tsx";
+import { Dialog, Money, dateLabel, useToast } from "./ui.tsx";
 
 
 // --- Paying ---------------------------------------------------------------------------------
@@ -108,15 +108,21 @@ export function DemoBank({ payment, onDone }: { payment: Item; onDone: () => voi
 
 /** A signature as the API takes it */
 export type SignValue = { typedName: string; consent: boolean };
-/** Ready to send: a name of two or more letters and the consent box ticked */
-export const signReady = (v: SignValue) => v.typedName.trim().length >= 2 && v.consent;
+// The signed-in person's profile name, kept where signReady can read it without a hook; SignBox sets it
+let signerName: string | undefined;
+/** Ready to send: the consent box ticked and a name that reads as the signer's (see signedNameProblem) */
+export const signReady = (v: SignValue) => v.typedName.trim().length >= 2 && v.consent && !signedNameProblem(v.typedName, signerName);
 
 /** Type your full name and tick the consent box; the name, as typed, is the signature */
 export function SignBox({ value, onChange, id = "sign" }: { value: SignValue; onChange: (v: SignValue) => void; id?: string }) {
+  const me = useSession();
+  signerName = me.user.name || undefined;
+  const wrong = value.typedName.trim().length >= 2 ? signedNameProblem(value.typedName, signerName) : undefined;
   return (
     <div className="sign-box">
       <label htmlFor={`${id}-name`}>Type your full name to sign</label>
-      <input id={`${id}-name`} className="sign-name" value={value.typedName} onChange={(e) => onChange({ ...value, typedName: e.target.value })} maxLength={120} autoComplete="name" required />
+      <input id={`${id}-name`} className="sign-name" value={value.typedName} onChange={(e) => onChange({ ...value, typedName: e.target.value })} maxLength={120} autoComplete="name" required placeholder={signerName} aria-invalid={wrong ? true : undefined} aria-describedby={wrong ? `${id}-wrong` : undefined} />
+      {wrong && <span id={`${id}-wrong`} className="small warn-text">{wrong}</span>}
       <label className="sign-consent">
         <input type="checkbox" checked={value.consent} onChange={(e) => onChange({ ...value, consent: e.target.checked })} /> {SIGN_CONSENT}
       </label>
@@ -274,9 +280,9 @@ const STATE_WORDS = { draft: "draft, only neon1 sees it", open: "open", partly_p
 const METHOD_WORDS: Record<PaymentMethod, string> = { ach: "bank transfer (ACH)", card: "card", check: "check", zelle: "Zelle", wire: "wire", other: "other" };
 
 /** Dollars typed by a person ("1,250.50") as cents, or undefined when it isn't an amount */
-const centsOf = (s: string) => {
+const centsOf = (s: string, signed = false) => {
   const n = Number(s.replace(/[$,\s]/g, ""));
-  return s.trim() && Number.isFinite(n) && n > 0 ? Math.round(n * 100) : undefined;
+  return s.trim() && Number.isFinite(n) && (n > 0 || (signed && n < 0)) ? Math.round(n * 100) : undefined;
 };
 
 /**
@@ -313,6 +319,19 @@ export function Invoices({ items, path, project }: { items: Item[]; path: string
     refresh();
   };
   const [pay, payPage] = usePay(path);
+  // neon1's own organization is its own client: there neon1 pays like any client would
+  const own = isOwnOrg(org.slug);
+  // The invoice's page, where the client reads it and pays: a link neon1 can send by text or email
+  const root = useHref("/").replace(/\/$/, "");
+  const copyLink = async (inv: Item) => {
+    const url = `${location.origin}${root}/o/${org.slug}/projects/${project.key}/invoices/${inv.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast("Copied. The client opens it, signed in, and pays with Pay.");
+    } catch {
+      toast(url);
+    }
+  };
   if (!invoices.length && !me.operator) return null;
   return (
     <section className="kind-group" id="billing">
@@ -332,7 +351,7 @@ export function Invoices({ items, path, project }: { items: Item[]; path: string
             <span style={{ width: 18 }} />
             <div>
               <div className="invoice-head">
-                <Link className="title" to={`/o/${org.slug}/projects/${project.key}/invoices/${inv.id}`}>{f.number ?? `${TYPE_WORDS[f.type]} draft`}</Link>
+                <Link className="title" to={`/o/${org.slug}/projects/${project.key}/invoices/${inv.id}`} {...NEW_TAB}>{f.number ?? `${TYPE_WORDS[f.type]} draft`}</Link>
                 <span className="tag">{TYPE_WORDS[f.type]}</span>
                 <span className={`tag${state === "overdue" ? " warn" : state === "paid" ? " client" : ""}`}>{STATE_WORDS[state]}</span>
               </div>
@@ -347,10 +366,12 @@ export function Invoices({ items, path, project }: { items: Item[]; path: string
               </div>
               <div className="line" style={{ marginTop: 6 }}>
                 {/* The client pays what's left; neon1 manages its drafts and records what arrives */}
-                {payable > 0 && !me.operator && <button className="btn btn-primary btn-sm" onClick={() => void pay(inv)}>{failed ? "Pay again: " : "Pay "}{money(payable)}</button>}
+                {payable > 0 && (!me.operator || own) && <button className="btn btn-primary btn-sm" onClick={() => void pay(inv)}>{failed ? "Pay again: " : "Pay "}{money(payable)}</button>}
+                {/* neon1 in a client's organization: the client pays from here; neon1 can send them the page */}
+                {payable > 0 && me.operator && !own && <button className="btn btn-ghost btn-sm" onClick={() => void copyLink(inv)}>Copy the pay link</button>}
                 {/* The demo has no bank, so the visitor plays it: the transfer clears, or is refused */}
                 {DEMO && clearing.map((x) => <DemoBank key={x.id} payment={x} onDone={refresh} />)}
-                {me.operator && inv.status === "draft" && <button className="btn btn-primary btn-sm" onClick={() => void act(`${path}/invoices/${inv.id}/issue`, { version: inv.version }, "Issued. The client can see and pay it now.")}>Issue</button>}
+                {me.operator && inv.status === "draft" && <button className="btn btn-primary btn-sm" onClick={() => void act(`${path}/invoices/${inv.id}/issue`, { version: inv.version }, own ? "Issued. It's open to pay now." : "Issued. The client is told and can pay it now.")}>Issue</button>}
                 {me.operator && payable > 0 && <button className="btn btn-ghost btn-sm" onClick={() => setPaying(inv)}>Record a payment</button>}
                 {me.operator && inv.status === "issued" && !paidOn.length && !clearing.length && f.type !== "credit" && <button className="btn btn-ghost btn-sm" onClick={() => setVoiding(inv)}>Void</button>}
               </div>
@@ -359,7 +380,7 @@ export function Invoices({ items, path, project }: { items: Item[]; path: string
         );
       })}
       {me.operator && <div className="actions" style={{ marginTop: 10 }}><button className="btn btn-ghost btn-sm" onClick={() => setCreating(true)}>New invoice</button></div>}
-      <NewInvoice open={creating} onClose={() => setCreating(false)} path={path} issued={invoices.filter((i) => i.status === "issued" || i.status === "paid")} />
+      <NewInvoice open={creating} onClose={() => setCreating(false)} path={path} items={items} issued={invoices.filter((i) => i.status === "issued" || i.status === "paid")} />
       <RecordPayment invoice={paying} items={items} onClose={() => setPaying(undefined)} onSave={(body) => { const inv = paying!; setPaying(undefined); void act(`${path}/invoices/${inv.id}/payments`, body, "Payment recorded."); }} />
       {payPage}
       <Dialog open={Boolean(voiding)} onClose={() => setVoiding(undefined)} label="Void invoice">
@@ -373,7 +394,7 @@ export function Invoices({ items, path, project }: { items: Item[]; path: string
 function VoidForm({ onVoid, onCancel }: { onVoid: (reason: string) => void; onCancel: () => void }) {
   const [reason, setReason] = useState("");
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onVoid(reason.trim()); }}>
+    <form className="stack-form" onSubmit={(e) => { e.preventDefault(); onVoid(reason.trim()); }}>
       <h2>Void this invoice?</h2>
       <p className="small muted">It stays on record, marked void, with your reason. Nobody can pay it afterwards.</p>
       <label htmlFor="void-reason">Reason</label>
@@ -397,52 +418,76 @@ function RecordPayment({ invoice, items, onClose, onSave }: { invoice?: Item; it
   const cents = centsOf(amount);
   return (
     <Dialog open={Boolean(invoice)} onClose={onClose} label="Record a payment">
-      <form onSubmit={(e) => { e.preventDefault(); if (cents) onSave({ amountCents: cents, method, ref: ref.trim(), receivedAt: on }); }}>
+      <form className="stack-form" onSubmit={(e) => { e.preventDefault(); if (cents) onSave({ amountCents: cents, method, ref: ref.trim(), receivedAt: on }); }}>
         <h2>Record a payment on {String(invoice?.fields.number ?? "")}</h2>
         <p className="small muted">{money(left)} is owed.</p>
-        <label htmlFor="pay-amount">Amount ($)</label>
-        <input id="pay-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+        <label htmlFor="pay-amount">Amount</label>
+        <Money id="pay-amount" value={amount} onChange={setAmount} required style={{ maxWidth: 220 }} />
         <label htmlFor="pay-method">How it arrived</label>
         <select id="pay-method" value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>
-          {(Object.keys(METHOD_WORDS) as PaymentMethod[]).map((m) => <option key={m} value={m}>{METHOD_WORDS[m]}</option>)}
+          {(Object.keys(METHOD_WORDS) as PaymentMethod[]).map((m) => <option key={m} value={m}>{METHOD_WORDS[m].charAt(0).toUpperCase() + METHOD_WORDS[m].slice(1)}</option>)}
         </select>
         <label htmlFor="pay-ref">Check number or confirmation (optional)</label>
         <input id="pay-ref" value={ref} onChange={(e) => setRef(e.target.value)} maxLength={120} />
         <label htmlFor="pay-on">Received on</label>
-        <input id="pay-on" type="date" value={on} onChange={(e) => setOn(e.target.value)} required />
-        <div className="actions"><button className="btn btn-primary" disabled={!cents || cents > left}>Record {cents ? money(cents) : ""}</button><button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button></div>
+        <input id="pay-on" type="date" value={on} onChange={(e) => setOn(e.target.value)} required style={{ maxWidth: 220 }} />
+        <div className="actions"><button className="btn btn-primary" disabled={!cents || cents > left}>Record {cents ? money(cents) : ""}</button>{cents !== undefined && cents > left && <span className="small warn-text">That's more than the {money(left)} owed.</span>}<button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button></div>
       </form>
     </Dialog>
   );
 }
 
-/** neon1 drafts an invoice: 1NEON suggests lines for a deposit, the final balance, or purchases at cost */
-function NewInvoice({ open, onClose, path, issued }: { open: boolean; onClose: () => void; path: string; issued: Item[] }) {
+/** neon1 drafts an invoice: 1NEON fills in the lines it would suggest for a deposit, the final balance,
+ * or purchases at cost, and every line stays editable: change an amount, reword it, or add your own */
+function NewInvoice({ open, onClose, path, items, issued }: { open: boolean; onClose: () => void; path: string; items: Item[]; issued: Item[] }) {
   const { org } = useOrg();
   const toast = useToast();
   const refresh = useRefresh(org.id);
   const [type, setType] = useState<InvoiceType>("deposit");
-  const [lines, setLines] = useState<{ text: string; amount: string }[]>([]);
+  const [lines, setLines] = useState<{ text: string; amount: string; ref?: string }[]>([]);
   const [appliesTo, setAppliesTo] = useState("");
   const [terms, setTerms] = useState("15");
   const [note, setNote] = useState("");
-  const typed: InvoiceLine[] = lines.flatMap((l) => (l.text.trim() && centsOf(l.amount) ? [{ text: l.text.trim(), qty: 1, unitCents: centsOf(l.amount)! }] : []));
+  const [busy, setBusy] = useState(false);
+  // What 1NEON suggests for this kind of invoice, from the decision in force or neon1's receipts
+  const suggest = (t: InvoiceType) => {
+    const d = currentDecision(items).decision;
+    const out = t === "deposit" ? (d ? depositLines(d, undefined, items) : []) : t === "final" || t === "progress" ? (d ? finalLines(d, items) : []) : t === "reimbursement" ? reimbursementLines(items) : [];
+    return out.map((l) => ({ text: l.text, amount: (lineCents(l) / 100).toFixed(2), ref: l.ref }));
+  };
+  // Each time the form opens, or the kind changes, it starts from the suggestion (or one empty line)
+  useEffect(() => {
+    if (!open) return;
+    const s = suggest(type);
+    setLines(s.length ? s : [{ text: "", amount: "" }]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, type]);
+  // A line with an amount but no words is named for the kind of invoice, so it's never dropped
+  const typed: InvoiceLine[] = lines.flatMap((l) => {
+    const cents = centsOf(l.amount, true);
+    if (cents === undefined) return [];
+    return [{ text: (l.text.trim() || TYPE_WORDS[type]).slice(0, 200), qty: 1, unitCents: cents, ref: l.ref }];
+  });
+  const total = typed.reduce((n, l) => n + l.unitCents, 0);
+  const unread = lines.filter((l) => l.amount.trim() && centsOf(l.amount, true) === undefined).length;
   const save = async () => {
+    if (busy) return;
+    setBusy(true);
     try {
-      await api(`${path}/invoices`, { method: "POST", body: { type, lines: typed.length ? typed : undefined, appliesTo: type === "credit" ? appliesTo : undefined, termsDays: Number(terms), note } });
+      await api(`${path}/invoices`, { method: "POST", body: { type, lines: typed.length ? typed : undefined, appliesTo: type === "credit" ? appliesTo : undefined, termsDays: Number(terms), note: note.trim() } });
       toast("Draft saved. Check it, then Issue.");
-      setLines([]);
+      setNote("");
       onClose();
     } catch (e) {
-      // Nothing to suggest: ask for a line instead
-      if (e instanceof HttpError && e.body.error === "no_lines") { setLines([{ text: "", amount: "" }]); toast(String(e.body.message)); }
-      else toast(problem(e));
+      toast(problem(e));
     }
+    setBusy(false);
     refresh();
   };
+  const ready = typed.length > 0 && total > 0 && !unread && (type !== "credit" || Boolean(appliesTo));
   return (
     <Dialog open={open} onClose={onClose} label="New invoice">
-      <form onSubmit={(e) => { e.preventDefault(); void save(); }}>
+      <form className="stack-form" onSubmit={(e) => { e.preventDefault(); if (ready) void save(); }}>
         <h2>New invoice</h2>
         <label htmlFor="inv-type">What it's for</label>
         <select id="inv-type" value={type} onChange={(e) => setType(e.target.value as InvoiceType)}>
@@ -457,23 +502,31 @@ function NewInvoice({ open, onClose, path, issued }: { open: boolean; onClose: (
             </select>
           </>
         )}
-        <p className="small muted">{type === "deposit" || type === "final" || type === "reimbursement" ? "Leave the lines empty and 1NEON fills them from the approved option or the receipts. Or add your own." : "Add each line with what it's for and the amount."}</p>
-        {lines.map((l, i) => (
-          <div className="line" key={i}>
-            <input aria-label="What it's for" placeholder="What it's for" value={l.text} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} maxLength={200} />
-            <input aria-label="Amount ($)" placeholder="$" inputMode="decimal" value={l.amount} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))} style={{ maxWidth: 120 }} />
+        <p className="small muted">{suggest(type).length ? "Filled in from the approved option or the receipts. Change any amount or wording, or add a line." : "Add each line with what it's for and the amount."}</p>
+        <fieldset className="inv-lines">
+          <legend>Lines</legend>
+          {lines.map((l, i) => (
+            <div className="inv-line" key={i}>
+              <input aria-label={`Line ${i + 1}: what it's for`} placeholder={`What it's for (e.g. ${TYPE_WORDS[type]})`} value={l.text} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} maxLength={200} />
+              <Money label={`Line ${i + 1}: amount in dollars`} placeholder="0.00" value={l.amount} onChange={(v) => setLines(lines.map((x, j) => (j === i ? { ...x, amount: v } : x)))} invalid={Boolean(l.amount.trim()) && centsOf(l.amount, true) === undefined} />
+              {lines.length > 1 && <button type="button" className="icon-act del" aria-label={`Remove line ${i + 1}`} title="Remove" onClick={() => setLines(lines.filter((_, j) => j !== i))}><Trash2 size={15} aria-hidden="true" /></button>}
+            </div>
+          ))}
+          <div className="inv-lines-foot">
+            <button type="button" className="chip" onClick={() => setLines([...lines, { text: "", amount: "" }])}>Add a line</button>
+            <span className="small">{unread ? <span className="warn-text">Type each amount as a number, like 200 or 1,250.50.</span> : <>Total <b>{money(total)}</b></>}</span>
           </div>
-        ))}
-        <button type="button" className="chip" onClick={() => setLines([...lines, { text: "", amount: "" }])}>Add a line</button>
+        </fieldset>
         <label htmlFor="inv-terms">Due in (days)</label>
-        <input id="inv-terms" type="number" min={0} max={90} value={terms} onChange={(e) => setTerms(e.target.value)} style={{ maxWidth: 100 }} />
+        <input id="inv-terms" type="number" inputMode="numeric" min={0} max={90} value={terms} onChange={(e) => setTerms(e.target.value)} style={{ maxWidth: 120 }} />
         <label htmlFor="inv-note">Note on the invoice (optional)</label>
-        <input id="inv-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} />
-        <div className="actions"><button className="btn btn-primary" disabled={type === "credit" && !appliesTo}>Save draft</button><button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button></div>
+        <textarea id="inv-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} placeholder="e.g. Deposit of 20% of the low end, as agreed" />
+        <div className="actions"><button className="btn btn-primary" disabled={!ready || busy}>{busy ? "Saving…" : `Save draft${total > 0 ? ` for ${money(total)}` : ""}`}</button><button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button></div>
       </form>
     </Dialog>
   );
 }
+
 
 /** One invoice line's amount, for the printed invoice */
 export const lineAmount = (l: InvoiceLine) => money(lineCents(l));

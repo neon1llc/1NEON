@@ -3,7 +3,7 @@
 // and Linear use, so a list stays short and every detail is one tap away.
 
 
-import { BasisLine, MetricFields, OptionFields, PurchaseFields, PurchaseLine, STATUSES, WORK_STATUSES, hoursRange, hoursText, priceLine, priceOf, type AuditEvent, type Item, type ItemKind, type Price } from "@1neon/domain";
+import { BasisLine, MetricFields, OptionFields, PurchaseFields, PurchaseLine, STATUSES, WORK_STATUSES, hoursRange, hoursText, paymentPlan, priceLine, priceOf, type AuditEvent, type Item, type ItemKind, type Price } from "@1neon/domain";
 import { numberProblem, optionalNumber } from "../lib/measures.ts";
 import { useQuery } from "@tanstack/react-query";
 import { Trash2, X } from "lucide-react";
@@ -13,7 +13,7 @@ import { problem, useMembers, useRefresh, useSubmit } from "../lib/hooks.ts";
 import { read } from "../lib/reads.ts";
 import { gate } from "./Reads.tsx";
 import { useOrg, useSession } from "./Shell.tsx";
-import { ago, Avatar, ConflictDialog, Dialog, useAsk, useToast, Changes } from "./ui.tsx";
+import { ago, Avatar, ConflictDialog, Dialog, Money, useAsk, useToast, Changes } from "./ui.tsx";
 
 
 // Plain words for every status a person can pick
@@ -77,7 +77,7 @@ function kindFields(i: Item): Record<string, string> {
     const o = OptionFields.parse(i.fields);
     return { cost: o.cost, timeline: o.timeline, hours: o.hours, outsideCosts: o.outsideCosts, result: o.result, costScore: String(o.costScore), qualityScore: String(o.qualityScore), effortScore: String(o.effortScore), recommended: o.recommended ? "yes" : "", purchases: linesOf(o.purchases),
       // How it's priced: as written, fixed, or an hourly estimate with its rate and range of hours
-      pricing: o.pricing ?? "", rateCents: o.rateCents === undefined ? "" : String(o.rateCents / 100), hoursLow: o.hoursLow === undefined ? "" : String(o.hoursLow), hoursHigh: o.hoursHigh === undefined ? "" : String(o.hoursHigh), basis: basisOf(o.basis), why: o.why };
+      pricing: o.pricing ?? "", rateCents: o.rateCents === undefined ? "" : String(o.rateCents / 100), hoursLow: o.hoursLow === undefined ? "" : String(o.hoursLow), hoursHigh: o.hoursHigh === undefined ? "" : String(o.hoursHigh), depositPercent: o.depositPercent === undefined ? "" : String(o.depositPercent), basis: basisOf(o.basis), why: o.why };
   }
   if (i.kind === "purchase") {
     const x = PurchaseFields.parse(i.fields);
@@ -100,6 +100,8 @@ function typed(key: string, v: string): unknown {
   if (key === "pricing") return v || null;
   if (key === "rateCents") { const n = optionalNumber(v); return n.ok && n.value !== undefined ? Math.round(n.value * 100) : null; }
   if (key === "hoursLow" || key === "hoursHigh") { const n = optionalNumber(v); return n.ok && n.value !== undefined ? n.value : null; }
+  // The deposit share: a whole percent from 0 to 100; blank goes back to the usual 50
+  if (key === "depositPercent") { const n = optionalNumber(v.replace("%", "")); return n.ok && n.value !== undefined ? Math.min(100, Math.max(0, Math.round(n.value))) : null; }
   // Only called once the panel has checked the text (numberProblem); blank leaves the value unset
   if (key === "baseline" || key === "target") { const n = optionalNumber(v); return n.ok ? n.value : undefined; }
   return v;
@@ -403,6 +405,9 @@ function KindFields({ kind, f, onChange }: { kind: ItemKind; f: Record<string, s
   const num = (v?: string) => { const n = optionalNumber(v ?? ""); return n.ok ? n.value : undefined; };
   const rate = num(f.rateCents);
   const price = estimate ? priceOf({ pricing: "estimate", rateCents: rate === undefined ? undefined : Math.round(rate * 100), hoursLow: num(f.hoursLow), hoursHigh: num(f.hoursHigh) }) : undefined;
+  // Any price in numbers (an estimate, or a fixed price written as one), for the deposit's preview
+  const pct = num((f.depositPercent ?? "").replace("%", ""));
+  const priced = priceOf({ pricing: (f.pricing || undefined) as "fixed" | "estimate" | undefined, cost: f.cost, rateCents: rate === undefined ? undefined : Math.round(rate * 100), hoursLow: num(f.hoursLow), hoursHigh: num(f.hoursHigh), depositPercent: pct });
   if (kind === "option") return (
     <div className="props">
       {/* How the price works. An estimate is hours at a rate: its cost and hours lines are worked out
@@ -416,7 +421,7 @@ function KindFields({ kind, f, onChange }: { kind: ItemKind; f: Record<string, s
       </label>
       {estimate ? (
         <>
-          <label>Rate, dollars an hour<input inputMode="decimal" value={f.rateCents ?? ""} onChange={(e) => set("rateCents", e.target.value)} placeholder="e.g. 100" /></label>
+          <label>Rate an hour<Money value={f.rateCents ?? ""} onChange={(v) => set("rateCents", v)} placeholder="e.g. 100" /></label>
           <label>Hours, low end<input inputMode="decimal" value={f.hoursLow ?? ""} onChange={(e) => set("hoursLow", e.target.value)} placeholder="e.g. 20" /></label>
           <label>Hours, high end<input inputMode="decimal" value={f.hoursHigh ?? ""} onChange={(e) => set("hoursHigh", e.target.value)} placeholder="e.g. 24" /></label>
           <p className="small muted" style={{ gridColumn: "1 / -1", margin: 0 }}>{price ? `Shown as “${priceLine(price)}”, ${hoursRange(price as Extract<Price, { kind: "estimate" }>)}. Billed for the hours logged, never past the high end.` : "Add the rate and the high end of the hours to price this option."}</p>
@@ -429,6 +434,13 @@ function KindFields({ kind, f, onChange }: { kind: ItemKind; f: Record<string, s
         </>
       )}
       <label>Timeline<input value={f.timeline ?? ""} onChange={(e) => set("timeline", e.target.value)} placeholder="e.g. 3 weeks" maxLength={80} /></label>
+      {/* The share asked up front: the usual 50%, or what the client agreed (20%, or 0 for none) */}
+      {priced && (
+        <>
+          <label>Deposit up front<span className="affix"><input inputMode="numeric" value={f.depositPercent ?? ""} onChange={(e) => set("depositPercent", e.target.value)} placeholder="50" aria-describedby="deposit-say" /><span className="affix-after" aria-hidden="true">%</span></span></label>
+          <p id="deposit-say" className="small muted" style={{ gridColumn: "1 / -1", margin: 0 }}>{paymentPlan(priced).join("; ")}.{pct === undefined ? " Leave it blank for the usual 50%." : ""}</p>
+        </>
+      )}
       {/* Where the hours go, so the price can be checked against the work */}
       <label style={{ gridColumn: "1 / -1" }}>How the hours add up
         <textarea rows={4} value={f.basis ?? ""} onChange={(e) => set("basis", e.target.value)} placeholder="One per line: piece of work | hours" />
