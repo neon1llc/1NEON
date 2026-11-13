@@ -77,7 +77,8 @@ select:disabled { cursor: default; opacity: .7; }
 ::placeholder { color: var(--muted); opacity: 1; }
 input:focus, textarea:focus, select:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: transparent; }
 /* Boxes and dots keep the brand color, and show a ring only for keyboard focus, never a square on click */
-input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+/* Checkboxes and radios keep their own size: the full-width rule above is for text fields */
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width: 18px; height: 18px; min-height: 0; padding: 0; flex: none; }
 input[type="checkbox"]:focus, input[type="radio"]:focus { outline: none; }
 input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
 
@@ -312,7 +313,7 @@ table.people td { padding: 10px 8px; border-bottom: 1px solid var(--line); verti
 }
 /* Under a walkthrough's bar: the sign-in fills only the screen below it, so the panel centers in what
    shows instead of running off the bottom, and the site's top bar (hidden behind it) takes no room */
-body:has(.live-bar) .signin { min-height: calc(100dvh - var(--demo-h)); }
+body:has(.live-bar) .signin { min-height: calc(100dvh - var(--live-top, var(--demo-h))); }
 body:has(.live-bar) .signin .n1-bar { display: none; }
 @media (max-width: 640px) {
   body:has(.live-bar) .signin { padding-top: 16px; }
@@ -691,8 +692,17 @@ details.history summary { cursor: pointer; font: 12px var(--mono); color: var(--
 .filters .chip .badge { width: 20px; height: 20px; font-size: 10px; }
 .filters .check { display: inline-flex; gap: 6px; align-items: center; }
 .filters .check input { width: 16px; min-height: 0; }
-.ptable { display: grid; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); overflow: hidden; }
-.ptr { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, .8fr); gap: 12px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--line); color: inherit; text-decoration: none; }
+/* No clipping: a row's menu opens over its neighbors; the end rows round their own corners instead */
+.ptable { display: grid; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); }
+.ptr:first-child { border-radius: var(--r) var(--r) 0 0; }
+.ptr:last-child { border-radius: 0 0 var(--r) var(--r); }
+.ptr { position: relative; display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, .8fr) 32px; gap: 12px; align-items: center; padding: 12px 10px 12px 16px; border-top: 1px solid var(--line); color: inherit; text-decoration: none; }
+/* The project's link stretches over its whole row, so the row opens it anywhere; the menu sits above it */
+.ptr-link { color: inherit; text-decoration: none; }
+.ptr-link::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.ptr-link:focus-visible { outline: none; }
+.ptr:has(.ptr-link:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+.ptr-more { position: relative; z-index: 1; }
 .ptr:first-child { border-top: 0; }
 .ptr:not(.head):hover { background: var(--accent-soft); }
 .ptr.head { font: 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding-top: 10px; padding-bottom: 10px; }
@@ -701,8 +711,9 @@ details.history summary { cursor: pointer; font: 12px var(--mono); color: var(--
 .stage-cell { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .stage-cell .badge { width: 20px; height: 20px; font-size: 10px; }
 @media (max-width: 640px) {
-  .ptr { grid-template-columns: minmax(0, 1fr) auto; }
+  .ptr { grid-template-columns: minmax(0, 1fr) auto 36px; }
   .ptr.head { display: none; }
+  .ptr > span:nth-child(5) { grid-column: 3; grid-row: 1 / span 2; }
   .ptr > span:nth-child(2) { grid-column: 1; grid-row: 2; }
   .ptr > span:nth-child(3) { grid-column: 2; grid-row: 1; }
   .ptr > span:nth-child(4) { grid-column: 2; grid-row: 2; text-align: right; }
@@ -716,12 +727,18 @@ details.history summary { cursor: pointer; font: 12px var(--mono); color: var(--
 .tl-key.diamond { width: 9px; height: 9px; border-radius: 1px; transform: rotate(45deg); background: var(--text); }
 .tl-key.late { background: repeating-linear-gradient(135deg, var(--red) 0 3px, transparent 3px 6px); }
 .tl-key.now { width: 0; height: 14px; border-left: 1.5px dashed var(--accent); border-radius: 0; }
-.tl-row { display: grid; grid-template-columns: minmax(150px, 240px) minmax(360px, 1fr); gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); color: inherit; text-decoration: none; }
+.tl-row { position: relative; display: grid; grid-template-columns: minmax(150px, 240px) minmax(360px, 1fr) 32px; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); color: inherit; text-decoration: none; }
+/* The project's link stretches over the whole row, bars included; the menu sits above it */
+.tl-link { color: inherit; text-decoration: none; }
+.tl-link::after { content: ""; position: absolute; inset: 0; z-index: 3; }
+.tl-link:focus-visible { outline: none; }
+.tl-row:has(.tl-link:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-sm); }
+.tl-more { position: relative; z-index: 4; }
 .tl-row.head { border-top: 0; padding: 4px 0 8px; }
 .tl-rows .tl-row:first-child { border-top: 0; }
-.tl-row:not(.head):hover .tl-name > span:first-child { color: var(--accent); }
+.tl-row:not(.head):hover .tl-link { color: var(--accent); }
 .tl-name { display: grid; gap: 2px; font-size: 14px; min-width: 0; }
-.tl-name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-name > span, .tl-name > .tl-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tl-name .s { font: 12px var(--mono); color: var(--muted); }
 .tl-sub { font: 11px var(--mono); color: var(--muted); }
 .tl-sub.late { color: var(--red); }
@@ -736,7 +753,9 @@ details.history summary { cursor: pointer; font: 12px var(--mono); color: var(--
 .tl-date { padding: 0 8px; font: 600 10px var(--mono); color: #fff; white-space: nowrap; }
 /* Phones: each project's name sits above its bar, which takes the full width; every other date shows */
 @media (max-width: 640px) {
-  .tl-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .tl-row { grid-template-columns: minmax(0, 1fr) 36px; gap: 6px; }
+  .tl-row .tl-track { grid-column: 1 / -1; grid-row: 2; }
+  .tl-more { grid-column: 2; grid-row: 1; }
   .tl-row.head > span:first-child { display: none; }
   .tl-row.head .tl-track { margin-top: 12px; }
   .tl-month:not(.today):nth-child(even) { visibility: hidden; }
@@ -1289,6 +1308,9 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
 .terms-list { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 8px 0 12px; font-size: 14px; }
 .terms-list dt { color: var(--muted); }
 .terms-list dd { margin: 0; }
+/* A change of decision, said before it is signed: what it replaces and what happens to the money */
+.change-box { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; padding: 10px 12px; margin: 8px 0 12px; font-size: 14px; }
+.change-box ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 @media (max-width: 480px) { .terms-list { grid-template-columns: 1fr; } .terms-list dd { margin-bottom: 6px; } }
 .purchase-meta { display: flex; gap: 6px 12px; flex-wrap: wrap; align-items: center; margin-top: 4px; font-size: 13px; }
 .accepted-note { margin-top: 4px; font-size: 13px; color: var(--ok); }
@@ -1373,3 +1395,24 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
   .side { bottom: calc(-1 * var(--under)); padding-bottom: calc(8px + var(--under)); }
   .scrim { bottom: calc(-1 * var(--under)); }
 }
+/* DuckDuckGo on iPhone clips anything fixed at its toolbar's top edge, overhang included, so the
+   overhang above can't reach the strip there. There the page stays still and the body scrolls inside
+   it (lib/edge.ts), and the strip shows the page's own background: the tab bar's color, or the dark
+   of the sign-in and of a walkthrough's card */
+html.body-scrolls { overflow: hidden; background: var(--frame); }
+html.body-scrolls body { box-sizing: border-box; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: none; }
+html.body-scrolls:has(.live-card-back) { background: color-mix(in srgb, #0d0208 60%, var(--bg)); }
+
+
+/* --- A row's quiet "more" menu (components/RowMenu.tsx) ---
+   Faint dots at the row's end, full strength when the row is hovered or the menu has focus; on a touch
+   screen a little stronger, since there's no hover. The list opens to the left of the dots, centered on
+   them, so it never runs past the bottom of a table or a timeline that scrolls */
+.row-menu { position: relative; display: flex; justify-content: flex-end; }
+.row-menu-btn { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: var(--r-sm); background: none; color: var(--muted); opacity: .4; cursor: pointer; transition: opacity .15s ease; }
+.ptr:hover .row-menu-btn, .tl-row:hover .row-menu-btn, .row-menu-btn:focus-visible, .row-menu.open .row-menu-btn { opacity: 1; }
+.row-menu-btn:hover, .row-menu.open .row-menu-btn { background: var(--accent-soft); color: var(--text); }
+@media (hover: none) { .row-menu-btn { width: 36px; height: 36px; opacity: .65; } }
+.row-menu-list { position: absolute; right: calc(100% + 4px); top: 50%; translate: 0 -50%; z-index: 20; display: grid; min-width: 180px; padding: 4px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--r-sm); box-shadow: 0 10px 30px rgba(16, 36, 26, .14); }
+.row-menu-list button { padding: 8px 12px; border: 0; border-radius: 6px; background: none; color: var(--text); font: 14px var(--sans); text-align: left; white-space: nowrap; cursor: pointer; }
+.row-menu-list button:hover, .row-menu-list button:focus-visible { background: var(--accent-soft); outline: none; }

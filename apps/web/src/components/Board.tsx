@@ -6,7 +6,7 @@ import type { Project, Stage } from "@1neon/domain";
 import { useState } from "react";
 import { Link } from "react-router";
 import { byRank } from "../lib/hooks.ts";
-import { daysSince, Health, LayerBadge } from "./ui.tsx";
+import { Health, LayerBadge, stageAge } from "./ui.tsx";
 
 
 /** A requested move: target stage and the ranks of the neighbours it lands between */
@@ -117,7 +117,7 @@ export function Board({
                 <Link className="name" to={hrefFor(p)}>{p.name}</Link>
                 <div className="meta">
                   <Health value={p.health} />
-                  <span title="Days in this stage">{daysSince(p.stageEnteredAt)}d</span>
+                  <span title="Time in this stage">{stageAge(p.stageEnteredAt)}</span>
                 </div>
                 {/* Keyboard, tap, and screen-reader path: the same moves as dragging. Up and down reorder within
                     the column (AP-06); another stage moves the card to the end of that column */}

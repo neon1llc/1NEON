@@ -26,7 +26,7 @@ describe("the bakery's options", () => {
 
   it("build on each other: C starts from everything in B", () => {
     expect(OPTIONS[2]!.fields.basis[0]!.hours).toBe(SUMMARY[1]!.expected);
-    expect(SUMMARY.map((s) => s.price)).toEqual(["$1,050 to $1,400 estimate", "$3,500 to $4,200 estimate", "$5,425 to $6,475 estimate"]);
+    expect(SUMMARY.map((s) => s.price)).toEqual(["$300 to $400 estimate", "$1,200 to $1,500 estimate", "$1,800 to $2,300 estimate"]);
   });
 });
 
@@ -38,7 +38,7 @@ describe("the bakery's money", () => {
 
   it("logs hours inside the approved estimate", () => {
     const logged = hoursLogged(time);
-    expect(logged).toBe(21);
+    expect(logged).toBe(13.75);
     expect(logged).toBeGreaterThanOrEqual(CHOSEN.fields.hoursLow);
     expect(logged).toBeLessThanOrEqual(CHOSEN.fields.hoursHigh);
   });
@@ -49,6 +49,6 @@ describe("the bakery's money", () => {
     const invoice = { id: "i_inv1", kind: "invoice", status: "paid", fields: { type: "deposit", lines: deposit } };
     const final = finalLines(decision, [...time, invoice]);
     expect(final.reduce((n, l) => n + Math.round(l.qty * l.unitCents), 0)).toBe(MONEY.finalCents);
-    expect([MONEY.deposit, MONEY.earned, MONEY.final, MONEY.range, MONEY.hours]).toEqual(["$1,750", "$3,675", "$1,925", "$3,500 to $4,200", "20 to 24 hours"]);
+    expect([MONEY.deposit, MONEY.earned, MONEY.final, MONEY.range, MONEY.hours]).toEqual(["$600", "$1,375", "$775", "$1,200 to $1,500", "12 to 15 hours"]);
   });
 });

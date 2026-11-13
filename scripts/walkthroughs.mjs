@@ -36,7 +36,10 @@ const SIZES = {
   phone: { width: 390, height: 844 },
   small: { width: 360, height: 640 },
   landscape: { width: 844, height: 390 },
+  // An iPhone in DuckDuckGo: its user agent turns on the page that stays still while the body scrolls (lib/edge.ts)
+  ddg: { width: 390, height: 844 },
 };
+const DDG_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 DuckDuckGo/7 Safari/605.1.15";
 const shows = arg("shows", [...SHORTS, ...CHAPTERS].join(",")).split(",").filter(Boolean);
 const sizes = arg("sizes", "desktop,phone").split(",").filter(Boolean);
 const scenarios = arg("scenarios", "play").split(",").filter(Boolean);
@@ -116,10 +119,11 @@ const state = (page) => page.evaluate(() => {
 }).catch(() => ({ title: "", line: "", eye: "", card: "", paused: false, chapter: 0, of: 0 }));
 
 // The intro card says how long the walkthrough takes ("about two minutes"). Read as seconds, with the
-// range that still counts as true: 40% either way, or the two ends of "a minute or two"
+// range that still counts as true: 40% either way, or the two ends of "a minute or two" or "a few minutes"
 const WORDS = { a: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
 function statedLength(eye) {
   if (/a minute or two/.test(eye)) return { said: "a minute or two", low: 40, high: 160 };
+  if (/a few minutes/.test(eye)) return { said: "a few minutes", low: 60, high: 240 };
   const m = /about (a|one|two|three|four|five|six|seven|eight|nine|ten|\d+) minutes?( and a half)?/.exec(eye);
   if (!m) return undefined;
   const sec = ((WORDS[m[1]] ?? Number(m[1])) + (m[2] ? 0.5 : 0)) * 60;
@@ -158,6 +162,8 @@ const SCENARIOS = {
     const took = ((Date.now() - t0) / 1000) * SPEED;
     const stated = statedLength(intro.eye);
     if (stated && (took < stated.low || took > stated.high)) throw new Error(`says it takes "${stated.said}" but took ${Math.round(took)} seconds at the default speed; correct its length`);
+    // With --verbose, the measured length is printed, for setting what each intro card says
+    if (verbose) console.log(`      ${Math.round(took)}s at the default speed; says "${stated?.said ?? "nothing"}"`);
   },
 
   /** Skip ahead a chapter at a time as soon as each begins, then step back through every one, then on to the end */
@@ -279,7 +285,7 @@ const retried = [];
 /** One walkthrough, one screen size, one scenario, in a fresh browser profile at double speed */
 async function run({ show, size, scenario }, tries = RETRIES) {
   const name = `${show} · ${size} · ${scenario}`;
-  const ctx = await browser.newContext({ viewport: SIZES[size], ignoreHTTPSErrors: true, hasTouch: ["phone", "small", "landscape", "tablet"].includes(size) });
+  const ctx = await browser.newContext({ viewport: SIZES[size], ignoreHTTPSErrors: true, hasTouch: ["phone", "small", "landscape", "tablet", "ddg"].includes(size), ...(size === "ddg" ? { userAgent: DDG_UA } : {}) });
   await ctx.addInitScript((speed) => { try { localStorage.setItem("1neon.liveSpeed", `2:${speed}`); } catch { /* blocked */ } }, SPEED);
   const page = await ctx.newPage();
   const problems = [];

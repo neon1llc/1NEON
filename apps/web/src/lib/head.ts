@@ -30,7 +30,7 @@ export function headFor(pathname: string): Head {
   const path = pathname.replace(/\/+$/, "") || "/";
   // Temporary, in-browser routes: useful to visit, not to rank
   if (path === "/1NEON/live" || path.startsWith("/1NEON/live/")) {
-    return { title: "Guided walkthrough · 1NEON", description: "A fictional project played on the real 1NEON portal, in about two minutes. No account needed.", noindex: true };
+    return { title: "Guided walkthrough · 1NEON", description: "A fictional project played on the real 1NEON portal, in about three minutes. No account needed.", noindex: true };
   }
   if (path === "/1NEON/demo" || path.startsWith("/1NEON/demo/")) {
     const section = sectionOf(path.slice("/1NEON/demo".length));

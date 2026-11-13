@@ -439,6 +439,8 @@ export const DecisionFields = z.object({
   approverEmail: z.string().max(254).optional(),
   // Earlier decisions on the same project that this one replaces; they stay readable as they were
   supersedes: z.array(id).max(50).optional(),
+  // When it replaces an earlier decision: why, in the decision maker's words, as they signed it
+  reason: z.string().max(1000).optional(),
   // The issued revision the option was approved from, and its ID there (0039-r2-B)
   proposalId: id.optional(),
   code: z.string().max(24).optional(),

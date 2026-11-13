@@ -90,7 +90,7 @@ describe("approved terms", () => {
     expect(next.status).toBe(201);
     // A new option is approved from the next revision, which neon1 issues
     expect((await call(OP, "POST", `${path}/proposals`, { note: "Adds a revised plan" })).status).toBe(201);
-    const second = await call(s.raj.email, "POST", `${path}/items/${next.json.id}/approve`, { version: next.json.version, signature: SIGN });
+    const second = await call(s.raj.email, "POST", `${path}/items/${next.json.id}/approve`, { version: next.json.version, reason: "The revised plan fits better", signature: SIGN });
     expect(second.status).toBe(201);
     expect(second.json.decision.fields.supersedes).toEqual([first.json.decision.id]);
     expect((await repo.getItem(p.tenantId, p.id, first.json.decision.id))!.fields.terms).toEqual(first.json.decision.fields.terms);

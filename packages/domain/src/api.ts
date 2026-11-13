@@ -113,8 +113,8 @@ export const UpdateItemInput = z.object({
 // Approval pins the option version shown to the approver. Initials agree that neon1 buys the items the
 // option lists for neon1 to buy, paid back at cost; they're required only when it lists any
 // The decision maker signs the approval: typed name and consent. Initials are kept for older callers;
-// when neon1 buys items, initials come from the signed name
-export const ApproveInput = z.object({ version: z.number().int(), conditions: z.string().max(2000).default(""), initials: z.string().trim().max(8).optional(), signature: SignInput });
+// when neon1 buys items, initials come from the signed name. Changing an earlier decision needs a reason
+export const ApproveInput = z.object({ version: z.number().int(), conditions: z.string().max(2000).default(""), reason: z.string().trim().max(1000).default(""), initials: z.string().trim().max(8).optional(), signature: SignInput });
 
 // neon1 issues the next revision of a project's proposal, saying what changed
 export const IssueInput = z.object({ note: z.string().trim().max(1000).default("") });

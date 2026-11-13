@@ -7,7 +7,7 @@ import { useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { gate, Stale } from "../components/Reads.tsx";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
-import { daysSince, Empty, Health, LAYERS, layerFromSlug, layerName, layerSlug, Rings } from "../components/ui.tsx";
+import { Empty, inStageFor, Health, LAYERS, layerFromSlug, layerName, layerSlug, Rings } from "../components/ui.tsx";
 import { useProjects } from "../lib/hooks.ts";
 
 
@@ -65,7 +65,7 @@ export function LayerPage() {
                 {list.map((p) => (
                   <Link key={p.id} className="row" to={`/o/${summary.slug}/projects/${p.key}/${layerSlug(l)}${s.id === "decide" ? "#options" : ""}`}>
                     <span><span className="s">{p.key}</span> <span className="t">{p.name}</span></span>
-                    <span className="s">{daysSince(p.stageEnteredAt)}d in stage</span>
+                    <span className="s">in stage {inStageFor(p.stageEnteredAt)}</span>
                     <Health value={p.health} />
                   </Link>
                 ))}

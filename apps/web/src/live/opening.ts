@@ -84,8 +84,8 @@ export async function walkTo(s: Stage, path: string) {
   if (page === "projects" && key && key !== "new") {
     await s.think("Our project is under Projects.");
     await s.go(`${org}/projects`, "Projects");
-    // The row is a link in either layout: List's .ptr or Timeline's .tl-row
-    await s.click({ sel: `a.ptr[href$="/projects/${key}"], a.tl-row[href$="/projects/${key}"]` }, 900);
+    // Each row opens through its link in either layout: List's .ptr or Timeline's .tl-row
+    await s.click({ sel: `.ptr a[href$="/projects/${key}"], .tl-row a[href$="/projects/${key}"]` }, 900);
     if (tab && TAB[tab]) {
       await s.think(`${TAB[tab]} is the tab I want.`);
       await s.click({ sel: "nav.tabs a", text: TAB[tab]! }, 900);

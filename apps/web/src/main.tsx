@@ -15,6 +15,7 @@ import { Legal } from "./pages/Legal.tsx";
 import { NotFound } from "./pages/NotFound.tsx";
 import { BASE_PATH, DEMO, devUser, LIVE } from "./lib/api.ts";
 import { applyHead, headFor } from "./lib/head.ts";
+import { keepEdgeStill } from "./lib/edge.ts";
 import { keepPageWithAddress, quietSkippedTransitions } from "./lib/motion.ts";
 import { setCache, setNavigate } from "./lib/nav.ts";
 import { offline } from "./lib/reads.ts";
@@ -22,6 +23,8 @@ import { Example } from "./pages/Example.tsx";
 import "./styles/app.css";
 
 
+// DuckDuckGo on iPhone: the body scrolls and the page stays still, so nothing scrolls by under its toolbar
+keepEdgeStill();
 // Quick tab changes cut a slide short; that is expected, never an error
 quietSkippedTransitions();
 

@@ -2,6 +2,24 @@
 
 1NEON releases use `v0.MINOR.PATCH` until the first complete release, v1.0.0 (see neon1's [versioning standard](https://neon1.tech/knowledge/standards/versioning/)). Each release is tagged on the commit that shipped it, once it's live.
 
+## v0.9.0 - 2026-11-13
+
+### Added
+- **Change the decision.** After an option is approved, the decision maker can still choose another one, until the handover is accepted. The change asks why, shows what it replaces, what was already invoiced, the hours already logged, and the deposit asked now, and is signed like an approval. Nothing is billed twice: money invoiced for the earlier option counts toward the new one, an unissued deposit draft for it is replaced, and if what was invoiced comes to more than the new option can cost, accepting the handover drafts a credit for the difference. The earlier decision stays on record, marked replaced, with the reason on the new one. A replaced option can be chosen again once neon1 confirms it in the next revision. Everyone who follows decisions is told.
+- Archive a project from the project list or the timeline, behind a quiet menu at the end of each row.
+- A question before archiving a project or deactivating a person, saying what happens and how to undo it.
+
+### Changed
+- The walkthrough's narration sits in a band under the controls, above the page, so it never covers what's happening. Every walkthrough plays about 15% slower, and Maria's thoughts wait until the narration has had time to be read. Each says its new length: the preview about three minutes, the whole story about 17, and a chapter on its own a few minutes.
+- The bakery example and the demo are priced at $100 an hour, the rate for small-business workflow work: Maria's chosen option is now $1,200 to $1,500, and her final invoice comes to $775 after a $600 deposit.
+- A project's stage says how long it's been there in words ("Decide for 4 days", "since today"), not "0d".
+
+### Fixed
+- On phones, the walkthrough's Start and end cards are centered on the screen.
+- In DuckDuckGo on iPhone, the strip under the browser's toolbar no longer shows the page scrolling under the tab bar.
+- Checkboxes keep their size: the consent box when signing was stretched across the dialog, squeezing its words into a narrow column on phones.
+- A pressed link styled as a button, such as **Compare options** under Next step, kept a readable label.
+
 ## v0.8.0 - 2026-11-13
 
 - `infra/envs/dev`: a dev backend for dev.neon1.tech/1NEON with its own Cognito pool (auth-dev.neon1.tech), table, and buckets; no texts, no malware scan, and a one-day lock on test records. The `dev` workflow ships the API and app there; `dev-sync` keeps the `dev` branch following main.
