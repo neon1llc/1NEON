@@ -112,38 +112,76 @@ export const invoiceNumber = (base: string, seq: number) => `INV-${base}-${Strin
 export const PaymentMethod = z.enum(["ach", "card", "check", "zelle", "wire", "other"]);
 export type PaymentMethod = z.infer<typeof PaymentMethod>;
 
-/** A payment against one invoice: from Stripe (with its session) or recorded by hand */
+/**
+ * A payment against one invoice: from Stripe (with its session) or recorded by hand. Its item's status
+ * says where the money is: "done" once received; "pending" while a bank (ACH) transfer the client
+ * started is still clearing; "failed" when the bank refused it. Only received money reduces a balance
+ */
 export const PaymentFields = z.object({
   invoiceId: id,
   amountCents: z.number().int().positive().max(1_000_000_000),
   method: PaymentMethod,
   // A check number, Zelle confirmation, or the Stripe payment's ID
   ref: z.string().max(120).default(""),
+  // The day the money arrived; for a bank transfer still clearing or refused, the day it was started
   receivedAt: z.string().date(),
+  // A bank transfer's start day, kept once it clears so the invoice can show both
+  startedAt: z.string().date().optional(),
   recordedBy: id,
   stripe: z.object({ session: z.string().max(200), intent: z.string().max(200).optional() }).optional(),
 });
 export type PaymentFields = z.infer<typeof PaymentFields>;
 
+/** Where a payment's money is */
+export const PAYMENT_STATUSES = ["pending", "failed", "done"] as const;
+
 // Any stored item: kinds are compared as strings, so plain records work too
 type Rec = Pick<Item, "id" | "status" | "fields"> & { kind: string };
 
-/** What is still owed on an issued invoice: its total, less payments, less issued credits against it */
+// The payments on one invoice, whatever their standing
+const paymentsOn = (invoice: Rec, items: Rec[]) => items.filter((i) => i.kind === "payment" && i.fields.invoiceId === invoice.id);
+/** Has this payment's money arrived? One still clearing, or refused by the bank, hasn't */
+export const received = (payment: Pick<Rec, "status">) => payment.status !== "pending" && payment.status !== "failed";
+
+/** What is still owed on an issued invoice: its total, less payments received, less issued credits against it */
 export function balanceOf(invoice: Rec, items: Rec[]): number {
   const f = InvoiceFields.parse(invoice.fields);
   if (invoice.status === "void" || invoice.status === "draft") return 0;
-  const paid = items.filter((i) => i.kind === "payment" && i.fields.invoiceId === invoice.id).reduce((s, i) => s + PaymentFields.parse(i.fields).amountCents, 0);
+  const paid = paymentsOn(invoice, items).filter(received).reduce((s, i) => s + PaymentFields.parse(i.fields).amountCents, 0);
   const credits = items.filter((i) => i.kind === "invoice" && i.status !== "void" && i.status !== "draft" && i.fields.type === "credit" && i.fields.appliesTo === invoice.id).reduce((s, i) => s + invoiceTotal(InvoiceFields.parse(i.fields)), 0);
   return Math.max(0, invoiceTotal(f) + credits - paid);
 }
 
-/** Where an invoice stands for people: draft, open, partly paid, overdue, paid, void, or credit */
-export function invoiceState(invoice: Rec, items: Rec[], today: string): "draft" | "open" | "partly_paid" | "overdue" | "paid" | "void" | "credit" {
+/** Bank payments started on an invoice and still clearing, in cents, up to what is owed */
+export function clearingOn(invoice: Rec, items: Rec[]): number {
+  const started = paymentsOn(invoice, items).filter((i) => i.status === "pending").reduce((s, i) => s + PaymentFields.parse(i.fields).amountCents, 0);
+  return Math.min(balanceOf(invoice, items), started);
+}
+
+/** What can be paid right now: the balance, less bank payments on their way, so nobody pays twice */
+export const payableOn = (invoice: Rec, items: Rec[]) => balanceOf(invoice, items) - clearingOn(invoice, items);
+
+/** The latest bank payment that didn't go through, while the invoice still waits to be paid again */
+export function failedOn(invoice: Rec, items: Rec[]): PaymentFields | undefined {
+  if (payableOn(invoice, items) <= 0) return undefined;
+  const failed = paymentsOn(invoice, items).filter((i) => i.status === "failed").map((i) => PaymentFields.parse(i.fields)).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
+  const last = failed.at(-1);
+  // A payment received since then means the client already answered the failure
+  const since = last && paymentsOn(invoice, items).some((i) => received(i) && String(i.fields.receivedAt) > last.receivedAt);
+  return since ? undefined : last;
+}
+
+/**
+ * Where an invoice stands for people: draft, open, partly paid, clearing (a bank payment for all that
+ * is owed is on its way, so it is neither open to pay nor overdue), overdue, paid, void, or credit
+ */
+export function invoiceState(invoice: Rec, items: Rec[], today: string): "draft" | "open" | "partly_paid" | "clearing" | "overdue" | "paid" | "void" | "credit" {
   const f = InvoiceFields.parse(invoice.fields);
   if (invoice.status === "draft" || invoice.status === "void") return invoice.status;
   if (f.type === "credit") return "credit";
   const left = balanceOf(invoice, items);
   if (left === 0) return "paid";
+  if (clearingOn(invoice, items) >= left) return "clearing";
   if (f.dueDate && today > f.dueDate) return "overdue";
   return left < invoiceTotal(f) ? "partly_paid" : "open";
 }

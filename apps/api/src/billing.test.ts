@@ -309,7 +309,14 @@ describe("paying online", () => {
     expect((await call(s.raj.email, "POST", `${path}/invoices/${inv.id}/pay`)).json.error).toBe("payments_off");
   });
 
-  it("opens Checkout for what is owed, then records the bank payment once when Stripe confirms it", async () => {
+  // A Checkout session's event, signed as Stripe signs it
+  const event = (session: { id: string; metadata: unknown }, type: string, payment_status: string) => ({ id: `evt_${type}`, type, data: { object: { object: "checkout.session", id: session.id, payment_status, amount_total: 325_000, payment_intent: "pi_1", payment_method_types: ["us_bank_account"], metadata: session.metadata } } });
+  const hook = async (e: unknown, header?: string) => {
+    const signed = await payments!.sign(e);
+    return app.request("/1NEON/api/billing/stripe", { method: "POST", headers: { "stripe-signature": header ?? signed.header }, body: signed.body });
+  };
+
+  it("opens Checkout for what is owed, shows the bank payment on its way, and records it once when it clears", async () => {
     const { inv, path } = await issuedDeposit();
     // Anyone in the organization may pay
     const r = await call(s.dana.email, "POST", `${path}/invoices/${inv.id}/pay`);
@@ -317,23 +324,67 @@ describe("paying online", () => {
     const session = payments!.sessions[0]!;
     expect(session).toMatchObject({ amountCents: 325_000, invoiceNumber: "INV-0039-01", metadata: { invoiceId: inv.id } });
 
-    const event = (type: string, payment_status: string) => ({ id: `evt_${type}`, type, data: { object: { object: "checkout.session", id: session.id, payment_status, amount_total: 325_000, payment_intent: "pi_1", payment_method_types: ["us_bank_account"], metadata: session.metadata } } });
-    const hook = async (e: unknown, header?: string) => {
-      const signed = await payments!.sign(e);
-      return app.request("/1NEON/api/billing/stripe", { method: "POST", headers: { "stripe-signature": header ?? signed.header }, body: signed.body });
-    };
     // A forged or stale signature is refused
-    expect((await hook(event("checkout.session.async_payment_succeeded", "paid"), "t=1,v1=00")).status).toBe(400);
-    // Bank payments complete later: the first event records nothing
-    expect((await hook(event("checkout.session.completed", "unpaid"))).status).toBe(200);
-    expect((await flow()).items.some((i) => i.kind === "payment")).toBe(false);
-    // Confirmed: one payment, by ACH, and the invoice is paid; a repeat changes nothing
-    await hook(event("checkout.session.async_payment_succeeded", "paid"));
-    await hook(event("checkout.session.async_payment_succeeded", "paid"));
+    expect((await hook(event(session, "checkout.session.async_payment_succeeded", "paid"), "t=1,v1=00")).status).toBe(400);
+    // Bank payments complete later: the first event records it as started, and the invoice stays open
+    expect((await hook(event(session, "checkout.session.completed", "unpaid"))).status).toBe(200);
+    await hook(event(session, "checkout.session.completed", "unpaid"));
+    const mid = await flow();
+    const started = mid.items.filter((i) => i.kind === "payment");
+    expect(started).toHaveLength(1);
+    expect(started[0]).toMatchObject({ status: "pending", fields: { method: "ach", amountCents: 325_000 } });
+    expect(mid.items.find((i) => i.id === inv.id)!.status).toBe("issued");
+    // While it clears nobody can pay again, by any route, and the invoice can't be voided
+    expect((await call(s.raj.email, "POST", `${path}/invoices/${inv.id}/pay`)).json.error).toBe("clearing");
+    expect((await call(OP, "POST", `${path}/invoices/${inv.id}/payments`, { amountCents: 325_000, method: "check", ref: "1041", receivedAt: "2026-11-12" })).json.error).toBe("too_much");
+    expect((await call(OP, "POST", `${path}/invoices/${inv.id}/void`, { version: mid.items.find((i) => i.id === inv.id)!.version, reason: "Wrong amount" })).json.error).toBe("has_payments");
+    // Home no longer asks the client to pay it
+    const home = await call(s.raj.email, "GET", `/t/${s.acme.id}/workspace`);
+    expect(home.json.waiting.filter((w: { itemId: string }) => w.itemId === inv.id)).toHaveLength(0);
+    // Confirmed: the same payment, now received, and the invoice is paid; a repeat changes nothing
+    await hook(event(session, "checkout.session.async_payment_succeeded", "paid"));
+    await hook(event(session, "checkout.session.async_payment_succeeded", "paid"));
+    await hook(event(session, "checkout.session.async_payment_failed", "unpaid"));
     const { items } = await flow();
     const pays = items.filter((i) => i.kind === "payment");
     expect(pays).toHaveLength(1);
-    expect(pays[0]!.fields).toMatchObject({ method: "ach", amountCents: 325_000, ref: "pi_1", stripe: { session: session.id } });
+    expect(pays[0]).toMatchObject({ id: started[0]!.id, status: "done", fields: { method: "ach", amountCents: 325_000, ref: "pi_1", stripe: { session: session.id } } });
+    expect(pays[0]!.fields.startedAt).toBeTruthy();
+    expect(items.find((i) => i.id === inv.id)!.status).toBe("paid");
+  });
+
+  it("marks a bank payment the bank refused as failed, tells both sides, and lets the client pay again", async () => {
+    const { inv, path } = await issuedDeposit();
+    await call(s.raj.email, "POST", `${path}/invoices/${inv.id}/pay`);
+    const session = payments!.sessions[0]!;
+    await hook(event(session, "checkout.session.completed", "unpaid"));
+    await hook(event(session, "checkout.session.async_payment_failed", "unpaid"));
+    // A late or repeated event never brings a failed payment back
+    await hook(event(session, "checkout.session.completed", "unpaid"));
+    const { items } = await flow();
+    const pays = items.filter((i) => i.kind === "payment");
+    expect(pays).toHaveLength(1);
+    expect(pays[0]!.status).toBe("failed");
+    expect(items.find((i) => i.id === inv.id)!.status).toBe("issued");
+    // It's owed again: Home asks, and Pay opens a new session for the whole amount
+    const home = await call(s.raj.email, "GET", `/t/${s.acme.id}/workspace`);
+    expect(home.json.waiting.find((w: { itemId: string }) => w.itemId === inv.id)).toMatchObject({ title: "Pay INV-0039-01: $3,250, the bank payment didn't go through", failed: true });
+    expect((await call(s.raj.email, "POST", `${path}/invoices/${inv.id}/pay`)).json.url).toBeTruthy();
+    expect(payments!.sessions.at(-1)).toMatchObject({ amountCents: 325_000 });
+    // With no money tied to it, neon1 may void it
+    const cur = items.find((i) => i.id === inv.id)!;
+    expect((await call(OP, "POST", `${path}/invoices/${inv.id}/void`, { version: cur.version, reason: "Reissuing with a later due date" })).status).toBe(200);
+  });
+
+  it("records a card payment at once", async () => {
+    const { inv, path } = await issuedDeposit();
+    await call(s.raj.email, "POST", `${path}/invoices/${inv.id}/pay`);
+    const session = payments!.sessions[0]!;
+    const card = event(session, "checkout.session.completed", "paid");
+    card.data.object.payment_method_types = ["card"];
+    await hook(card);
+    const { items } = await flow();
+    expect(items.filter((i) => i.kind === "payment")).toMatchObject([{ status: "done", fields: { method: "card" } }]);
     expect(items.find((i) => i.id === inv.id)!.status).toBe("paid");
   });
 });

@@ -3,6 +3,7 @@
 // Pradeep's side arrives the way it would for her, through the page and the notification bell.
 
 
+import { demoPaymentEvent } from "../components/Billing.tsx";
 import { liveEngine } from "../lib/api.ts";
 import { ASSETS, BETTER, CONSTRAINTS, DRY_RUN, FILE_ASK, FRIDAY, HOURS, LEARNED, MEASURES, MILESTONE, MONEY, OPTIONS, PRINTER, PROJECT, RUNBOOK, TASKS, UPDATES } from "../lib/bakery.ts";
 import type { Section, Show, Stage } from "./player.ts";
@@ -147,11 +148,14 @@ export async function finalPaid() {
   await paid("final");
 }
 
-// Record the whole of an issued invoice of one type as paid by bank transfer
+// The bank clears the transfer she started on an issued invoice of one type, reported as Stripe would;
+// if she never started one (a chapter was skipped), the whole of it is recorded as paid by bank transfer
 async function paid(type: string) {
   const { t, p, items } = await project();
   const inv = items.find((i) => i.kind === "invoice" && i.status === "issued" && i.fields.type === type);
   if (!inv) return;
+  const started = items.find((i) => i.kind === "payment" && i.status === "pending" && i.fields.invoiceId === inv.id);
+  if (started) return demoPaymentEvent({ id: (started.fields.stripe as { session: string }).session, amountCents: Number(started.fields.amountCents), invoiceNumber: String(inv.fields.number), metadata: { tenantId: t, projectId: p.id, invoiceId: inv.id } }, "bank_cleared");
   const cents = (inv.fields.lines as { qty: number; unitCents: number }[]).reduce((n, l) => n + Math.round(l.qty * l.unitCents), 0);
   await as(`/t/${t}/projects/${p.id}/invoices/${inv.id}/payments`, "POST", { amountCents: cents, method: "ach", ref: "Stripe bank transfer", receivedAt: new Date().toISOString().slice(0, 10) });
 }
@@ -500,8 +504,12 @@ export const STORY: Section[] = [
       await s.think("Bank transfer is preferred. I'll do that.");
       await s.top();
       await s.say("Pay opens Stripe's secure page; 1NEON never sees her bank or card details");
-      await s.click({ sel: ".pp-tools button", text: /^Pay / }, 1400);
-      await s.say("She pays by bank transfer (ACH). It clears in a few days, and Stripe tells 1NEON");
+      await s.click({ sel: ".pp-tools button", text: /^Pay / }, 1200);
+      await s.say("No money moves in a walkthrough, so a stand-in page opens. She pays from the bakery's bank account");
+      await s.click({ sel: "dialog[open] button", text: "Pay from a bank account" }, 1200);
+      await s.say("Until the bank clears it, the invoice says it's on its way, and Pay is gone so nobody pays twice");
+      await s.think("Started today, and nothing more to pay. Good.");
+      await s.hover(".pp-state", 1400);
       await s.others(depositPaid, 1200, "Her bank payment cleared");
       await s.think("Paid in full. It says so right on the invoice.");
       await s.hover(".inv-lines tfoot", 1200);
@@ -655,7 +663,9 @@ export const STORY: Section[] = [
       await s.think("And each hour, with the date and what it was for. Nothing to take on trust.");
       await s.hover(".inv-hours", 1500);
       await s.top();
-      await s.click({ sel: ".pp-tools button", text: /^Pay / }, 1400);
+      await s.click({ sel: ".pp-tools button", text: /^Pay / }, 1200);
+      await s.think("From the bank account again, like the deposit.");
+      await s.click({ sel: "dialog[open] button", text: "Pay from a bank account" }, 1200);
       await s.others(finalPaid, 1200, "Her bank payment cleared");
       await s.think("Paid in full. Both invoices stay here for my accountant.");
       await s.hover(".inv-lines tfoot", 1200);

@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { AGREEMENT_TEXT } from "./agreement.ts";
-import { alignPrice, balanceOf, canonical, depositLines, finalLines, hoursStanding, initialsOf, invoiceNumber, invoiceState, invoiceTotal, money, parseMoney, paymentPlan, priceLine, priceMeaning, priceOf, reimbursementLines, sha256Hex } from "./billing.ts";
+import { alignPrice, balanceOf, canonical, clearingOn, failedOn, payableOn, depositLines, finalLines, hoursStanding, initialsOf, invoiceNumber, invoiceState, invoiceTotal, money, parseMoney, paymentPlan, priceLine, priceMeaning, priceOf, reimbursementLines, sha256Hex } from "./billing.ts";
 
 
 // A stored record of a kind, with fields
@@ -52,6 +52,29 @@ describe("invoices", () => {
     expect(balanceOf(i, [i, p1, { ...cr, status: "void" }])).toBe(6_000);
     expect(invoiceState(i, [i, p1, cr, pay("p2", "i1", 5_000)], "2026-11-30")).toBe("paid");
     expect(invoiceState({ ...i, status: "void" }, [], "2026-11-12")).toBe("void");
+  });
+
+  it("counts a bank payment only once it clears, and shows one on its way or refused", () => {
+    const i = inv("i1", "issued", { type: "deposit", lines: [{ text: "x", qty: 1, unitCents: 10_000 }], dueDate: "2026-11-20" });
+    const started = { ...pay("p1", "i1", 10_000), status: "pending" };
+    // On its way: still owed, nothing more to pay, and not overdue while the bank works
+    expect(balanceOf(i, [i, started])).toBe(10_000);
+    expect(clearingOn(i, [i, started])).toBe(10_000);
+    expect(payableOn(i, [i, started])).toBe(0);
+    expect(invoiceState(i, [i, started], "2026-11-25")).toBe("clearing");
+    expect(failedOn(i, [i, started])).toBeUndefined();
+    // Refused: owed again, overdue once the date passes, and the failure is there to show
+    const refused = { ...started, status: "failed" };
+    expect(payableOn(i, [i, refused])).toBe(10_000);
+    expect(invoiceState(i, [i, refused], "2026-11-12")).toBe("open");
+    expect(invoiceState(i, [i, refused], "2026-11-25")).toBe("overdue");
+    expect(failedOn(i, [i, refused])?.amountCents).toBe(10_000);
+    // Paid another way afterwards: the failure no longer asks for anything
+    expect(failedOn(i, [i, refused, pay("p2", "i1", 10_000)])).toBeUndefined();
+    // A transfer for part of it leaves the rest payable
+    const part = { ...pay("p3", "i1", 4_000), status: "pending" };
+    expect(payableOn(i, [i, part])).toBe(6_000);
+    expect(invoiceState(i, [i, part], "2026-11-12")).toBe("open");
   });
 });
 

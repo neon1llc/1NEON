@@ -2,7 +2,7 @@
 // Execute, Observe, Normalize).
 
 
-import { balanceOf, dollars as wholeDollars, invoiceState, InvoiceFields, money as dollars, paymentPlan, priceMeaning, priceOf, betterWhen, canApprove, changedSince, currentDecision, todayIn, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, priceCheckDue, ProjectRole, proposalRef, PurchaseFields, HandoffFields, revisions, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
+import { balanceOf, dollars as wholeDollars, failedOn, invoiceState, InvoiceFields, money as dollars, payableOn, paymentPlan, priceMeaning, priceOf, betterWhen, canApprove, changedSince, currentDecision, todayIn, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, priceCheckDue, ProjectRole, proposalRef, PurchaseFields, HandoffFields, revisions, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
 import { ArrowRight, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
@@ -203,13 +203,15 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
   const unissued = !approved && proposed.length > 0 && (!cur || changedSince(cur.p, items).any);
   // Money first once anything is billed: the client's open invoices, neon1's drafts to check and issue
   const today = todayIn(org.timeZone);
-  const owed = items.filter((i) => i.kind === "invoice" && balanceOf(i, items) > 0);
+  // (an invoice a bank payment already covers asks for nothing while the transfer clears)
+  const owed = items.filter((i) => i.kind === "invoice" && payableOn(i, items) > 0);
   const drafts = items.filter((i) => i.kind === "invoice" && i.status === "draft");
   const overdue = owed.filter((i) => invoiceState(i, items, today) === "overdue");
   if (!me.operator && owed.length) {
-    const first = overdue[0] ?? owed[0]!;
+    const refused = owed.find((i) => failedOn(i, items));
+    const first = refused ?? overdue[0] ?? owed[0]!;
     const f = InvoiceFields.parse(first.fields);
-    text = <>{overdue.length ? <>Invoice {f.number} is <b>overdue</b>: </> : <>Invoice {f.number} is ready: </>}{dollars(balanceOf(first, items))}, due {dateLabel(f.dueDate)}.{owed.length > 1 ? ` ${owed.length - 1} more ${owed.length === 2 ? "is" : "are"} open.` : ""}</>;
+    text = <>{refused ? <>The bank payment on invoice {f.number} <b>didn't go through</b>, so it's still owed: </> : overdue.length ? <>Invoice {f.number} is <b>overdue</b>: </> : <>Invoice {f.number} is ready: </>}{dollars(payableOn(first, items))}, due {dateLabel(f.dueDate)}.{owed.length > 1 ? ` ${owed.length - 1} more ${owed.length === 2 ? "is" : "are"} open.` : ""}</>;
     action = { to: `${base}/execute#billing`, label: "See and pay" };
   } else if (me.operator && drafts.length) {
     text = <>{drafts.length === 1 ? `A ${String(drafts[0]!.fields.type)} invoice is` : `${drafts.length} invoices are`} drafted. Check {drafts.length === 1 ? "it" : "them"}, then issue.</>;

@@ -254,7 +254,8 @@ async function eventTargets(d: OutboxDeps, e: AuditEvent, clock: Clock): Promise
   const { repo, cfg } = d;
   const io = <T>(p: Promise<T>) => beforeDeadline(p, clock.deadline);
   const [members, tenant, actor] = await io(Promise.all([repo.listMembers(e.tenantId), repo.getTenant(e.tenantId), repo.getUser(e.actorId)]));
-  const by = actor?.name || actor?.email || "Someone";
+  // Stripe's own events (a payment started, received, or failed) have no person behind them
+  const by = e.actorId === "stripe" ? "The payment page (Stripe)" : actor?.name || actor?.email || "Someone";
   const targets: Target[] = [];
   for (const m of members) {
     if (m.status !== "joined" || m.userId === e.actorId) continue;

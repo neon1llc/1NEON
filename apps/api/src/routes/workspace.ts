@@ -2,7 +2,7 @@
 // its workflow stages, the workspace landing, Coming up, Insights, and the audit trail.
 
 
-import { InvoiceFields, RECORD_KINDS, Stage, balanceOf, canApprove, dollars, invoiceState, changeRecord, occurrences, stageChanges, dateIn, isClosed, isOwnOrg, metricReached, mondayOf, plusDays, todayIn, type Tenant } from "@1neon/domain";
+import { InvoiceFields, RECORD_KINDS, Stage, canApprove, dollars, failedOn, invoiceState, payableOn, changeRecord, occurrences, stageChanges, dateIn, isClosed, isOwnOrg, metricReached, mondayOf, plusDays, todayIn, type Tenant } from "@1neon/domain";
 import { z } from "zod";
 import { actorId, body, fail, need, now, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
@@ -53,7 +53,7 @@ export function workspaceRoutes(app: App, k: Kit) {
     // Needs you: an invoice to pay (for neon1, a draft to check and issue), a choice between options
     // you may approve, a finished handover to accept, files the client is asked for, and your open
     // work. A project's proposed options are one decision, so they wait as one entry
-    const waiting: { projectId: string; projectKey: string; projectName: string; itemId: string; title: string; kind: string; action: "pay" | "issue" | "choose" | "accept" | "upload" | "do"; count?: number; dueDate?: string; overdue?: boolean }[] = [];
+    const waiting: { projectId: string; projectKey: string; projectName: string; itemId: string; title: string; kind: string; action: "pay" | "issue" | "choose" | "accept" | "upload" | "do"; count?: number; dueDate?: string; overdue?: boolean; failed?: boolean }[] = [];
     const today = todayIn(t.timeZone, new Date(now()));
     for (const p of live) {
       const items = await repo.listItems(t.id, p.id);
@@ -63,11 +63,13 @@ export function workspaceRoutes(app: App, k: Kit) {
       // Money first: each invoice with a balance waits on the client; each draft waits on neon1
       for (const i of items.filter((x) => x.kind === "invoice")) {
         if (actor.operator && i.status === "draft") waiting.push({ projectId: p.id, projectKey: p.key, projectName: p.name, itemId: i.id, title: `Check and issue the draft: ${i.title.toLowerCase()}`, kind: "invoice", action: "issue" });
-        const left = actor.operator || isOwnOrg(t.slug) ? 0 : balanceOf(i, items);
+        // A bank payment on its way already covers its part; one the bank refused is said plainly
+        const left = actor.operator || isOwnOrg(t.slug) ? 0 : payableOn(i, items);
         if (left > 0) {
           const f = InvoiceFields.parse(i.fields);
           const overdue = invoiceState(i, items, today) === "overdue";
-          waiting.push({ projectId: p.id, projectKey: p.key, projectName: p.name, itemId: i.id, title: `Pay ${f.number ?? "the invoice"}: ${dollars(left)}${overdue ? ", overdue" : ""}`, kind: "invoice", action: "pay", dueDate: f.dueDate, overdue });
+          const failed = Boolean(failedOn(i, items));
+          waiting.push({ projectId: p.id, projectKey: p.key, projectName: p.name, itemId: i.id, title: `Pay ${f.number ?? "the invoice"}: ${dollars(left)}${failed ? ", the bank payment didn't go through" : overdue ? ", overdue" : ""}`, kind: "invoice", action: "pay", dueDate: f.dueDate, overdue, failed: failed || undefined });
         }
       }
       // A handover with every step done waits on the decision maker's signature

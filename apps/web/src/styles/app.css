@@ -1348,6 +1348,13 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
 /* The printed invoice's totals sit right under the lines */
 .inv-lines td:nth-child(n + 2), .inv-lines tfoot td { text-align: right; white-space: nowrap; }
 .inv-lines tfoot th { text-align: right; font-weight: 500; }
+/* A bank transfer on its way sits under the balance, muted: shown, but not yet counted */
+.inv-lines tfoot tr.inv-clearing th, .inv-lines tfoot tr.inv-clearing td { color: var(--muted); font-style: italic; }
+/* The demo's stand-in payment page, and the row where a visitor plays the bank */
+.demo-pay { max-width: 460px; }
+.demo-pay .actions { flex-wrap: wrap; }
+.demo-bank { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.invoice-row .warn-text { color: var(--red); }
 
 /* The agreement note reads as one sentence with its link; the way back sits beside the confirmation */
 .notice.agreement-needed { display: block; }

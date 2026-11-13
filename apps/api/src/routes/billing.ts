@@ -6,7 +6,7 @@
 
 import {
   AGREEMENT_EDITION, AGREEMENT_TEXT, CreateInvoiceInput, IssueInvoiceInput, Item, InvoiceFields, PaymentFields, RecordPaymentInput, SignAgreementInput, UpdateInvoiceInput, VoidInvoiceInput,
-  balanceOf, canonical, depositLines, finalLines, priceOf, type PriceTerms, invoiceNumber, invoiceTotal, isOwnOrg, money, newId, plusDays, proposalNumber, reimbursementLines, revisions, sha256Hex, signature, todayIn,
+  balanceOf, canonical, clearingOn, depositLines, finalLines, priceOf, type PriceTerms, invoiceNumber, invoiceTotal, isOwnOrg, money, newId, payableOn, plusDays, proposalNumber, reimbursementLines, revisions, sha256Hex, signature, todayIn,
   type Project, type Tenant,
 } from "@1neon/domain";
 import type { Context } from "hono";
@@ -39,7 +39,11 @@ export function stripeWebhook(app: App, k: Kit) {
     return c.json({ received: true });
   });
 
-  /** Record a completed payment once, however many times Stripe sends the event */
+  /**
+   * Record what Stripe says about a Checkout session, once, however many times it sends the event.
+   * A card is paid at once. A bank (ACH) transfer is recorded as started when the client finishes
+   * Stripe's page, then marked received when the bank clears it days later, or failed if it refuses
+   */
   async function settle(e: PaymentEvent) {
     const s = e.session;
     if (!s) return;
@@ -48,37 +52,44 @@ export function stripeWebhook(app: App, k: Kit) {
     const invoice = await repo.getItem(tenantId, projectId, invoiceId);
     if (!invoice || invoice.kind !== "invoice") return;
     const p = await repo.getProject(tenantId, projectId);
-    if (!p) return;
-    if (e.type === "checkout.session.async_payment_failed") {
-      await repo.table.write([repo.auditOp({ tenantId, actorId: "stripe", action: "payment.failed", target: invoice.id, summary: `${p.key}: a bank payment for ${String(invoice.fields.number)} didn't go through` })]);
-      return;
-    }
-    // A card is paid at once; a bank (ACH) payment completes days later, as its own event
-    const paid = (e.type === "checkout.session.completed" && s.paymentStatus === "paid") || e.type === "checkout.session.async_payment_succeeded";
-    if (!paid || s.amountTotal <= 0) return;
-    // The payment's ID comes from the session, so a repeated event finds it already recorded
+    if (!p || s.amountTotal <= 0) return;
+    // The payment's ID comes from the session, so each event finds what the earlier ones recorded
     const pid = `i_s${replayKey(`${tenantId}|${s.id}`)}`;
-    if (await repo.getItem(tenantId, projectId, pid)) return;
-    await writePayment(p, invoice, { id: pid, amountCents: s.amountTotal, method: METHOD[s.method ?? ""] ?? "other", ref: s.paymentIntent ?? s.id, receivedAt: new Date().toISOString().slice(0, 10), by: "stripe", stripe: { session: s.id, intent: s.paymentIntent } });
+    const had = await repo.getItem(tenantId, projectId, pid);
+    const done = e.type === "checkout.session.async_payment_succeeded" || (e.type === "checkout.session.completed" && s.paymentStatus === "paid");
+    const status = done ? "done" : e.type === "checkout.session.async_payment_failed" ? "failed" : e.type === "checkout.session.completed" && s.paymentStatus === "unpaid" ? "pending" : undefined;
+    // Only a transfer still on its way moves on; a received or failed payment is a record and stays
+    if (!status || (had && (had.status !== "pending" || status === "pending"))) return;
+    const today = now().slice(0, 10);
+    const startedAt = had ? String(had.fields.startedAt ?? had.fields.receivedAt) : status === "done" ? undefined : today;
+    await writePayment(p, invoice, { id: pid, status, was: had, amountCents: s.amountTotal, method: METHOD[s.method ?? ""] ?? (status === "done" && !had ? "other" : "ach"), ref: s.paymentIntent ?? s.id, receivedAt: status === "failed" && had ? String(had.fields.receivedAt) : today, startedAt, by: "stripe", stripe: { session: s.id, intent: s.paymentIntent } });
   }
 
-  /** Save a payment and, when nothing is left owing, mark the invoice paid, in one write */
-  async function writePayment(p: Project, invoice: Item, x: { id: string; amountCents: number; method: PaymentFields["method"]; ref: string; receivedAt: string; by: string; stripe?: PaymentFields["stripe"] }) {
+  /**
+   * Save a payment (or move a bank transfer from started to received or failed) and, when nothing is
+   * left owing, mark the invoice paid, in one write. Received and failed payments get a locked copy
+   */
+  async function writePayment(p: Project, invoice: Item, x: { id: string; status?: "done" | "pending" | "failed"; was?: Item; amountCents: number; method: PaymentFields["method"]; ref: string; receivedAt: string; startedAt?: string; by: string; stripe?: PaymentFields["stripe"] }) {
     const ts = now();
-    const items = await repo.listItems(p.tenantId, p.id);
+    const status = x.status ?? "done";
+    const number = String(invoice.fields.number);
+    const items = (await repo.listItems(p.tenantId, p.id)).filter((i) => i.id !== x.id);
     const payment = Item.parse({
-      tenantId: p.tenantId, projectId: p.id, id: x.id, kind: "payment", title: `Payment on ${String(invoice.fields.number)}`, body: "", status: "done", rank: ts,
-      fields: PaymentFields.parse({ invoiceId: invoice.id, amountCents: x.amountCents, method: x.method, ref: x.ref, receivedAt: x.receivedAt, recordedBy: x.by, stripe: x.stripe }),
-      completedAt: ts, version: 1, createdAt: ts, updatedAt: ts, updatedBy: x.by,
+      tenantId: p.tenantId, projectId: p.id, id: x.id, kind: "payment", title: `Payment on ${number}`, body: "", status, rank: x.was?.rank ?? ts,
+      fields: PaymentFields.parse({ invoiceId: invoice.id, amountCents: x.amountCents, method: x.method, ref: x.ref, receivedAt: x.receivedAt, startedAt: x.startedAt, recordedBy: x.by, stripe: x.stripe }),
+      completedAt: status === "done" ? ts : undefined, version: (x.was?.version ?? 0) + 1, createdAt: x.was?.createdAt ?? ts, updatedAt: ts, updatedBy: x.by,
     });
     const left = balanceOf(invoice, [...items, payment]);
-    const next: Item | undefined = left === 0 && invoice.status === "issued" ? { ...invoice, status: "paid", completedAt: ts, version: invoice.version + 1, updatedAt: ts, updatedBy: x.by } : undefined;
+    const next: Item | undefined = status === "done" && left === 0 && invoice.status === "issued" ? { ...invoice, status: "paid", completedAt: ts, version: invoice.version + 1, updatedAt: ts, updatedBy: x.by } : undefined;
+    const said = status === "pending" ? { action: "payment.started", summary: `${p.key}: a bank payment of ${money(x.amountCents)} was started on ${number}. It takes a few business days to clear` }
+      : status === "failed" ? { action: "payment.failed", summary: `${p.key}: the bank payment of ${money(x.amountCents)} on ${number} didn't go through. ${money(payableOn(invoice, [...items, payment]))} is still owed` }
+      : { action: "payment.received", summary: `${p.key}: ${money(x.amountCents)} received on ${number}${left === 0 ? ", paid in full" : `, ${money(left)} left`}` };
     await repo.table.write([
-      repo.itemOp(payment, { create: true }),
+      repo.itemOp(payment, x.was ? { version: x.was.version } : { create: true }),
       ...(next ? [repo.itemOp(next, { version: invoice.version })] : []),
-      repo.auditOp({ tenantId: p.tenantId, actorId: x.by, action: "payment.received", target: invoice.id, summary: `${p.key}: ${money(x.amountCents)} received on ${String(invoice.fields.number)}${left === 0 ? ", paid in full" : `, ${money(left)} left`}` }),
+      repo.auditOp({ tenantId: p.tenantId, actorId: x.by, target: invoice.id, ...said }),
     ]);
-    await keep(k, `t/${p.tenantId}/p/${p.id}/payments/${payment.id}.json`, payment);
+    if (status !== "pending") await keep(k, `t/${p.tenantId}/p/${p.id}/payments/${payment.id}${status === "failed" ? "-failed" : ""}.json`, payment);
     return { payment, invoice: next ?? invoice };
   }
 
@@ -228,7 +239,10 @@ export function billingRoutes(app: App, k: Kit, pay: ReturnType<typeof stripeWeb
     const input = await body(c, VoidInvoiceInput);
     if (input.version !== it.version) fail(409, "conflict", "This invoice changed since you opened it.", it);
     const items = await repo.listItems(p.tenantId, p.id);
-    if (items.some((i) => i.kind === "payment" && i.fields.invoiceId === it.id)) fail(409, "has_payments", "Payments were made on this invoice. Issue a credit instead, so the record stays whole.");
+    // A payment received, or a bank transfer on its way, ties money to it; one the bank refused doesn't
+    const tied = items.filter((i) => i.kind === "payment" && i.fields.invoiceId === it.id && i.status !== "failed");
+    if (tied.some((i) => i.status === "pending")) fail(409, "has_payments", "A bank payment is on its way for this invoice. Once it clears, issue a credit instead, so the record stays whole.");
+    if (tied.length) fail(409, "has_payments", "Payments were made on this invoice. Issue a credit instead, so the record stays whole.");
     const u = who(c).user;
     const ts = now();
     const next: Item = { ...it, status: "void", fields: { ...it.fields, voided: { by: u.id, name: u.name || u.email, at: ts, reason: input.reason } }, version: it.version + 1, updatedAt: ts, updatedBy: u.id };
@@ -247,8 +261,11 @@ export function billingRoutes(app: App, k: Kit, pay: ReturnType<typeof stripeWeb
     const it = await invoiceOf(c, p);
     if (it.status !== "issued" || it.fields.type === "credit") fail(409, "not_open", "Payments go on an open invoice.");
     const input = await body(c, RecordPaymentInput);
-    const left = balanceOf(it, await repo.listItems(p.tenantId, p.id));
-    if (input.amountCents > left) fail(400, "too_much", `Only ${money(left)} is owed on this invoice.`);
+    // What a bank transfer on its way already covers isn't taken twice
+    const all = await repo.listItems(p.tenantId, p.id);
+    const left = payableOn(it, all);
+    const onWay = clearingOn(it, all);
+    if (input.amountCents > left) fail(400, "too_much", onWay ? `${money(left)} can be recorded: a bank payment of ${money(onWay)} is on its way for this invoice.` : `Only ${money(left)} is owed on this invoice.`);
     const r = await pay.writePayment(p, it, { id: newId("i"), amountCents: input.amountCents, method: input.method, ref: input.ref, receivedAt: input.receivedAt, by: actorId(c) });
     return c.json(r, 201);
   });
@@ -260,8 +277,11 @@ export function billingRoutes(app: App, k: Kit, pay: ReturnType<typeof stripeWeb
     const it = await invoiceOf(c, p);
     if (!k.d.payments) fail(503, "payments_off", "Online payment isn't set up yet. Pay by check, Zelle, or bank transfer, as the invoice says.");
     if (it.status !== "issued" || it.fields.type === "credit") fail(409, "not_open", "This invoice isn't open for payment.");
-    const left = balanceOf(it, await repo.listItems(p.tenantId, p.id));
-    if (left <= 0) fail(409, "not_open", "Nothing is owed on this invoice.");
+    const all = await repo.listItems(p.tenantId, p.id);
+    if (balanceOf(it, all) <= 0) fail(409, "not_open", "Nothing is owed on this invoice.");
+    // A bank transfer already started covers it: paying again would take the money twice
+    const left = payableOn(it, all);
+    if (left <= 0) fail(409, "clearing", "A bank payment for this invoice is on its way. It takes a few business days to clear, and you'll be told when it does. There's nothing more to pay.");
     const t = c.get("tenant");
     const f = InvoiceFields.parse(it.fields);
     const back = `${cfg.publicUrl}/1NEON/o/${t.slug}/projects/${p.key}/execute`;
