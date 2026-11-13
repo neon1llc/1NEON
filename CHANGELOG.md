@@ -29,6 +29,13 @@
 - An email about an invoice or a payment opens that invoice, with **See the invoice**, where it used to open Home.
 - Notices about payments name the payment page as their source, where they used to say "Someone".
 - Progress counts skip records: hours, invoices, payments, decisions, and updates are never counted as work to finish.
+- The interactive demo's history reads in order: each project was created before the stages it has passed, its proposal was issued the day it reached Decide, and each project's health says who assessed it and when.
+- A walkthrough of one chapter sets the story up a second time by itself if the first setup stumbles, and only then shows a card.
+- The demo bar's **Switch person** and **Start over** are as tall as the bar, so they're easy to tap on a phone.
+
+### Fixed
+- A project tab tapped just before another link (two quick taps on a busy phone) could leave the tab's page on screen under the link's address. The page shown now always matches the address, and a tab still slides to the next one.
+- A walkthrough could stop partway in Safari while it set the story up out of sight, for the same reason. Setup now moves between pages without sliding, and a step that can't find what it needs says what the page showed instead.
 
 ## v0.6.0 - 2026-11-13
 
