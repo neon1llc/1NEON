@@ -1,7 +1,7 @@
 {
   "name": "1neon",
   "private": true,
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "1 portal. Needs. Execute. Observe. Normalize.",
   "license": "MIT",
   "type": "module",
