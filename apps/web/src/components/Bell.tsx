@@ -1,5 +1,5 @@
 // apps/web/src/components/Bell.tsx - Notifications: a bell in the top bar that breathes while
-// something new is waiting, and a list of what others did lately, important ones marked, each one
+// something new is waiting, and a list of what others did lately (and copies of what you signed), important ones marked, each one
 // a link to what it's about. Opening the list marks everything seen: what was new when it opened stays
 // under "New" (a filled dot, bold) until the list closes, older ones sit under "Earlier" (a hollow dot),
 // and the header says how many were new. Choices for email and text live in the profile.
@@ -15,6 +15,7 @@ import { read } from "../lib/reads.ts";
 import { gate, Stale } from "./Reads.tsx";
 import { useMembers } from "../lib/hooks.ts";
 import { ago, layerSlug } from "./ui.tsx";
+import { useSession } from "./Shell.tsx";
 
 
 /** One notification as the API returns it, with where it leads when the thing still exists */
@@ -35,6 +36,8 @@ export function Bell({ tid, slug }: { tid: string; slug: string }) {
   const qc = useQueryClient();
   const members = useMembers(tid);
   const names = new Map(members.data?.map((m) => [m.userId, m.name || m.email]) ?? []);
+  // The caller's own signed records come back too, marked as theirs
+  const myId = useSession().user.id;
   const q = useQuery({ queryKey: ["notes", tid], queryFn: () => read<Notes>(`/t/${tid}/notifications`, { unread: "number", events: "array" }), refetchInterval: 20_000 });
   const [open, setOpen] = useState(false);
   // What was new when the list opened stays marked while it's open, even after it's marked seen
@@ -100,7 +103,7 @@ export function Bell({ tid, slug }: { tid: string; slug: string }) {
                       <span className={`dot${isNew ? " on" : ""}`} aria-hidden="true" />
                       <span className="what">
                         <span className="sum">{isNew && <span className="sr-only">New: </span>}{e.summary}</span>
-                        <span className="muted small">{e.actorId === "stripe" ? "The payment page" : names.get(e.actorId) ?? "Someone"} · {ago(e.at)}{e.level === "critical" && <span className="tag imp">important</span>}</span>
+                        <span className="muted small">{e.actorId === "stripe" ? "The payment page" : e.actorId === myId ? "You, a copy for your records" : names.get(e.actorId) ?? "Someone"} · {ago(e.at)}{e.level === "critical" && <span className="tag imp">important</span>}</span>
                       </span>
                     </>
                   );

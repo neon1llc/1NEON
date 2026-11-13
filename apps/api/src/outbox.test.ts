@@ -184,6 +184,16 @@ describe("event notices", () => {
     expect(billing).toContain(`See the invoice: https://example.invalid/1NEON/o/${s.acme.slug}/projects/FLOW-1/invoices/${made.json.id}`);
     for (const t of texts.filter((x) => x !== billing)) expect(t).toContain(`Open 1NEON: https://example.invalid/1NEON/o/${s.acme.slug}/workspace`);
   });
+
+  it("sends the signer a copy of what they signed, but no notice of their other actions", async () => {
+    const event = (action: string, id: string) => ({ tenantId: s.acme.id, id, at: new Date().toISOString(), actorId: s.raj.id, action, target: "x", summary: `FLOW-1: ${action}` });
+    await repo.table.write([outboxOp("E#sign1", { kind: "event", event: event("decision.approved", "sign1") }), outboxOp("E#iss1", { kind: "event", event: event("proposal.issued", "iss1") })]);
+    const before = mailer.sent.length;
+    await pass();
+    const toRaj = mailer.sent.slice(before).filter((m) => m.to === s.raj.email);
+    expect(toRaj.map((m) => m.subject)).toEqual([expect.stringContaining("decision.approved")]);
+    expect(toRaj[0]!.text).toMatch(/^You in /);
+  });
 });
 
 

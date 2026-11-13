@@ -19,6 +19,21 @@ export function signature(doc: Signature["doc"], ref: string, hash: string, inpu
   return Signature.parse({ doc, ref, hash, typedName: input.typedName, consent: SIGN_CONSENT, by: who.id, name: who.name, email: who.email, at, ip: from.ip?.slice(0, 64), ua: from.ua?.slice(0, 300) });
 }
 
+/**
+ * Why a typed signature doesn't read as the signer's name, or undefined when it does. A name has no
+ * digits, and when the profile has a name, the signature carries at least one word of it (first or
+ * last name, any case), so "Raj Patel" signs for Raj Patel and "anything123" signs for no one
+ */
+export function signedNameProblem(typed: string, profileName: string | undefined): string | undefined {
+  const t = typed.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (/\d/.test(t) || !/\p{L}.*\p{L}/u.test(t)) return "Type your name as you'd sign it, in letters.";
+  const name = (profileName ?? "").includes("@") ? "" : (profileName ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const parts = name.split(/[^\p{L}]+/u).filter((w) => w.length >= 2);
+  if (!parts.length) return undefined;
+  const typedParts = new Set(t.split(/[^\p{L}]+/u).filter(Boolean));
+  return parts.some((w) => typedParts.has(w)) ? undefined : `Type your name as it is on your profile (${profileName}). To sign under another name, change it in your profile first.`;
+}
+
 /** Initials from a typed name: "Raj Patel" → "RP" (kept for purchases neon1 buys) */
 export const initialsOf = (name: string) => name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? "").join("").slice(0, 8) || "?";
 

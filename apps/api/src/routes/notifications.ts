@@ -2,7 +2,7 @@
 // marking them seen. Sending notices is the outbox's job (lib/transactions.ts, outbox.ts).
 
 
-import { groupOf, KIND_LAYER, neon1Only, type AuditEvent, type ItemKind, type Layer, type Project } from "@1neon/domain";
+import { actorHears, groupOf, isOwnOrg, KIND_LAYER, neon1Only, type AuditEvent, type ItemKind, type Layer, type Project } from "@1neon/domain";
 import { actorId, need, now, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
 
@@ -54,7 +54,10 @@ export function notificationRoutes(app: App, k: Kit) {
     // Never opened: only the last three days count as new, so older history doesn't all light up at once
     const seenAt = member?.seenAt ?? new Date(Date.now() - 3 * 864e5).toISOString();
     const op = who(c).actor.operator;
-    const mine = events.filter((e) => e.actorId !== me && (op || !neon1Only(e.action))).slice(0, 40);
+    // Others' events, plus the caller's own signed records (a copy of what they agreed to, so signing
+    // shows in the bell); in neon1's own organization, its billing too
+    const own = isOwnOrg(t.slug);
+    const mine = events.filter((e) => (e.actorId !== me || actorHears(e.action, own)) && (op || !neon1Only(e.action))).slice(0, 40);
     const links = await linksFor(t.id, mine);
     const list = mine.map((e, i) => {
       const g = groupOf(e.action);

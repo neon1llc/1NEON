@@ -2,7 +2,7 @@
 // approving an option into an immutable decision, and the advisory edit markers.
 
 
-import { AGREEMENT_EDITION, AcceptInput, AgreeInput, ApproveInput, canonical, finalLines, lineage, refundCredit, priceOf, initialsOf, sha256Hex, signature, depositLines, InvoiceFields, CreateItemInput, IssueInput, changeRecord, itemChanges, assessed, completionAfter, priceCheckDue, proposalRef, resolveTiming, revisions, DecisionFields, Item, OptionFields, PRICE_CHECK_DAYS, PurchaseFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, todayIn, type Project } from "@1neon/domain";
+import { AGREEMENT_EDITION, AcceptInput, signedNameProblem, AgreeInput, ApproveInput, canonical, finalLines, lineage, refundCredit, priceOf, initialsOf, sha256Hex, signature, depositLines, InvoiceFields, CreateItemInput, IssueInput, changeRecord, itemChanges, assessed, completionAfter, priceCheckDue, proposalRef, resolveTiming, revisions, DecisionFields, Item, OptionFields, PRICE_CHECK_DAYS, PurchaseFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, todayIn, type Project } from "@1neon/domain";
 import type { Context } from "hono";
 import { z } from "zod";
 import { actorId, body, byRank, check, defined, fail, label, need, now, validateFields, who, type Env } from "../lib/http.ts";
@@ -239,6 +239,8 @@ export function itemRoutes(app: App, k: Kit) {
     // The approver signs this option ID over a hash of exactly what they agreed to; when neon1 buys
     // items, the same signature agrees to pay them back at cost, and its initials go on each purchase
     const changed = current ? { replaces: current.id, reason: input.reason } : {};
+    const misnamed = signedNameProblem(input.signature.typedName, approver.name);
+    if (misnamed) fail(400, "signature_name", misnamed);
     const signed = signature("approval", snap.code, await sha256Hex(canonical({ code: snap.code, proposal: rev.title, terms, conditions: input.conditions, ...changed })), input.signature, { id: by, name, email: approver.email }, ts, from(c));
     const initials = input.initials || initialsOf(input.signature.typedName);
     const decision = Item.parse({
@@ -348,6 +350,8 @@ export function itemRoutes(app: App, k: Kit) {
     const { p, it, u, ts, by } = await decide(c, "handoff");
     const input = await body(c, AcceptInput);
     if (input.version !== it.version) fail(409, "conflict", "This step changed since you read it. Review it again.", it);
+    const misnamed = signedNameProblem(input.signature.typedName, u.name);
+    if (misnamed) fail(400, "signature_name", misnamed);
     const signed = signature("acceptance", it.title, await sha256Hex(canonical({ id: it.id, version: it.version, title: it.title, body: it.body, note: input.note })), input.signature, { id: by, name: u.name || u.email, email: u.email }, ts, from(c));
     const next: Item = { ...it, status: "done", completedAt: completionAfter(it, "done", ts), fields: { ...it.fields, accepted: { by, name: u.name || u.email, at: ts, note: input.note, signature: signed } }, version: it.version + 1, updatedAt: ts, updatedBy: by };
     // The last handover step accepted: neon1 gets a draft of the final invoice for what's left on the price
@@ -379,6 +383,8 @@ export function itemRoutes(app: App, k: Kit) {
     const ts = now();
     const by = actorId(c);
     const name = u.name || u.email;
+    const misnamed = signedNameProblem(input.signature.typedName, u.name);
+    if (misnamed) fail(400, "signature_name", misnamed);
     const accepted: Item[] = [];
     for (const it of waiting) {
       const signed = signature("acceptance", it.title, await sha256Hex(canonical({ id: it.id, version: it.version, title: it.title, body: it.body, note: input.note })), input.signature, { id: by, name, email: u.email }, ts, from(c));

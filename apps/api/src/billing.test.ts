@@ -468,3 +468,57 @@ describe("paying online", () => {
     expect(items.find((i) => i.id === inv.id)!.status).toBe("paid");
   });
 });
+
+
+describe("terms agreed after the proposal", () => {
+  it("asks the deposit share the option says (20%), and nothing up front at 0%", async () => {
+    const { opt, path } = await flow();
+    const b = opt("B");
+    const r = await call(OP, "PATCH", `${path}/items/${b.id}`, { version: b.version, fields: { depositPercent: 20 } });
+    expect(r.json.fields.depositPercent).toBe(20);
+    await call(OP, "POST", `${path}/proposals`, { note: "20% deposit, as asked" });
+    const fresh = (await flow()).opt("B");
+    const ok = await call(s.raj.email, "POST", `${path}/items/${fresh.id}/approve`, { version: fresh.version, signature: SIGN });
+    expect(ok.status).toBe(201);
+    expect(ok.json.decision.fields.terms.depositPercent).toBe(20);
+    // $4,500 fixed: 20% is $900
+    const draft = (await flow()).items.find((i) => i.kind === "invoice")!;
+    expect(draft.fields).toMatchObject({ type: "deposit", lines: [{ unitCents: 90_000, text: expect.stringContaining("20% deposit") }] });
+    // A second deposit draft neon1 asks for suggests the same share, since the first isn't issued yet
+    const again = await call(OP, "POST", `${path}/invoices`, { type: "deposit" });
+    expect(again.json.fields.lines[0].unitCents).toBe(90_000);
+  });
+
+  it("keeps a line neon1 typed, amount and words, instead of the suggestion", async () => {
+    const { path } = await approveB();
+    const r = await call(OP, "POST", `${path}/invoices`, { type: "deposit", lines: [{ text: "Deposit", qty: 1, unitCents: 20_000 }], note: "20% as agreed" });
+    expect(r.status).toBe(201);
+    expect(r.json.fields.lines).toEqual([expect.objectContaining({ text: "Deposit", unitCents: 20_000 })]);
+  });
+
+  it("refuses a signature that isn't the signer's name", async () => {
+    const { opt, path } = await flow();
+    const b = opt("B");
+    const r = await call(s.raj.email, "POST", `${path}/items/${b.id}/approve`, { version: b.version, signature: { typedName: "anything123", consent: true } });
+    expect(r.status).toBe(400);
+    expect(r.json.error).toBe("signature_name");
+    const other = await call(s.raj.email, "POST", `${path}/items/${b.id}/approve`, { version: b.version, signature: { typedName: "Someone Else", consent: true } });
+    expect(other.json.error).toBe("signature_name");
+  });
+
+  it("revises an approved option as a new draft, approved in its place in the next revision", async () => {
+    const { decision, path } = await approveB();
+    const { opt } = await flow();
+    const b = opt("B");
+    // The approved option's own terms stay as signed
+    expect((await call(OP, "PATCH", `${path}/items/${b.id}`, { version: b.version, fields: { depositPercent: 20 } })).status).toBe(400);
+    const copy = await call(OP, "POST", `${path}/items`, { kind: "option", status: "draft", title: `${b.title} (revised)`, body: b.body, fields: { ...b.fields, depositPercent: 20, revises: b.id } });
+    expect(copy.status).toBe(201);
+    await call(OP, "PATCH", `${path}/items/${copy.json.id}`, { version: copy.json.version, status: "proposed" });
+    await call(OP, "POST", `${path}/proposals`, { note: "Revised terms for B: 20% deposit" });
+    const fresh = (await repo.listItems(s.acme.id, (await flow()).p.id)).find((i) => i.id === copy.json.id)!;
+    const ok = await call(s.raj.email, "POST", `${path}/items/${fresh.id}/approve`, { version: fresh.version, reason: "We agreed a 20% deposit", signature: SIGN });
+    expect(ok.status).toBe(201);
+    expect(ok.json.decision.fields).toMatchObject({ supersedes: [decision.id], reason: "We agreed a 20% deposit", terms: { depositPercent: 20 } });
+  });
+});

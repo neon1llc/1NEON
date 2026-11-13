@@ -6,7 +6,7 @@
 
 import {
   AGREEMENT_EDITION, AGREEMENT_TEXT, CreateInvoiceInput, IssueInvoiceInput, Item, InvoiceFields, PaymentFields, RecordPaymentInput, SignAgreementInput, UpdateInvoiceInput, VoidInvoiceInput,
-  balanceOf, canonical, clearingOn, depositLines, finalLines, priceOf, type PriceTerms, invoiceNumber, invoiceTotal, isOwnOrg, money, newId, payableOn, plusDays, proposalNumber, reimbursementLines, revisions, sha256Hex, signature, todayIn,
+  balanceOf, canonical, signedNameProblem, clearingOn, depositLines, finalLines, priceOf, type PriceTerms, invoiceNumber, invoiceTotal, isOwnOrg, money, newId, payableOn, plusDays, proposalNumber, reimbursementLines, revisions, sha256Hex, signature, todayIn,
   type Project, type Tenant,
 } from "@1neon/domain";
 import type { Context } from "hono";
@@ -130,6 +130,8 @@ export function billingRoutes(app: App, k: Kit, pay: ReturnType<typeof stripeWeb
     if (had) return c.json(had);
     const u = who(c).user;
     const ts = now();
+    const misnamed = signedNameProblem(input.typedName, u.name);
+    if (misnamed) fail(400, "signature_name", misnamed);
     const signed = signature("agreement", AGREEMENT_EDITION, input.hash, input, { id: u.id, name: u.name || u.email, email: u.email }, ts, from(c));
     const next: Tenant = { ...t, agreements: [...(t.agreements ?? []), signed], version: t.version + 1, updatedAt: ts, updatedBy: u.id };
     await repo.table.write([

@@ -4,7 +4,7 @@
 // client and draft, issue, void, credit, and record payment for neon1.
 
 
-import { AGREEMENT_EDITION, InvoiceFields, PaymentFields, SIGN_CONSENT, balanceOf, currentDecision, depositLines, dollars, failedOn, finalLines, reimbursementLines, hoursRange, hoursStanding, hoursText, invoiceState, invoiceTotal, isOwnOrg, lineCents, money, payableOn, paymentPlan, priceMeaning, priceOf, received, todayIn, type BasisLine, type InvoiceLine, type InvoiceType, type Item, type PaymentMethod, type PriceTerms, type Project } from "@1neon/domain";
+import { AGREEMENT_EDITION, InvoiceFields, PaymentFields, SIGN_CONSENT, balanceOf, currentDecision, depositLines, dollars, failedOn, finalLines, reimbursementLines, hoursRange, hoursStanding, hoursText, invoiceState, invoiceTotal, isOwnOrg, lineCents, money, payableOn, paymentPlan, priceMeaning, priceOf, received, signedNameProblem, todayIn, type BasisLine, type InvoiceLine, type InvoiceType, type Item, type PaymentMethod, type PriceTerms, type Project } from "@1neon/domain";
 import { Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useHref, useLocation, useSearchParams } from "react-router";
@@ -108,15 +108,21 @@ export function DemoBank({ payment, onDone }: { payment: Item; onDone: () => voi
 
 /** A signature as the API takes it */
 export type SignValue = { typedName: string; consent: boolean };
-/** Ready to send: a name of two or more letters and the consent box ticked */
-export const signReady = (v: SignValue) => v.typedName.trim().length >= 2 && v.consent;
+// The signed-in person's profile name, kept where signReady can read it without a hook; SignBox sets it
+let signerName: string | undefined;
+/** Ready to send: the consent box ticked and a name that reads as the signer's (see signedNameProblem) */
+export const signReady = (v: SignValue) => v.typedName.trim().length >= 2 && v.consent && !signedNameProblem(v.typedName, signerName);
 
 /** Type your full name and tick the consent box; the name, as typed, is the signature */
 export function SignBox({ value, onChange, id = "sign" }: { value: SignValue; onChange: (v: SignValue) => void; id?: string }) {
+  const me = useSession();
+  signerName = me.user.name || undefined;
+  const wrong = value.typedName.trim().length >= 2 ? signedNameProblem(value.typedName, signerName) : undefined;
   return (
     <div className="sign-box">
       <label htmlFor={`${id}-name`}>Type your full name to sign</label>
-      <input id={`${id}-name`} className="sign-name" value={value.typedName} onChange={(e) => onChange({ ...value, typedName: e.target.value })} maxLength={120} autoComplete="name" required />
+      <input id={`${id}-name`} className="sign-name" value={value.typedName} onChange={(e) => onChange({ ...value, typedName: e.target.value })} maxLength={120} autoComplete="name" required placeholder={signerName} aria-invalid={wrong ? true : undefined} aria-describedby={wrong ? `${id}-wrong` : undefined} />
+      {wrong && <span id={`${id}-wrong`} className="small warn-text">{wrong}</span>}
       <label className="sign-consent">
         <input type="checkbox" checked={value.consent} onChange={(e) => onChange({ ...value, consent: e.target.checked })} /> {SIGN_CONSENT}
       </label>
