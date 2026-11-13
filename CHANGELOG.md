@@ -16,7 +16,7 @@
 - **Accept the handover**: once every handover step is done, the decision maker accepts all of them with one signature. Each step is still signed for, and an accepted step stays done.
 - **Needs you**, on Home, now lists invoices to pay (with the due date, overdue first), drafts for neon1 to issue, and a handover ready to accept.
 - In the interactive demo and the walkthroughs, **Pay** opens a stand-in for the payment page that says no money moves, and lets you pay by bank or card to see each outcome. In the demo you can also play the bank and clear or refuse a transfer.
-- FAQ answers: whether a price is fixed or an estimate, where the hours worked are listed, what happens if the work needs more or fewer hours than estimated, and what happens if a bank payment doesn't go through.
+- FAQ answers: whether a price is fixed or an estimate, where the hours worked are listed, what happens if the work needs more or fewer hours than estimated, what happens if a bank payment doesn't go through, whether you get a receipt, whether paying by card or paying late costs more, and what to do if an invoice looks wrong.
 
 ### Changed
 - The service agreement is edition 2.0. Its Paying section says how fixed prices and estimates are billed, that a deposit counts toward the final invoice, and that any difference is refunded if the work comes to less than a deposit paid. An organization that signed edition 1.0 signs 2.0 before its next approval, and its earlier signature keeps the text it was given.

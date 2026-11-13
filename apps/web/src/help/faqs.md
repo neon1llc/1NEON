@@ -172,6 +172,15 @@ Choose **Pay** on the invoice. Stripe's secure page opens, where you pay by bank
 ### What if my bank payment doesn't go through?
 Then no money moved, and the invoice says so: it's open again, with the failed payment and its date listed. 1NEON tells you and neon1 the day your bank reports it, and **Next step** in the project and **Needs you** on Home both point to the invoice. Choose **Pay again** to pay by bank or card, or use one of the other ways on the invoice. Nothing is added to what you owe.
 
+### Do I get a receipt?
+The invoice is your receipt. Once it's paid it reads **Paid in full**, with each payment's date, amount, and how it arrived, and it prints or saves as a PDF from the same page. 1NEON also emails whoever gets billing notices when a payment arrives.
+
+### Is there a fee for paying by card, or for paying late?
+No. The invoice's total is what you pay, whichever way you pay it: neon1 adds no surcharge for a card, and the service agreement has no late fee or interest. An invoice past its due date shows as overdue, and the agreement says neon1 may pause work when an invoice is more than 30 days overdue, after telling you.
+
+### What if I think an invoice is wrong?
+Say so before you pay: email [hello@neon1.tech](mailto:hello@neon1.tech) with the invoice number and the line in question. An invoice for hours lists every entry it bills, so you can point to the one you mean. An issued invoice is never edited. If something is wrong, neon1 reduces it with a credit, or voids it with a reason and issues a new one, and the record shows what changed.
+
 ### When are invoices sent?
 As the option you approved says, under **When you pay**. Half of a fixed price, or half of an estimate's low end, is invoiced when you approve, as a deposit. The rest is invoiced when you accept the handover: the remainder of a fixed price, or the hours worked less the deposit for an estimate, with those hours listed on the invoice. Items neon1 buys for you are billed at cost with the receipt, and a care plan is billed monthly. Invoices are due in 15 days unless the option says otherwise, and each one emails whoever is set to get billing notices. Watch [the deposit](/1NEON/live?play=pay) and [the final invoice](/1NEON/live?play=final).
 
