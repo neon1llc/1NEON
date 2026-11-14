@@ -370,6 +370,11 @@ export class Repo {
     return (await this.table.query(`T#${tid}`, "PROJ#")).map((r) => entity<Project>(r)!).filter((p) => !p.deletedAt);
   }
 
+  /** An organization's trashed projects, for the admin's export; nothing else reads Trash */
+  async listTrashedProjects(tid: string) {
+    return (await this.table.query(`T#${tid}`, "PROJ#")).map((r) => entity<Project>(r)!).filter((p) => p.deletedAt);
+  }
+
   /** The All clients view: every project in every organization (read only) */
   async listAllProjects() {
     return (await this.table.queryIndex("GSI2", "KIND#PROJECT")).map((r) => entity<Project>(r)!).filter((p) => !p.deletedAt);
@@ -450,6 +455,11 @@ export class Repo {
     return (await this.table.query(`T#${tid}#P#${pid}`, `COMMENT#${iid}#`)).map((r) => entity<Comment>(r)!);
   }
 
+  /** Every comment on every item in one project, for the admin's export */
+  async listProjectComments(tid: string, pid: string): Promise<Comment[]> {
+    return (await this.table.query(`T#${tid}#P#${pid}`, "COMMENT#")).map((r) => entity<Comment>(r)!);
+  }
+
   // A new comment
   commentOp(c: Comment): WriteOp {
     return { put: { ...keys.comment(c.tenantId, c.projectId, c.itemId, c.at, c.id), type: "comment", ...c }, guard: { create: true } };
@@ -520,5 +530,10 @@ export class Repo {
   // Newest audit events first
   async listAudit(tid: string, limit = 50) {
     return (await this.table.query(keys.audit(tid), "", { limit, reverse: true })).map((r) => entity<AuditEvent>(r)!);
+  }
+
+  /** The whole audit trail, oldest first, for the admin's export (the Activity page shows the latest) */
+  async listAllAudit(tid: string) {
+    return (await this.table.query(keys.audit(tid))).map((r) => entity<AuditEvent>(r)!);
   }
 }

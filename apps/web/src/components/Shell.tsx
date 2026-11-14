@@ -378,7 +378,8 @@ function SignIn() {
         <p className="fine legal-links">
           <Link to="/faqs">FAQs</Link> · <Link to="/cookies">Cookies</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
         </p>
-        {/* Not a client yet: the sample and the demo are one click away, with no sign-in to attempt.
+        {/* Not a client yet: one door, the guided walkthrough, with no sign-in to attempt. The sample
+            project and the demo stay reachable from inside it (its end card) and from the FAQs.
             The demo, already one of them, offers the guided walkthrough in the same place instead */}
         {PICKER && (
           <nav className="signin-more" aria-label="Another way to see it">
@@ -387,8 +388,7 @@ function SignIn() {
         )}
         {!IN_DEMO && (
           <nav className="signin-more" aria-label="Without an account">
-            <a href="/1NEON/example">Read a sample project</a>
-            <a href="/1NEON/demo/">Try the interactive demo</a>
+            <a href="/1NEON/live">New here? See how it works</a>
           </nav>
         )}
         {/* Local builds also offer the demo people under the real form */}

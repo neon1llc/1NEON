@@ -73,7 +73,7 @@ function DemoCheckout({ session, onClose, onPaid }: { session?: DemoSession; onC
     <Dialog open={Boolean(session)} onClose={onClose} label="A stand-in for the payment page">
       <div className="demo-pay">
         <h2>A stand-in for the payment page</h2>
-        <p className="small muted">This is a demo, so no money moves. In 1NEON, Pay opens Stripe's secure page, and 1NEON never sees bank or card details.</p>
+        <p className="small muted">This is a demo, so no money moves. In 1NEON, Pay opens Stripe's hosted payment page, and 1NEON never sees bank or card details.</p>
         <p>{session ? <>Pay <b>{money(session.amountCents)}</b> on {session.invoiceNumber}:</> : null}</p>
         <div className="actions">
           <button type="button" className="btn btn-primary" onClick={() => void go("bank_started")}>Pay from a bank account</button>

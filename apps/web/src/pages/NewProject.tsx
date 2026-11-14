@@ -2,7 +2,7 @@
 // measure it, then review.
 
 
-import { TEMPLATES } from "@1neon/domain";
+import { QUICK_FIX, TEMPLATES } from "@1neon/domain";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useOrg, useTopBar } from "../components/Shell.tsx";
@@ -55,6 +55,13 @@ export function NewProject() {
   if (!canWrite) return <p className="lead">Viewers can't start projects. Ask an editor or admin in {org.name}.</p>;
   // The chosen template, falling back to the first (blank)
   const t = TEMPLATES.find((x) => x.id === template) ?? TEMPLATES[0]!;
+  // A quick fix skips Measures and asks only what's wrong: neon1 quotes it from the project itself.
+  // `order` is the steps this template walks through, by their place in STEPS
+  const quick = template === QUICK_FIX;
+  const order = quick ? [0, 1, 3] : [0, 1, 2, 3];
+  const at = order.indexOf(step);
+  const nextStep = order[at + 1];
+  const prevStep = order[at - 1];
   // Measures checked once, the same way for the inline errors, the Review step, and the create call:
   // a started measure with a bad number or a missing name is an error, never silently dropped
   const measures = checkMeasures(metrics);
@@ -62,13 +69,13 @@ export function NewProject() {
   // The project starts in the first stage that isn't hidden, as the API does
   const first = org.stages.find((x) => !x.hidden) ?? org.stages[0];
   // What was left blank, named on the review so skipping it is a choice, not an accident
-  const later = [!projectSummary.trim() && "what it is", !outcome.trim() && "what done looks like", kept.length === 0 && "a measure"].filter(Boolean) as string[];
+  const later = (quick ? [!projectSummary.trim() && "what's wrong"] : [!projectSummary.trim() && "what it is", !outcome.trim() && "what done looks like", kept.length === 0 && "a measure"]).filter(Boolean) as string[];
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
   // Only the Basics step has a required field
   const ready = [true, name.trim().length > 0, true, true];
   // On a step with a problem, move to the first field to fix instead of going on; answers stay as typed
   const firstProblem = () => {
-    if (!measures.first) return false;
+    if (quick || !measures.first) return false;
     const [field, i] = measures.first.split(":");
     const ids = { title: "mt", unit: "mu", baseline: "mb", target: "mg" } as Record<string, string>;
     if (step !== 2) setStep(2);
@@ -91,8 +98,10 @@ export function NewProject() {
           outcome,
           example,
           targetDate: targetDate || undefined,
-          // Exactly the values the Review step showed
-          metrics: kept,
+          // Exactly the values the Review step showed (a quick fix has none, and shows none)
+          metrics: quick ? [] : kept,
+          // Answers typed before switching to a quick fix, which doesn't ask them, aren't sent
+          ...(quick ? { outcome: "", example: "" } : {}),
         },
       });
       refresh();
@@ -112,12 +121,12 @@ export function NewProject() {
       <h1 className="page-title">New project</h1>
       {/* Progress through the steps; the current one is marked for screen readers */}
       <div className="steps" aria-label="Steps" data-tour="wizard">
-        {STEPS.map((s, i) => (
-          <span key={s} className={i === step ? "on" : i < step ? "done" : ""} aria-current={i === step ? "step" : undefined}>{i + 1}. {s}</span>
+        {order.map((i, n) => (
+          <span key={STEPS[i]} className={i === step ? "on" : n < at ? "done" : ""} aria-current={i === step ? "step" : undefined}>{n + 1}. {STEPS[i]}</span>
         ))}
       </div>
       {/* Each step announces itself and takes focus when reached by Next or Back (AP-05) */}
-      <h2 ref={stepHeading} tabIndex={-1} className="sr">Step {step + 1} of {STEPS.length}: {STEPS[step]}</h2>
+      <h2 ref={stepHeading} tabIndex={-1} className="sr">Step {at + 1} of {order.length}: {STEPS[step]}</h2>
       {/* Enter moves to the next step; on the last step it creates the project */}
       {/* The form pans like an assembly line: forward to the left, Back to the right */}
       <form
@@ -125,7 +134,7 @@ export function NewProject() {
         onSubmit={(e) => {
           e.preventDefault();
           if (step >= 2 && firstProblem()) return;
-          if (step < STEPS.length - 1) slide("next", () => setStep(step + 1));
+          if (nextStep !== undefined) slide("next", () => setStep(nextStep));
           else void create();
         }}
       >
@@ -149,10 +158,11 @@ export function NewProject() {
         {step === 1 && (
           <>
             <p className="small muted" style={{ margin: 0 }}><sup className="req" aria-hidden="true">*</sup> Required. The rest can wait, and the project will remind you.</p>
-            <div><label htmlFor="n">Name<sup className="req" aria-hidden="true">*</sup></label><input id="n" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required autoFocus placeholder="e.g. move the file server to the cloud" /></div>
-            <div><label htmlFor="s">In one or two sentences, what is this?</label><textarea id="s" value={projectSummary} onChange={(e) => setSummary(e.target.value)} maxLength={500} rows={2} placeholder="e.g. patients email forms to one inbox, and staff retype them into the record" /></div>
-            <div><label htmlFor="o">What will be true when it's done?</label><textarea id="o" value={outcome} onChange={(e) => setOutcome(e.target.value)} maxLength={500} rows={2} placeholder="e.g. patients upload once, and the front desk sees what's missing at a glance" /></div>
-            <div><label htmlFor="x">One real example of how it works today</label><textarea id="x" value={example} onChange={(e) => setExample(e.target.value)} maxLength={2000} rows={3} placeholder="e.g. every Monday, Dana exports the schedule to a spreadsheet and emails it to the front desk…" /></div>
+            <div><label htmlFor="n">Name<sup className="req" aria-hidden="true">*</sup></label><input id="n" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required autoFocus placeholder={quick ? "e.g. printer won't print from the front desk" : "e.g. move the file server to the cloud"} /></div>
+            <div><label htmlFor="s">{quick ? "What's wrong, in a sentence or two?" : "In one or two sentences, what is this?"}</label><textarea id="s" value={projectSummary} onChange={(e) => setSummary(e.target.value)} maxLength={500} rows={2} placeholder={quick ? "e.g. since Tuesday's update, jobs sit in the queue and nothing prints" : "e.g. patients email forms to one inbox, and staff retype them into the record"} /></div>
+            {/* A quick fix is done when it works, and has no example to collect: those two are for projects */}
+            {!quick && <div><label htmlFor="o">What will be true when it's done?</label><textarea id="o" value={outcome} onChange={(e) => setOutcome(e.target.value)} maxLength={500} rows={2} placeholder="e.g. patients upload once, and the front desk sees what's missing at a glance" /></div>}
+            {!quick && <div><label htmlFor="x">One real example of how it works today</label><textarea id="x" value={example} onChange={(e) => setExample(e.target.value)} maxLength={2000} rows={3} placeholder="e.g. every Monday, Dana exports the schedule to a spreadsheet and emails it to the front desk…" /></div>}
             <div><label htmlFor="d">Target date (optional)</label><input id="d" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} style={{ maxWidth: 220 }} /></div>
           </>
         )}
@@ -193,24 +203,26 @@ export function NewProject() {
             <p className="s mono muted small" style={{ margin: 0 }}>{t.keyPrefix} · {t.name}</p>
             <h2 style={{ margin: "6px 0 10px" }}>{name}</h2>
             {projectSummary && <p>{projectSummary}</p>}
-            {outcome && <p><b>Done when:</b> {outcome}</p>}
+            {outcome && !quick && <p><b>Done when:</b> {outcome}</p>}
             {targetDate && <p><b>Target:</b> {dateLabel(targetDate)}</p>}
             {/* Each measure exactly as it will be saved: the normalized numbers, with unset ones named */}
-            {kept.length > 0 && (
+            {kept.length > 0 && !quick && (
               <ul className="small" style={{ paddingLeft: 18 }}>
                 {kept.map((m, i) => <li key={i}>{m.title}: now {numberWords(m.baseline)}, target {numberWords(m.target)}{m.unit ? ` (${m.unit})` : ""}</li>)}
               </ul>
             )}
-            {!measures.ok && <p className="notice" role="alert">A measure needs fixing before Create. <button type="button" className="linkish" onClick={firstProblem}>Show me</button></p>}
+            {!measures.ok && !quick && <p className="notice" role="alert">A measure needs fixing before Create. <button type="button" className="linkish" onClick={firstProblem}>Show me</button></p>}
             {later.length > 0 && <p className="small notice">Not written yet: {later.join(", ")}. You can add {later.length === 1 ? "it" : "them"} later from the project's Overview, which will remind you.</p>}
-            <p className="muted small">Gets the next {t.keyPrefix} number when created. Starts in {first?.name}. Adds {plural(t.items.length, "starter item")}{kept.length ? ` and ${plural(kept.length, "measure")}` : ""}.</p>
+            {quick
+              ? <p className="muted small">Gets the next {t.keyPrefix} number when created. Starts with a quote to price and issue, and one handover step, "{t.items.find((i) => i.kind === "handoff")?.title}". The client approves the quote with one signature, nothing is paid up front, and the invoice is drafted when they accept the fix.</p>
+              : <p className="muted small">Gets the next {t.keyPrefix} number when created. Starts in {first?.name}. Adds {plural(t.items.length, "starter item")}{kept.length ? ` and ${plural(kept.length, "measure")}` : ""}.</p>}
           </div>
         )}
         {error && <p className="notice" role="alert">{error}</p>}
         {/* Back, then Next or Create */}
         <div className="actions">
-          {step > 0 && <button type="button" className="btn btn-ghost" onClick={() => slide("back", () => setStep(step - 1))}>Back</button>}
-          <button className="btn btn-primary" type="submit" disabled={!ready[step] || busy}>{step < STEPS.length - 1 ? "Next" : busy ? "Creating…" : unsure ? "Check again" : "Create project"}</button>
+          {prevStep !== undefined && <button type="button" className="btn btn-ghost" onClick={() => slide("back", () => setStep(prevStep))}>Back</button>}
+          <button className="btn btn-primary" type="submit" disabled={!ready[step] || busy}>{nextStep !== undefined ? "Next" : busy ? "Creating…" : unsure ? "Check again" : "Create project"}</button>
         </div>
       </form>
     </>

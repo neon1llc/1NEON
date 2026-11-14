@@ -401,8 +401,8 @@ export const STORY: Section[] = [
       await s.say("What he learned on the call is written into the project, where she can correct it");
       await s.think("He wrote down what I told him: the Instagram orders, Dee's 4am count, the shared password.");
       await s.hover({ sel: ".item", text: "What goes wrong today?" }, 1100);
-      await s.think("And what can't be done. Instagram messages can't be read automatically. Good to know now, not later.");
-      await s.hover({ sel: ".item", text: "Instagram messages can't be read automatically" }, 1100);
+      await s.think("And what we won't do yet. Instagram messages stay manual. Good to know now, not later.");
+      await s.hover({ sel: ".item", text: "Instagram messages stay manual for now" }, 1100);
     },
   },
   {
@@ -491,7 +491,7 @@ export const STORY: Section[] = [
       await walkTo(s, `${base}/projects/${KEY}/execute`);
       await s.top();
       await s.say("Next step tells her it's ready, how much, and when it's due");
-      await s.think(`${MONEY.deposit}, due in two weeks. That's the deposit I read about before I approved.`);
+      await s.think(`${MONEY.deposit}, due in 15 days. That's the deposit I read about before I approved.`);
       await s.hover(".next-step", 1100);
       await s.click({ sel: ".next-step a", text: "See and pay" }, 1000);
       await s.say("Every invoice lives under Execute, with what's paid and what's left");
@@ -503,7 +503,7 @@ export const STORY: Section[] = [
       await s.scroll(500, 1400);
       await s.think("Bank transfer is preferred. I'll do that.");
       await s.top();
-      await s.say("Pay opens Stripe's secure page; 1NEON never sees her bank or card details");
+      await s.say("Pay opens Stripe's hosted payment page; 1NEON never sees her bank or card details");
       await s.click({ sel: ".pp-tools button", text: /^Pay / }, 1200);
       await s.say("No money moves in a walkthrough, so a stand-in page opens. She pays from the bakery's bank account");
       await s.click({ sel: "dialog[open] button", text: "Pay from a bank account" }, 1200);

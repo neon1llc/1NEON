@@ -4,7 +4,9 @@
 
 import { describe, expect, it } from "vitest";
 import { AGREEMENT_TEXT } from "./agreement.ts";
-import { alignPrice, balanceOf, canonical, clearingOn, failedOn, payableOn, depositLines, finalLines, hoursStanding, initialsOf, invoiceNumber, invoiceState, invoiceTotal, money, parseMoney, paymentPlan, priceLine, priceMeaning, priceOf, reimbursementLines, sha256Hex } from "./billing.ts";
+import { alignPrice, balanceOf, canonical, clearingOn, failedOn, payableOn, depositLines, finalLines, hoursStanding, initialsOf, invoiceNumber, invoiceState, invoiceTotal, money, parseMoney, paymentPlan, priceLine, priceMeaning, priceOf, quoteFields, reimbursementLines, sha256Hex } from "./billing.ts";
+import { QuoteInput } from "./api.ts";
+import { templateById } from "./defaults.ts";
 
 
 // A stored record of a kind, with fields
@@ -172,5 +174,39 @@ describe("signing", () => {
 
   it("takes initials from a typed name", () => {
     expect(initialsOf("Raj  Patel")).toBe("RP");
+  });
+});
+
+
+// A quick fix: one quote with nothing up front, shaped from the same price fields as any option
+describe("quick fix quotes", () => {
+  it("starts from a template with one draft quote at 2 to 5 hours and one handover step", () => {
+    const t = templateById("quick_fix");
+    expect(t.keyPrefix).toBe("FIX");
+    expect(t.items.map((i) => [i.kind, i.status ?? "open"])).toEqual([["option", "draft"], ["handoff", "open"]]);
+    expect(t.items[0]!.fields).toMatchObject({ pricing: "estimate", hoursLow: 2, hoursHigh: 5, depositPercent: 0 });
+  });
+
+  it("writes an hourly quote's words from its numbers, and asks for nothing up front", () => {
+    const f = quoteFields({ pricing: "estimate", rateCents: 15_000, hoursLow: 2, hoursHigh: 5 });
+    expect(f).toMatchObject({ cost: "$300 to $750 estimate", hours: "2 to 5 hours", depositPercent: 0, recommended: true });
+    const p = priceOf(f)!;
+    expect(depositLines({ id: "d", title: "x", fields: { terms: f } })).toEqual([]);
+    expect(paymentPlan(p)).toEqual(["Nothing up front; the hours worked when you accept the handover"]);
+  });
+
+  it("drops hours and rate from a fixed quote, and keeps the option's other fields", () => {
+    const f = quoteFields({ pricing: "fixed", priceCents: 45_000 }, { rateCents: 15_000, hoursLow: 2, hoursHigh: 5, result: "Prints again", purchases: [{ name: "Cable" }] });
+    expect(f).toMatchObject({ cost: "$450 fixed", hours: "", result: "Prints again", purchases: [{ name: "Cable" }] });
+    expect(f.rateCents).toBeUndefined();
+    expect(priceOf(f)).toEqual({ kind: "fixed", totalCents: 45_000, depositPercent: 0 });
+  });
+
+  it("refuses a quote with no price, a range backwards, or more hours than a quick fix", () => {
+    expect(QuoteInput.safeParse({ pricing: "fixed" }).success).toBe(false);
+    expect(QuoteInput.safeParse({ pricing: "estimate", hoursHigh: 5 }).success).toBe(false);
+    expect(QuoteInput.safeParse({ pricing: "estimate", rateCents: 100, hoursLow: 6, hoursHigh: 5 }).success).toBe(false);
+    expect(QuoteInput.safeParse({ pricing: "estimate", rateCents: 100, hoursHigh: 25 }).success).toBe(false);
+    expect(QuoteInput.safeParse({ pricing: "estimate", rateCents: 100, hoursHigh: 5 }).success).toBe(true);
   });
 });

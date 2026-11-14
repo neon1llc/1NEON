@@ -49,7 +49,7 @@ export const BETTER = "Nobody retypes an order, Dee's bake sheet is waiting for 
 
 /** Limits found before any option was written, so each option is honest about them */
 export const CONSTRAINTS: [string, string][] = [
-  ["Instagram messages can't be read automatically", "Instagram doesn't give outside tools dependable access to a business's messages. An instant reply sends the order form's link, and staff enter the rest in a short staff form."],
+  ["Instagram messages stay manual for now", "Instagram does offer official messaging access for business accounts, but setting it up (a Meta developer app, its permissions, and upkeep as Meta's rules change) costs more than it saves for about six orders a night. An instant reply sends the order form's link, and staff enter the rest in a short staff form. It can be added later if Instagram orders grow."],
   ["Voicemail orders depend on the phone service emailing transcripts", "Most services do. If the bakery's doesn't, a free Google Voice number can take the after-hours calls."],
   ["Ready before the holiday rush", "The week side by side with the old way has to finish before the rush starts."],
 ];
@@ -121,7 +121,7 @@ export const OPTIONS: BakeryOption[] = [
       "Every order in one list by 7pm, however it arrived, and the kitchen's bake sheet made from that list. Nobody retypes an order; a person checks each one that a customer didn't type in themselves.",
       "Includes:\n- Everything in A\n- Order emails and voicemail transcripts read into the same list as they arrive. Each is marked to check, with a link to the original, so a person confirms it in seconds and nothing is trusted blindly\n- A 20-second staff form for phone calls and Instagram messages, and a flag when the same order seems to have arrived twice\n- A 7pm email to you and Sam with tomorrow's pickups and anything still to check, and a bake sheet for Dee with tomorrow's totals by item, ready before 4am\n- Pickup tags printed from the list\n- A safety net: a nightly copy of the list, an alert to you if no orders arrive during opening hours, and each person signing in as themselves in place of the shared password\n- A dry run on a past week of your real orders before anything goes live, then a week side by side with the old way\n- A runbook, a recorded walkthrough for new staff, training for each person, and every account in the bakery's name\n- Two weeks of go-live support for fixes and questions",
       "Not included:\n- Taking payment online\n- Changes to your phone service or your website's design",
-      "Depends on:\n- Your phone service emailing voicemail transcripts. Most do, and if yours doesn't, a free Google Voice number can\n- Instagram messages can't be read automatically. An instant reply sends the order form's link, and staff use the staff form for the rest",
+      "Depends on:\n- Your phone service emailing voicemail transcripts. Most do, and if yours doesn't, a free Google Voice number can\n- Instagram messages staying manual for now. Automating them would mean a Meta developer app, its permissions, and upkeep, which costs more than it saves for about six orders a night. An instant reply sends the order form's link, and staff use the staff form for the rest",
     ].join("\n\n"),
     fields: {
       ...estimate(22, 28, SOLID),

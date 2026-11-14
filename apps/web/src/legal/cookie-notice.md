@@ -38,6 +38,7 @@ The portal also saves, on your device only:
 | `neon1.rain` (local storage) | The same rain settings as the website, on the sign-in screen | Until you clear it |
 | `1neon.projects.view`, `1neon.projects.view.sort` (local storage) | Whether you last looked at projects as a list or a timeline, and how you sorted them | Until you clear it |
 | `1neon.tour-offered` (session storage) | That the welcome tour was already offered, so it isn't offered again in this tab | Until the tab closes |
+| `1neon-export` (the browser's private file storage) | Admins only: the zip from **Download everything** while it's built, so a large export doesn't fill memory. Never sent anywhere; your browser copies it to your downloads | 30 minutes after it's saved; if you close the tab sooner, the next time you open Settings or start an export |
 
 Your other preferences, such as your theme, are saved with your account.
 

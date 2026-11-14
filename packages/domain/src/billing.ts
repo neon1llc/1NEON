@@ -254,6 +254,23 @@ export function alignPrice<T extends PriceTerms & { hours?: string }>(f: T): T {
   return p?.kind === "estimate" ? { ...f, cost: priceLine(p), hours: hoursRange(p) } : f;
 }
 
+/**
+ * A quick fix's quote as an option's fields: the price in numbers and in words, nothing up front, and
+ * recommended (it's the only one). A fixed price drops any hours and rate; an estimate gets its words
+ * from its numbers (alignPrice), so the quote reads the same on every screen. `was` keeps the option's
+ * other fields (its scores, a result to check) as they were
+ */
+export function quoteFields(q: { pricing: "fixed" | "estimate"; priceCents?: number; rateCents?: number; hoursLow?: number; hoursHigh?: number; timeline?: string }, was: Record<string, unknown> = {}): Record<string, unknown> {
+  const base = { ...was, pricing: q.pricing, depositPercent: 0, recommended: true, timeline: q.timeline ?? "" };
+  if (q.pricing === "fixed") {
+    const { rateCents: _r, hoursLow: _l, hoursHigh: _h, basis: _b, ...rest } = base as Record<string, unknown>;
+    void _r; void _l; void _h; void _b;
+    return { ...rest, cost: q.priceCents ? priceLine({ kind: "fixed", totalCents: q.priceCents, depositPercent: 0 }) : "", hours: "" };
+  }
+  const high = q.hoursHigh ?? 0;
+  return alignPrice({ ...base, rateCents: q.rateCents, hoursLow: Math.min(q.hoursLow ?? high, high), hoursHigh: high, cost: "", hours: "" });
+}
+
 /** What the kind of price means for the person paying, in a sentence or two */
 export function priceMeaning(p: Price): string {
   if (p.kind === "fixed") return "A fixed price. It changes only if you approve a change to the work.";

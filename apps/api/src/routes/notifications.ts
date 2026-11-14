@@ -2,7 +2,7 @@
 // marking them seen. Sending notices is the outbox's job (lib/transactions.ts, outbox.ts).
 
 
-import { actorHears, groupOf, isOwnOrg, KIND_LAYER, neon1Only, type AuditEvent, type ItemKind, type Layer, type Project } from "@1neon/domain";
+import { actorHears, groupOf, isOwnOrg, isQuickFix, KIND_LAYER, neon1Only, noticeSummary, type AuditEvent, type ItemKind, type Layer, type Project } from "@1neon/domain";
 import { actorId, need, now, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
 
@@ -59,9 +59,15 @@ export function notificationRoutes(app: App, k: Kit) {
     const own = isOwnOrg(t.slug);
     const mine = events.filter((e) => (e.actorId !== me || actorHears(e.action, own)) && (op || !neon1Only(e.action))).slice(0, 40);
     const links = await linksFor(t.id, mine);
+    // A quick fix's client reads a quote, so notices about its proposal revisions say "Quote" (the
+    // stored record keeps its number as issued). Projects are read only when such a notice is listed
+    const quickKeys = mine.some((e) => e.action.startsWith("proposal."))
+      ? new Set((await repo.listProjects(t.id)).filter(isQuickFix).map((p) => p.key))
+      : new Set<string>();
     const list = mine.map((e, i) => {
       const g = groupOf(e.action);
-      return { ...e, group: g.id, level: g.level, unread: e.at > seenAt && g.level !== "info", link: links[i] };
+      const key = /^([A-Z][A-Z0-9]*-\d+):/.exec(e.summary)?.[1] ?? "";
+      return { ...e, summary: noticeSummary(e.summary, quickKeys.has(key)), group: g.id, level: g.level, unread: e.at > seenAt && g.level !== "info", link: links[i] };
     });
     return c.json({ seenAt, unread: list.filter((e) => e.unread).length, events: list });
   });

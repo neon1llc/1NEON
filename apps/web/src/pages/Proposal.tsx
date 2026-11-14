@@ -5,7 +5,7 @@
 // draft (?draft=1) built from the project's records the same way Issue freezes them.
 
 
-import { buildSnapshot, currentDecision, DecisionFields, hoursRange, hoursText, paymentPlan, priceCheckDue, priceMeaning, priceOf, proposalRef, revisions, todayIn, type Item, type ProposalFields, type ProposalSnapshot } from "@1neon/domain";
+import { isQuickFix, buildSnapshot, currentDecision, DecisionFields, hoursRange, hoursText, paymentPlan, priceCheckDue, priceMeaning, priceOf, proposalRef, revisions, todayIn, type Item, type ProposalFields, type ProposalSnapshot } from "@1neon/domain";
 import { FileText, Printer } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
@@ -60,7 +60,9 @@ export function ProposalPage() {
   const detail = useProject(org.id, pid);
   const members = useMembers(org.id);
   const base = `/o/${summary.slug}/projects/${key}`;
-  useTopBar(<span><Link to={`/o/${summary.slug}/projects`}>Projects</Link> / <Link to={base}>{key}</Link> / Proposal</span>, [key, summary.slug]);
+  // A quick fix's one revision is its quote: the same frozen document, named for what it is
+  const quick = isQuickFix(projects.data?.find((p) => p.key === key));
+  useTopBar(<span><Link to={`/o/${summary.slug}/projects`}>Projects</Link> / <Link to={base}>{key}</Link> / {quick ? "Quote" : "Proposal"}</span>, [key, summary.slug, quick]);
   const out = { to: base, label: "Back to the project" };
   const waitList = gate([projects], { out });
   if (waitList) return waitList;
@@ -87,7 +89,7 @@ export function ProposalPage() {
   // Decisions made on the revision shown, newest last; the one in force is marked
   const inForce = currentDecision(items).decision?.id;
   const decided = shown ? items.filter((i) => i.kind === "decision" && i.fields.proposalId === shown.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt)) : [];
-  return <Proposal snapshot={snapshot} rev={shown?.p} latestRev={revs.at(-1)?.p.rev} decided={decided} inForce={inForce} timeZone={org.timeZone} slug={summary.slug} base={base} />;
+  return <Proposal snapshot={snapshot} rev={shown?.p} latestRev={revs.at(-1)?.p.rev} decided={decided} inForce={inForce} timeZone={org.timeZone} slug={summary.slug} base={base} quick={quick} />;
 }
 
 
@@ -101,10 +103,12 @@ function acceptanceOf(d: Item): Acceptance | undefined {
 
 
 /** The document itself, from a frozen snapshot (or the draft's); it reads top to bottom like the page */
-function Proposal({ snapshot: s, rev, latestRev, decided, inForce, timeZone, slug, base }: { snapshot: ProposalSnapshot; rev?: ProposalFields; latestRev?: number; decided: Item[]; inForce?: string; timeZone?: string; slug: string; base: string }) {
+function Proposal({ snapshot: s, rev, latestRev, decided, inForce, timeZone, slug, base, quick = false }: { snapshot: ProposalSnapshot; rev?: ProposalFields; latestRev?: number; decided: Item[]; inForce?: string; timeZone?: string; slug: string; base: string; quick?: boolean }) {
   const toast = useToast();
   const ref = rev ? proposalRef(rev.number, rev.rev) : undefined;
-  const title = ref ? `Proposal ${ref}` : "Proposal draft";
+  // A quick fix says "Quote" wherever a project says "Proposal"
+  const word = quick ? "Quote" : "Proposal";
+  const title = ref ? `${word} ${ref}` : `${word} draft`;
   // The browser tab and a saved PDF are named for the proposal
   useEffect(() => {
     const was = document.title;
@@ -113,7 +117,7 @@ function Proposal({ snapshot: s, rev, latestRev, decided, inForce, timeZone, slu
   }, [title, s.orgName]);
   // On paper, the ID (and the Demo's fictional label) prints in every page's bottom margin, with the
   // page number. A constructed sheet, since the portal's policy allows no inline style elements
-  const foot = `${ref ? `Proposal ${ref}` : "Proposal draft, not issued"}${DEMO ? " · Fictional sample, not an offer" : ""}`;
+  const foot = `${ref ? `${word} ${ref}` : `${word} draft, not issued`}${DEMO ? " · Fictional sample, not an offer" : ""}`;
   useEffect(() => {
     if (typeof CSSStyleSheet === "undefined" || !("adoptedStyleSheets" in document)) return;
     const sheet = new CSSStyleSheet();
@@ -141,9 +145,10 @@ function Proposal({ snapshot: s, rev, latestRev, decided, inForce, timeZone, slu
     <>
       {/* Only on screen: the way back, print or save, and Word */}
       <div className="pp-tools">
-        <Link className="btn btn-ghost btn-sm" to={`${base}/needs#options`}>Back to options</Link>
+        <Link className="btn btn-ghost btn-sm" to={`${base}/needs#options`}>{quick ? "Back to the quote" : "Back to options"}</Link>
         <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {rev && <button type="button" className="btn btn-ghost btn-sm" onClick={() => void docx()}><FileText size={15} aria-hidden="true" /> Download Word</button>}
+          {/* A quick fix has no Word copy: the quote is read here, or printed */}
+          {rev && !quick && <button type="button" className="btn btn-ghost btn-sm" onClick={() => void docx()}><FileText size={15} aria-hidden="true" /> Download Word</button>}
           <button type="button" className="btn btn-primary btn-sm" onClick={() => window.print()}><Printer size={15} aria-hidden="true" /> Print or save as PDF</button>
         </span>
       </div>
@@ -171,7 +176,7 @@ function Proposal({ snapshot: s, rev, latestRev, decided, inForce, timeZone, slu
         <div className="pp-title">
           <b>{s.orgName}</b>
           <h1 id="pp-h1">{s.project.name}</h1>
-          <span>Business Modernization Design (Proposal)</span>
+          <span>{quick ? "Quick fix (Quote)" : "Business Modernization Design (Proposal)"}</span>
           <span>{rev ? `Issued ${longDate(rev.issuedAt)}` : "Draft, not issued"}</span>
           <span>ID: {ref ?? "assigned when issued"}</span>
         </div>
