@@ -82,8 +82,9 @@ export function Example() {
         <div className="crumb"><a href="/1NEON/">1NEON</a> / Sample project</div>
         <span className="top-acts">
           <a className="btn btn-ghost btn-sm" href="/">neon1.tech</a>
-          <a className="btn btn-ghost btn-sm" href="/1NEON/live">Guided walkthrough</a>
-          <a className="btn btn-primary btn-sm" href="/1NEON/demo/">Interactive demo</a>
+          {/* Short in the bar so it holds one line on a phone; the end card says the length */}
+          <a className="btn btn-primary btn-sm" href="/1NEON/live">Watch it</a>
+          <a className="btn btn-ghost btn-sm" href="/1NEON/demo/">Interactive demo</a>
         </span>
       </header>
       <main className="content example-body" id="main">
@@ -114,14 +115,14 @@ export function Example() {
             </div>
           </section>
         ))}
-        {/* The end: try the real thing, or talk about a real project */}
+        {/* The end: one primary way on (watch it), the demo as quiet text beneath, then a real project */}
         <section className="example-end card">
           <p>That's the whole loop. A real project follows the same steps, with its own need and numbers.</p>
           <div className="actions">
-            <a className="btn btn-primary" href="/1NEON/demo/">Interactive demo</a>
-            <a className="btn btn-ghost" href="/1NEON/live">Guided walkthrough</a>
+            <a className="btn btn-primary" href="/1NEON/live">Watch it (about 3 minutes)</a>
             <a className="btn btn-ghost" href="https://calendly.com/1isgladtobeofservice/neon1-consultation" target="_blank" rel="noopener">Book a free call</a>
           </div>
+          <p className="small muted">Would rather click around yourself? <a href="/1NEON/demo/">Try the interactive demo</a>.</p>
         </section>
       </main>
     </div>

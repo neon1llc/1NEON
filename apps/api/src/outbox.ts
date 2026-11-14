@@ -9,7 +9,7 @@
 // "Accepted" means the provider took the message; it is not proof that it was delivered.
 
 
-import { actorHears, groupOf, isOwnOrg, neon1Only, wants, type AuditEvent, type Member, type User } from "@1neon/domain";
+import { actorHears, groupOf, isOwnOrg, isQuickFix, neon1Only, noticeSummary, wants, type AuditEvent, type Member, type User } from "@1neon/domain";
 import type { Config } from "./config.ts";
 import { inviteEmail, noticeEmail } from "./emails.ts";
 import type { Mailer, Texter } from "./services.ts";
@@ -261,6 +261,9 @@ async function eventTargets(d: OutboxDeps, e: AuditEvent, clock: Clock): Promise
   const home = `${cfg.publicUrl}/1NEON/o/${tenant?.slug ?? ""}`;
   const key = /^([A-Z][A-Z0-9]*-\d+): /.exec(e.summary)?.[1];
   const invoiceUrl = key && (e.action.startsWith("invoice.") || e.action.startsWith("payment.")) ? `${home}/projects/${key}/invoices/${e.target}` : undefined;
+  // A quick fix's notices about its proposal revisions say "Quote"; the stored summary is unchanged
+  const quick = key && e.action.startsWith("proposal.") ? (await io(repo.listProjects(e.tenantId))).some((p) => p.key === key && isQuickFix(p)) : false;
+  const summary = noticeSummary(e.summary, quick);
   const targets: Target[] = [];
   // The one who acted hears only of what they signed (a copy for their records), or, in neon1's own
   // organization, the billing a client would hear of
@@ -272,7 +275,7 @@ async function eventTargets(d: OutboxDeps, e: AuditEvent, clock: Clock): Promise
     // neon1's working drafts reach neon1 only
     if (neon1Only(e.action) && !cfg.operatorEmails.includes(u.email)) continue;
     if (wants(u.notify, e.action, "email")) {
-      const mail = noticeEmail({ orgName: tenant?.name ?? "1NEON", by: m.userId === e.actorId ? "You" : by, summary: e.summary, url: invoiceUrl ?? `${home}/workspace`, button: invoiceUrl ? "See the invoice" : undefined, important: groupOf(e.action).level === "critical" });
+      const mail = noticeEmail({ orgName: tenant?.name ?? "1NEON", by: m.userId === e.actorId ? "You" : by, summary, url: invoiceUrl ?? `${home}/workspace`, button: invoiceUrl ? "See the invoice" : undefined, important: groupOf(e.action).level === "critical" });
       targets.push({ key: u.id, channel: "email", send: (signal) => d.mailer.send(u.email, mail.subject, mail.text, mail.html, undefined, signal) });
     }
     // Texts only to a verified number the person still has, within the budgets, with no project detail

@@ -1380,7 +1380,7 @@ body:has(.n1neo) .n1chat-portal { display: none !important; }
 .invoice-row .warn-text { color: var(--red); }
 
 /* The agreement note reads as one sentence with its link; the way back sits beside the confirmation */
-.notice.agreement-needed { display: block; }
+.notice.agreement-needed, .notice.agreement-inline { display: block; }
 .notice .agreement-back { flex: none; }
 
 

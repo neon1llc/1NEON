@@ -21,6 +21,24 @@ const FILE_PROBLEM: Record<FileProblem, string> = {
 };
 
 
+/**
+ * The one way to a file's bytes: a signed link, only once the file is ready and its malware scan is
+ * clean. Anything else gets a check now, then a plain refusal (410 for good, 409 for "not yet"). The
+ * normal download and the admin's Trash export both come through here, so neither can skip the scan
+ */
+export async function downloadLink(k: Pick<Kit, "d" | "repo">, x: DocumentRecord, view = false) {
+  const { d, repo } = k;
+  const cur = await settleFile({ repo, storage: d.storage }, x);
+  const state = fileState(cur);
+  if (state === "rejected") fail(410, "infected", "This file was flagged by the malware scan and can't be downloaded.");
+  if (state === "failed") fail(410, "file_failed", FILE_PROBLEM[cur.problem ?? "missing"]);
+  if (state !== "ready" || cur.scan !== "clean") fail(409, "scanning", "This file is still being checked. Try again in a minute.");
+  // `view` opens a viewable file in the browser; other types (and every plain request) download
+  const inline = view && VIEWABLE.has(cur.contentType) ? cur.contentType : undefined;
+  return { url: await d.storage.getUrl(cur.key, cur.name, inline), inline: Boolean(inline) };
+}
+
+
 /** Local dev only, registered ahead of the CSRF check: the in-memory store's upload and download links */
 export function devFileRoutes(app: App, k: Kit) {
   const { d, cfg } = k;
@@ -105,16 +123,7 @@ export function docRoutes(app: App, k: Kit) {
   // A download link, once the malware scan has passed
   app.get("/t/:tid/docs/:did/download", async (c) => {
     need(c, "read");
-    const x = await doc(c);
-    // Only a ready file downloads; anything else gets a check now, then a plain reason
-    const cur = await settleFile({ repo, storage: d.storage }, x);
-    const state = fileState(cur);
-    if (state === "rejected") fail(410, "infected", "This file was flagged by the malware scan and can't be downloaded.");
-    if (state === "failed") fail(410, "file_failed", FILE_PROBLEM[cur.problem ?? "missing"]);
-    if (state !== "ready" || cur.scan !== "clean") fail(409, "scanning", "This file is still being checked. Try again in a minute.");
-    // ?view=1 opens a viewable file in the browser; other types (and every plain request) download
-    const view = c.req.query("view") === "1" && VIEWABLE.has(cur.contentType) ? cur.contentType : undefined;
-    return c.json({ url: await d.storage.getUrl(cur.key, cur.name, view), inline: Boolean(view) });
+    return c.json(await downloadLink(k, await doc(c), c.req.query("view") === "1"));
   });
 
   // Remove a file: the person who uploaded it, or an admin

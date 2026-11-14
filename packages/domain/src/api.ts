@@ -4,7 +4,8 @@
 import { NotifyPrefs } from "./notify.ts";
 import { InvoiceLine, InvoiceType, PaymentMethod, SignInput } from "./billing.ts";
 import { z } from "zod";
-import { AccessLevel, CalEventKind, CalRepeat, Health, ItemKind, Layer, ProjectRole, Theme, Tour, email, id } from "./model.ts";
+import { AccessLevel, CalEventKind, CalRepeat, Health, ItemKind, Layer, Pricing, ProjectRole, Theme, Tour, email, id } from "./model.ts";
+import { QUICK_FIX_MAX_HOURS } from "./defaults.ts";
 
 
 // Organizations (operator only)
@@ -118,6 +119,32 @@ export const ApproveInput = z.object({ version: z.number().int(), conditions: z.
 
 // neon1 issues the next revision of a project's proposal, saying what changed
 export const IssueInput = z.object({ note: z.string().trim().max(1000).default("") });
+
+// A quick fix's quote, written and issued in one step by neon1: what the fix is, and its price, either
+// fixed or hours at a rate (never billed past the high end). Nothing is asked up front. The option it
+// writes is the project's one open option unless `optionId` names another; `version` guards an edit
+export const QuoteInput = z
+  .object({
+    optionId: id.optional(),
+    version: z.number().int().optional(),
+    title: z.string().trim().min(1).max(160).default("The fix"),
+    body: z.string().max(8000).default(""),
+    pricing: Pricing,
+    priceCents: z.number().int().positive().max(1_000_000_00).optional(),
+    rateCents: z.number().int().positive().max(10_000_00).optional(),
+    hoursLow: z.number().positive().max(QUICK_FIX_MAX_HOURS).optional(),
+    hoursHigh: z.number().positive().max(QUICK_FIX_MAX_HOURS).optional(),
+    timeline: z.string().trim().max(80).default(""),
+    note: z.string().trim().max(1000).default(""),
+  })
+  .superRefine((q, ctx) => {
+    // A fixed price needs its amount; an estimate needs a rate and its high end, with the low end under it
+    if (q.pricing === "fixed" && !q.priceCents) ctx.addIssue({ code: "custom", path: ["priceCents"], message: "Give the fixed price." });
+    if (q.pricing === "estimate" && !q.rateCents) ctx.addIssue({ code: "custom", path: ["rateCents"], message: "Give the hourly rate." });
+    if (q.pricing === "estimate" && !q.hoursHigh) ctx.addIssue({ code: "custom", path: ["hoursHigh"], message: "Give the most hours it can take." });
+    if (q.pricing === "estimate" && q.hoursLow && q.hoursHigh && q.hoursLow > q.hoursHigh) ctx.addIssue({ code: "custom", path: ["hoursLow"], message: "The fewest hours can't be more than the most." });
+  });
+export type QuoteInput = z.infer<typeof QuoteInput>;
 
 // A decision maker agrees, by initials, that neon1 buys one item to be paid back at cost
 export const AgreeInput = z.object({ version: z.number().int(), initials: z.string().trim().min(1).max(8) });

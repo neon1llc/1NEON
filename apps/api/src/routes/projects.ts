@@ -2,7 +2,7 @@
 // its starter items, read, edit (including who decides), move between stages, and trash.
 
 
-import { CreateProjectInput, assessed, Item, MoveProjectInput, UpdateProjectInput, newId, rankBetween, templateById, type Project, changeRecord, projectChanges } from "@1neon/domain";
+import { CreateProjectInput, assessed, isQuickFix, Item, MoveProjectInput, UpdateProjectInput, newId, rankBetween, templateById, type Project, changeRecord, projectChanges } from "@1neon/domain";
 import { z } from "zod";
 import { MAX_TRANSACTION, actorId, body, byRank, defined, fail, need, now, who } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
@@ -71,10 +71,12 @@ export function projectRoutes(app: App, k: Kit) {
       if (it.status === "done") it.completedAt = ts;
       items.push(it);
     };
-    // The real example: answered in the wizard, or asked as the first discovery question
+    // The real example: answered in the wizard, or asked as the first discovery question. A quick fix
+    // starts with only its quote and its one handover step, so it isn't asked there
     if (input.example) push({ kind: "discovery", title: "One real example of how it works today", body: input.example, status: "done" });
-    else if (input.template !== "blank") push({ kind: "discovery", title: "One real example of how it works today" });
-    for (const ti of tpl.items) push({ kind: ti.kind, title: ti.title, body: ti.body ?? "", fields: ti.fields ?? {} });
+    else if (input.template !== "blank" && !isQuickFix(project)) push({ kind: "discovery", title: "One real example of how it works today" });
+    // The template's items, each in its own starting status when it names one (a quote starts as a draft)
+    for (const ti of tpl.items) push({ kind: ti.kind, title: ti.title, body: ti.body ?? "", fields: ti.fields ?? {}, ...(ti.status ? { status: ti.status } : {}) });
     for (const m of input.metrics) push({ kind: "metric", title: m.title, fields: { unit: m.unit, baseline: m.baseline, target: m.target, direction: m.baseline !== undefined && m.target !== undefined && m.target < m.baseline ? "down" : "up", baselineDate: m.baseline !== undefined ? ts.slice(0, 10) : undefined, readings: [] } });
     // A project, its starter items, its audit event, and its request key land in one transaction or
     // not at all. The largest template (14 items) plus an example and 10 measures is 25 items, far

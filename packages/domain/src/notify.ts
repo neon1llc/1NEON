@@ -48,6 +48,13 @@ export const actorHears = (action: string, ownOrg: boolean) => RECEIPTS.has(acti
 export const neon1Only = (action: string) => action === "invoice.drafted";
 
 
+/**
+ * The wording of a notice to a person (bell and email). The stored audit summary keeps "Proposal 0041-r1"
+ * so numbering and hashes never change; on a quick fix, whose client reads a quote, the notice says
+ * "Quote 0041-r1" instead. Only the proposal's reference is reworded, and only when `quick` is true
+ */
+export const noticeSummary = (summary: string, quick: boolean) => (quick ? summary.replace(/\bProposal (?=\d{4,}-r\d+)/g, "Quote ") : summary);
+
 /** The group an audit action belongs to; unknown actions count as updates */
 export function groupOf(action: string): NotifyGroup {
   return NOTIFY_GROUPS.find((g) => g.match(action)) ?? NOTIFY_GROUPS.find((g) => g.id === "updates")!;

@@ -21,6 +21,7 @@ import { authRoutes } from "./routes/auth.ts";
 import { commentRoutes } from "./routes/comments.ts";
 import { contactRoutes } from "./routes/contact.ts";
 import { devFileRoutes, docRoutes } from "./routes/docs.ts";
+import { exportRoutes } from "./routes/export.ts";
 import { factorRoutes } from "./routes/factors.ts";
 import { editRoutes, itemRoutes } from "./routes/items.ts";
 import { memberRoutes } from "./routes/members.ts";
@@ -167,6 +168,8 @@ export function createApp(d: Deps) {
   editRoutes(app, k);
   docRoutes(app, k);
   billingRoutes(app, k, pay);
+  // The admin's export reads Trash, which every other route treats as gone
+  exportRoutes(app, k);
 
   return app;
 }

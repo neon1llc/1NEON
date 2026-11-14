@@ -291,3 +291,16 @@ describe("proposal references", () => {
     expect(r.any).toBe(true);
   });
 });
+
+
+describe("noticeSummary", () => {
+  it("says Quote for a quick fix's proposal reference, and only there", async () => {
+    const { noticeSummary } = await import("./notify.ts");
+    expect(noticeSummary("FIX-1: issued Proposal 0041-r1", true)).toBe("FIX-1: issued Quote 0041-r1");
+    expect(noticeSummary("FIX-1: issued Proposal 0041-r1: prices rechecked", true)).toBe("FIX-1: issued Quote 0041-r1: prices rechecked");
+    expect(noticeSummary("FIX-1: Raj asked neon1 to refresh Proposal 0041-r2", true)).toBe("FIX-1: Raj asked neon1 to refresh Quote 0041-r2");
+    // Other projects, and wording that isn't a numbered reference, are untouched
+    expect(noticeSummary("FLOW-1: issued Proposal 0041-r1", false)).toBe("FLOW-1: issued Proposal 0041-r1");
+    expect(noticeSummary("FIX-1: Proposal sent to Raj", true)).toBe("FIX-1: Proposal sent to Raj");
+  });
+});

@@ -2,12 +2,12 @@
 // approving an option into an immutable decision, and the advisory edit markers.
 
 
-import { AGREEMENT_EDITION, AcceptInput, signedNameProblem, AgreeInput, ApproveInput, canonical, finalLines, lineage, refundCredit, priceOf, initialsOf, sha256Hex, signature, depositLines, InvoiceFields, CreateItemInput, IssueInput, changeRecord, itemChanges, assessed, completionAfter, priceCheckDue, proposalRef, resolveTiming, revisions, DecisionFields, Item, OptionFields, PRICE_CHECK_DAYS, PurchaseFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, todayIn, type Project } from "@1neon/domain";
+import { AGREEMENT_EDITION, AcceptInput, signedNameProblem, AgreeInput, ApproveInput, canonical, finalLines, lineage, refundCredit, priceOf, initialsOf, sha256Hex, signature, depositLines, InvoiceFields, CreateItemInput, IssueInput, QuoteInput, isQuickFix, quoteFields, changeRecord, itemChanges, assessed, completionAfter, priceCheckDue, proposalRef, resolveTiming, revisions, DecisionFields, Item, OptionFields, PRICE_CHECK_DAYS, PurchaseFields, UpdateItemInput, canApprove, isOwnOrg, newId, rankBetween, settableStatus, todayIn, type Project, type Tenant } from "@1neon/domain";
 import type { Context } from "hono";
 import { z } from "zod";
 import { actorId, body, byRank, check, defined, fail, label, need, now, validateFields, who, type Env } from "../lib/http.ts";
 import type { App, Kit } from "../lib/kit.ts";
-import { keys } from "../store/repo.ts";
+import { keys, type Repo } from "../store/repo.ts";
 import { issueProposal } from "../proposals.ts";
 
 
@@ -282,9 +282,12 @@ export function itemRoutes(app: App, k: Kit) {
     // counts toward it, so the draft asks only for the difference, or nothing
     const deposit = priceOf(of) ? draftInvoice(p, "deposit", depositLines(decision, undefined, [...kept, decision]), ts, by) : undefined;
     const was = current && (current.fields.code ? `${String(current.fields.code)} ` : "") + current.title.replace(/^Approved: /, "");
+    // A quick fix's card moves to Build with its approval (the board's own move, in the same write)
+    const build = followWork(repo, tenant, p, "build", "quote approved", ts, by);
     await repo.table.write([
       repo.itemOp(approved, { version: option.version }),
       repo.itemOp(decision, { create: true }),
+      ...(build?.ops ?? []),
       ...buys.map((b) => repo.itemOp(b, { create: true })),
       ...stale.map((i) => ({ delete: keys.item(p.tenantId, p.id, i.id), guard: { version: i.version } })),
       ...(deposit ? [repo.itemOp(deposit, { create: true })] : []),
@@ -311,6 +314,53 @@ export function itemRoutes(app: App, k: Kit) {
     if (r.error) fail(409, "no_options", "Share at least one option before issuing the proposal.");
     const issued = r.issued;
     return c.json(issued, 201);
+  });
+
+  /**
+   * Quote and issue a quick fix in one step: neon1 only, on a quick fix only. Writes the price onto the
+   * project's one open option (fixed, or hours at a rate capped at the high end; nothing up front),
+   * shares it, issues the proposal revision the client approves from, and moves the card to Decide when
+   * it's earlier, all in one transaction. Approval afterwards is the ordinary route with every check it
+   * has: the issued revision, the price check, the service agreement signed once, and a signature
+   */
+  app.post("/t/:tid/projects/:pid/quote", async (c) => {
+    need(c, "write");
+    if (!who(c).actor.operator) fail(403, "neon1_only", "Quotes are written by neon1.");
+    const p = await project(c);
+    if (!isQuickFix(p)) fail(409, "not_quick_fix", "This project has a full proposal. Add options and issue the proposal instead.");
+    const input = await body(c, QuoteInput);
+    const items = await repo.listItems(p.tenantId, p.id);
+    // Once the quote is approved, its terms are a decision's record; a change is a revised copy instead
+    if (currentDecision(items)) fail(409, "decided", "This quote is approved. To change its terms, use Revise terms on it, and the client approves the revised quote.");
+    const open = items.filter((i) => i.kind === "option" && (i.status === "draft" || i.status === "proposed")).sort(byRank);
+    const was = input.optionId ? open.find((i) => i.id === input.optionId) : open[0];
+    if (input.optionId && !was) fail(404, "not_found", "That quote no longer exists, or it was declined.");
+    if (was && input.version !== undefined && input.version !== was.version) fail(409, "conflict", "The quote changed since you opened it. Review it again.", was);
+    const ts = now();
+    const by = actorId(c);
+    // The quote's fields: the price in numbers and words, nothing up front, checked like any option's
+    const fields = validateFields("option", quoteFields(input, was?.fields ?? {}));
+    if (!priceOf(fields)) fail(400, "invalid", "Give the quote a price: a fixed amount, or an hourly rate with the most hours it can take.");
+    // The one open option, priced and shared; a quick fix whose option was removed gets a new one
+    const option: Item = was
+      ? { ...was, title: input.title, body: input.body, status: "proposed", fields, version: was.version + 1, updatedAt: ts, updatedBy: by }
+      : Item.parse({ tenantId: p.tenantId, projectId: p.id, id: newId("i"), kind: "option", title: input.title, body: input.body, status: "proposed", rank: rankBetween(items.filter((i) => i.kind === "option").sort(byRank).at(-1)?.rank ?? "", ""), fields, version: 1, createdAt: ts, updatedAt: ts, updatedBy: by });
+    // The card moves on to Decide with the quote, when the organization has that stage and it's ahead
+    const t = c.get("tenant");
+    const at = t.stages.findIndex((s) => s.id === p.stageId);
+    const decide = t.stages.findIndex((s) => s.id === "decide");
+    const moved: Project | undefined = decide >= 0 && !t.stages[decide]!.hidden && at >= 0 && at < decide ? { ...p, stageId: "decide", stageEnteredAt: ts, version: p.version + 1, updatedAt: ts, updatedBy: by } : undefined;
+    const u = who(c).user;
+    const r = await issueProposal(repo, t, moved ?? p, { id: by, name: u.name }, input.note, new Date(ts), {
+      items: [option],
+      ops: [
+        repo.itemOp(option, was ? { version: was.version } : { create: true }),
+        repo.auditOp({ tenantId: p.tenantId, actorId: by, action: "option.quoted", target: option.id, summary: `${p.key}: quoted "${option.title}" at ${String(fields.cost)}, nothing up front` }, ts),
+        ...(moved ? [repo.projectOp(moved, { version: p.version }), repo.auditOp({ tenantId: p.tenantId, actorId: by, action: "project.moved", target: p.id, summary: `Moved ${p.key} to ${t.stages[decide]!.name} (quote issued)` }, ts)] : []),
+      ],
+    });
+    if (r.error) fail(409, "no_options", "Share at least one option before issuing the proposal.");
+    return c.json({ option, issued: r.issued, project: moved ?? p }, 201);
   });
 
   /** A decision maker asks neon1 to refresh a revision past its price check (recorded once per revision) */
@@ -360,7 +410,9 @@ export function itemRoutes(app: App, k: Kit) {
     const decision = currentDecision(items);
     const hasFinal = items.some((i) => i.kind === "invoice" && i.status !== "void" && i.fields.type === "final");
     const final = steps.every((i) => i.status === "done") && decision && !hasFinal ? closingDraft(p, decision, items, ts, by) : undefined;
-    await repo.table.write([repo.itemOp(next, { version: it.version }), ...(final ? [repo.itemOp(final, { create: true })] : []), repo.auditOp({ tenantId: p.tenantId, actorId: by, action: "handoff.accepted", target: it.id, summary: `${p.key}: ${u.name || u.email} accepted "${it.title}"${input.note ? `: ${input.note}` : ""}, signed by ${input.signature.typedName}` })]);
+    // A quick fix's card moves to Hand over once its step is accepted; closing stays manual, after payment
+    const handed = steps.every((i) => i.status === "done") ? followWork(repo, c.get("tenant"), p, "handover", "handover accepted", ts, by) : undefined;
+    await repo.table.write([repo.itemOp(next, { version: it.version }), ...(final ? [repo.itemOp(final, { create: true })] : []), ...(handed?.ops ?? []), repo.auditOp({ tenantId: p.tenantId, actorId: by, action: "handoff.accepted", target: it.id, summary: `${p.key}: ${u.name || u.email} accepted "${it.title}"${input.note ? `: ${input.note}` : ""}, signed by ${input.signature.typedName}` })]);
     await keep(`t/${p.tenantId}/p/${p.id}/acceptances/${it.id}-v${next.version}.json`, next);
     return c.json(next);
   });
@@ -394,9 +446,12 @@ export function itemRoutes(app: App, k: Kit) {
     const decision = currentDecision(items);
     const hasFinal = items.some((i) => i.kind === "invoice" && i.status !== "void" && i.fields.type === "final");
     const final = decision && !hasFinal ? closingDraft(p, decision, items, ts, by) : undefined;
+    // Every step is done here, so a quick fix's card moves to Hand over (closing stays manual)
+    const handed = followWork(repo, c.get("tenant"), p, "handover", "handover accepted", ts, by);
     await repo.table.write([
       ...accepted.map((next, n) => repo.itemOp(next, { version: waiting[n]!.version })),
       ...(final ? [repo.itemOp(final, { create: true })] : []),
+      ...(handed?.ops ?? []),
       repo.auditOp({ tenantId: p.tenantId, actorId: by, action: "handoff.accepted", target: accepted[0]!.id, summary: `${p.key}: ${name} accepted the handover (${accepted.length} ${accepted.length === 1 ? "step" : "steps"})${input.note ? `: ${input.note}` : ""}, signed by ${input.signature.typedName}` }),
     ]);
     for (const next of accepted) await keep(`t/${p.tenantId}/p/${p.id}/acceptances/${next.id}-v${next.version}.json`, next);
@@ -440,6 +495,22 @@ export function currentDecision<T extends Pick<Item, "kind" | "id" | "fields" | 
   const replaced = new Set(decisions.flatMap((d) => (d.fields.supersedes as string[] | undefined) ?? []));
   return decisions.filter((d) => !replaced.has(d.id)).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
 }
+
+/**
+ * A quick fix's card follows its work on the board: the same move as the board's own (the project
+ * moves, with a project.moved audit entry in the same write). The target stage must exist, be shown,
+ * and be ahead of the card, so a hidden stage is never entered and a card never moves backward.
+ * Returns the moved project and the ops to write, or nothing when the card stays where it is
+ */
+function followWork(repo: Pick<Repo, "projectOp" | "auditOp">, t: Pick<Tenant, "stages">, p: Project, toId: string, why: string, ts: string, by: string) {
+  if (!isQuickFix(p)) return undefined;
+  const at = t.stages.findIndex((s) => s.id === p.stageId);
+  const to = t.stages.findIndex((s) => s.id === toId);
+  if (to < 0 || at < 0 || to <= at || t.stages[to]!.hidden) return undefined;
+  const project: Project = { ...p, stageId: toId, stageEnteredAt: ts, version: p.version + 1, updatedAt: ts, updatedBy: by };
+  return { project, ops: [repo.projectOp(project, { version: p.version }), repo.auditOp({ tenantId: p.tenantId, actorId: by, action: "project.moved", target: p.id, summary: `Moved ${p.key} to ${t.stages[to]!.name} (${why})` }, ts)] };
+}
+
 
 /** A draft invoice for neon1 to check and issue; none when there is nothing to bill */
 /**

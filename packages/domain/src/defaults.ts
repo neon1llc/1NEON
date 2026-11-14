@@ -50,6 +50,8 @@ export interface TemplateItem {
   title: string;
   body?: string;
   fields?: Record<string, unknown>;
+  // The status it starts in, when the kind's usual one won't do (an option starts as a draft)
+  status?: string;
 }
 
 
@@ -75,6 +77,46 @@ const common: TemplateItem[] = [
   { kind: "handoff", title: "Older tools it replaces retired or merged, and leftovers cleaned up" },
   { kind: "handoff", title: "neon1 access reduced or removed" },
 ];
+
+
+// --- Quick fix ------------------------------------------------------------------------
+// A small job of a few hours on the same model as any project: one option shaped as a quote, nothing
+// up front, and one handover step. The client still signs the quote (a decision with its terms copied
+// in) and accepts the step, so the invoice, audit, and hashes work exactly as they do for a full project.
+// Only the words and the screens are lighter. No new kinds or fields: it's a template and a label
+
+
+/** The template ID that marks a project as a quick fix */
+export const QUICK_FIX = "quick_fix";
+
+/** Is this project a quick fix? (its template, set when it was made, never changes) */
+export const isQuickFix = (p: { template?: string } | undefined) => p?.template === QUICK_FIX;
+
+/** The usual range of hours a quick fix is quoted at, before neon1 changes it */
+export const QUICK_FIX_HOURS = { low: 2, high: 5 } as const;
+
+/** The most hours a quick fix may be quoted at; more than that is a project with its own proposal */
+export const QUICK_FIX_MAX_HOURS = 24;
+
+// The quick fix template, listed after the full-project ones in the gallery
+const quickFix: Template = {
+  id: QUICK_FIX,
+  name: "Quick fix",
+  keyPrefix: "FIX",
+  summary: "A small job of a few hours: one quote, one signature, one invoice when it's fixed.",
+  items: [
+    // The quote: an hourly estimate capped at its high end until neon1 sets the rate (or a fixed price)
+    // in Quote and issue. Nothing up front, so approving drafts no deposit
+    {
+      kind: "option",
+      title: "The fix",
+      status: "draft",
+      fields: { pricing: "estimate", hoursLow: QUICK_FIX_HOURS.low, hoursHigh: QUICK_FIX_HOURS.high, hours: `${QUICK_FIX_HOURS.low} to ${QUICK_FIX_HOURS.high} hours`, depositPercent: 0, recommended: true },
+    },
+    // Accepting this one step closes the work and drafts the final invoice
+    { kind: "handoff", title: "Fixed and shown working" },
+  ],
+};
 
 
 /** The template gallery shown in the New project wizard */
@@ -151,6 +193,7 @@ export const TEMPLATES: Template[] = [
       { kind: "handoff", title: "Written steps left behind" },
     ],
   },
+  quickFix,
 ];
 
 

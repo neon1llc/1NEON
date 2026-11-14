@@ -15,9 +15,14 @@
 - **Option history.** Each option shows when it was added, issued in each revision, approved and signed (with the signed name and reason), replaced, revised, invoiced, and paid.
 - **Pay from 1NEON.** The Pay button shows in neon1's own organization too, and neon1 can copy a client's pay link to send.
 - Copies of what you sign (approvals, changes, the agreement, handovers) reach you by email and in the bell; billing in neon1's own organization reaches neon1.
+- **Quick fix, for small jobs.** A project template for a fix of a few hours: neon1 sends one quote (a fixed price, or hours at a rate never billed past the most hours quoted) with **Quote and issue**, the client sees **Approve the quote** and signs once with nothing up front, then accepts one step, "Fixed and shown working", and neon1 prepares the one invoice. A first-time client signs the service agreement in the same dialog, as its own record. The card moves to Build on approval and to Hand over on acceptance, and notices say "Quote". Records, signatures, and invoices are kept like any project's.
+- **A complete export.** Download everything now also holds projects in Trash, every comment, and the activity history, plus manifest.json listing every file with its size and SHA-256 checksum. The zip's name ends in -complete or -partial, README.txt's first line says which, and Settings lists anything missing with the reason. In Chrome, Edge, and Firefox the zip is built on disk as it goes, so a large export doesn't fill memory; elsewhere, an export over 1.5 GB asks first.
 - Moving a project back to Decide or before once an option is approved asks for a reason, and Next step says when the board is behind what's been done ("An option is approved: move to Build").
 
 ### Changed
+- One way in for newcomers: the sign-in page offers "New here? See how it works", the guided walkthrough, and the sample project and demo are offered from it.
+- The bakery's proposal says Instagram messages stay manual for now because automating them costs more than it saves for about six orders a night, not that they can't be read.
+- Pay says it opens Stripe's hosted payment page.
 - Proposals, previews, invoices, and documents open in a new tab.
 - The export's decisions.csv says each decision's deposit share.
 - Money boxes show a $ sign, the deposit box a % sign; new invoice lines come filled in from the approved option and can be changed or added to, with a running total.
@@ -30,6 +35,8 @@
 - An option panel no longer runs under the browser's top bar, out of reach of its Close button.
 - **Check invoices** under Next step goes to the invoices again when pressed a second time.
 - A new deposit draft no longer replaces a typed amount with the 50% suggestion.
+- In the walkthrough, the deposit is due in 15 days, as on every invoice.
+- A one-step handover no longer says "all 1 steps".
 
 ## v0.10.0 - 2026-11-13
 

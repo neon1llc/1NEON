@@ -2,7 +2,8 @@
 // Execute, Observe, Normalize).
 
 
-import { balanceOf, billedOn, depositLines, hoursLogged, hoursText, lineage, lineCents, dollars as wholeDollars, failedOn, invoiceState, InvoiceFields, money as dollars, payableOn, paymentPlan, priceMeaning, priceOf, betterWhen, canApprove, changedSince, currentDecision, todayIn, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, priceCheckDue, ProjectRole, proposalRef, PurchaseFields, HandoffFields, optionHistory, revisions, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
+import { isQuickFix, QUICK_FIX_HOURS, QUICK_FIX_MAX_HOURS, quoteFields, priceLine, type QuoteInput, balanceOf, billedOn, depositLines, hoursLogged, hoursText, lineage, lineCents, dollars as wholeDollars, failedOn, invoiceState, InvoiceFields, money as dollars, payableOn, paymentPlan, priceMeaning, priceOf, betterWhen, canApprove, changedSince, currentDecision, todayIn, isClosed, isOwnOrg, KIND_LAYER, metricProgress, MetricFields, OptionFields, priceCheckDue, ProjectRole, proposalRef, PurchaseFields, HandoffFields, optionHistory, revisions, type DocumentRecord, type Item, type ItemKind, type Layer, type Project, type Stage } from "@1neon/domain";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ExternalLink, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { FileList, UploadButton } from "../components/Files.tsx";
@@ -14,7 +15,7 @@ import { gate, Stale } from "../components/Reads.tsx";
 import { Link, NavLink, useLocation, useNavigate, useParams } from "react-router";
 import { useOrg, useSession, useTopBar } from "../components/Shell.tsx";
 import { Avatar, ConflictDialog, Dialog, Empty, Health, HEALTH_LABEL, LayerBadge, LAYERS, layerHint, layerName, layerProgress, OnionProgress, Trend, ago, dateLabel, daysSince, inStageFor, layerFromSlug, layerSlug, useAsk, useToast } from "../components/ui.tsx";
-import { api, DEMO, HttpError, NEW_TAB } from "../lib/api.ts";
+import { api, BASE_PATH, DEMO, HttpError, NEW_TAB } from "../lib/api.ts";
 import { AgreementNeeded, Hours, Invoices, PriceBasis, SignBox, signReady, useAgreementSigned, type Priced, type SignValue } from "../components/Billing.tsx";
 import { firstYear, money, parseCost, type Recurring } from "../lib/cost.ts";
 import { handoverSummary } from "../lib/handover.ts";
@@ -59,6 +60,9 @@ const KINDS_IN = (layer: Layer) => (Object.keys(KIND_LAYER) as ItemKind[]).filte
 // Every work item is done or not done, with a checkbox, so each counted need can be finished. Options
 // finish by approval, measures by reaching their target, and decisions and updates are records
 const CHECKABLE = new Set<ItemKind>((Object.keys(KIND_LAYER) as ItemKind[]).filter((k) => !["option", "metric", "decision", "update", "purchase", "proposal", "constraint", "invoice", "payment", "time"].includes(k)));
+// On a quick fix, the groups shown even while empty: the quote, requests, tasks, purchases, and the
+// handover step. The rest appear once they hold something, so a two-hour job reads like one
+const QUICK_GROUPS = new Set<ItemKind>(["option", "request", "task", "purchase", "handoff"]);
 
 
 /** A project by key (FLOW-1): the key resolves to an ID through the project list */
@@ -105,6 +109,10 @@ export function ProjectPage() {
   // Item counts for each layer tab
   // A measure counts as done once its latest reading reaches the target
   const prog = layerProgress(items.map((i) => (i.kind === "metric" && (metricProgress(MetricFields.parse(i.fields)) ?? 0) >= 1 ? { ...i, status: "done" } : i)), (k) => KIND_LAYER[k as ItemKind]);
+  // A quick fix has nothing to measure unless someone adds it: its Observe tab shows only once it has
+  // an item or a file, so the client sees four sections that each hold something
+  const observeEmpty = !items.some((i) => KIND_LAYER[i.kind] === "observation") && !detail.data.docs.some((d) => d.layer === "observation");
+  const tabs = LAYERS.filter((l) => !(isQuickFix(p) && l === "observation" && observeEmpty));
   return (
     <>
       {/* Shown data that a refresh couldn't update is marked, so nobody acts on it unknowingly */}
@@ -127,8 +135,8 @@ export function ProjectPage() {
       {/* Overview, then one tab per layer with its item count; at is the open tab's position */}
       <nav className="tabs" aria-label="Project sections" data-tour="layers">
         <NavLink to={base} end viewTransition onClick={(e) => toTab(e, base, 0)} className={() => (tab === "overview" ? "active" : "")}>Overview</NavLink>
-        {LAYERS.map((l, i) => (
-          <NavLink key={l} to={`${base}/${layerSlug(l)}`} viewTransition onClick={(e) => toTab(e, `${base}/${layerSlug(l)}`, i + 1)}><LayerBadge layer={l} /><span className="tab-name">{layerName(l)}<small className="sub"><span className="sr">, </span>{layerHint(l)}</small></span> {prog[l][1] > 0 && <span className="muted" aria-label={`${prog[l][0]} of ${prog[l][1]} done`} title={`${prog[l][0]} of ${prog[l][1]} done`}>{prog[l][0]}/{prog[l][1]}</span>}</NavLink>
+        {tabs.map((l) => (
+          <NavLink key={l} to={`${base}/${layerSlug(l)}`} viewTransition onClick={(e) => toTab(e, `${base}/${layerSlug(l)}`, LAYERS.indexOf(l) + 1)}><LayerBadge layer={l} /><span className="tab-name">{layerName(l)}<small className="sub"><span className="sr">, </span>{layerHint(l)}</small></span> {prog[l][1] > 0 && <span className="muted" aria-label={`${prog[l][0]} of ${prog[l][1]} done`} title={`${prog[l][0]} of ${prog[l][1]} done`}>{prog[l][0]}/{prog[l][1]}</span>}</NavLink>
         ))}
       </nav>
       {/* The section under the tabs pans by tab order */}
@@ -201,6 +209,8 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
   const handover = items.filter((i) => i.kind === "handoff");
   const unsigned = handover.filter((i) => !i.fields.accepted);
   const deciders = p.people.filter((x) => x.role === "decision_maker").map((x) => names.get(x.userId) ?? "the decision maker");
+  // A quick fix says "quote" where a project says "proposal" and "option", and asks for one approval
+  const quick = isQuickFix(p);
   // Moving on past Decide needs an approved option (or a reason, given on the board)
   // neon1 runs the stages of a client's project: Next step offers the move to neon1 (and to anyone in
   // neon1's own organization), and tells a client who has the work
@@ -221,7 +231,7 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
     }
     if (!approved && revisions(items).length && decideAt >= 0 && at < decideAt) {
       const to = shown(decideAt);
-      return to ? { to, why: "The proposal is issued and the client can approve an option" } : undefined;
+      return to ? { to, why: quick ? "The quote is issued and the client can approve it" : "The proposal is issued and the client can approve an option" } : undefined;
     }
     if (!approved && options.some((o) => o.status === "proposed") && proposeAt >= 0 && at < proposeAt) {
       const to = shown(proposeAt);
@@ -257,9 +267,23 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
     // The work ran ahead of the board: say what's done, and move it to where the work is in one step
     text = <>{catchUp.why}, so this project's work is in <b>{catchUp.to.name}</b>. The board still shows <b>{stage?.name ?? "an earlier stage"}</b>.</>;
     move = catchUp.to;
+  } else if (quick && me.operator && canWrite && !approved && (unissued || !proposed.length)) {
+    // A quick fix is quoted and issued in one step, from the quote form under Needs
+    text = cur ? <>The quote changed since {proposalRef(cur.p.number, cur.p.rev)}. Issue it again so the client approves the new price.</> : <>Write the price for this fix and issue the quote, so the client can approve it with one signature.</>;
+    action = { to: `${base}/needs#quote`, label: "Quote and issue" };
   } else if (unissued && me.operator && canWrite) {
     text = <>Issue the proposal{cur ? `'s next revision, r${cur.p.rev + 1},` : ""} so the client can approve an option.</>;
     action = { to: `${base}/needs#options`, label: cur ? `Issue r${cur.p.rev + 1}` : "Issue the proposal" };
+  } else if (quick && proposed.length && canApprove(actor, access, p.people, isOwnOrg(org.slug)).ok) {
+    // The client approves one quote: its price, and that nothing is paid until the fix is accepted
+    const q = OptionFields.parse(ready[0]?.fields ?? proposed[0]!.fields);
+    if (ready.length && fresh) text = <>Approve the quote: <b>{proposed[0]!.title}</b>{q.cost ? `, ${q.cost}` : ""}. Nothing is paid up front; neon1 invoices once it's fixed and you've accepted it.</>;
+    else if (cur && !fresh) text = <>The price in Quote {proposalRef(cur.p.number, cur.p.rev)} is due a check. Ask neon1 to refresh it, then approve.</>;
+    else text = <>neon1 is finishing the quote. You can read it now and approve it once it's issued.</>;
+    action = { to: `${base}/needs#options`, label: ready.length && fresh ? "Approve the quote" : "See the quote" };
+  } else if (quick && proposed.length) {
+    text = <>Waiting on {deciders.length ? deciders.join(" or ") : "an admin of the client"} to approve the quote.</>;
+    action = { to: `${base}/needs#options`, label: "See the quote" };
   } else if (proposed.length && canApprove(actor, access, p.people, isOwnOrg(org.slug)).ok) {
     if (ready.length && fresh) text = <>Choose an option: {ready.length} {ready.length === 1 ? "is" : "are"} ready for your approval in Proposal {proposalRef(cur!.p.number, cur!.p.rev)}.</>;
     else if (cur && !fresh) text = <>The prices in Proposal {proposalRef(cur.p.number, cur.p.rev)} are due a price check. Ask neon1 to refresh them, then choose.</>;
@@ -273,8 +297,8 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
     action = { to: `${base}/needs#files`, label: "Upload" };
   } else if (handover.length && unsigned.length && handover.every((i) => i.status === "done") && !me.operator && canApprove(actor, access, p.people, isOwnOrg(org.slug)).ok) {
     // Every handover step is done: the decision maker's one signature accepts them
-    text = <>Every handover step is done. Check them, then accept the handover with one signature.</>;
-    action = { to: `${base}/normalize`, label: "Review and accept" };
+    text = quick ? <>neon1 says it's fixed. Check that it works, then accept it with one signature.</> : <>Every handover step is done. Check them, then accept the handover with one signature.</>;
+    action = { to: `${base}/normalize`, label: quick ? "Check and accept" : "Review and accept" };
   } else if (mine.length) {
     text = <>You have {mine.length} open {mine.length === 1 ? "item" : "items"} here.</>;
     action = { to: `${base}/${layerSlug(KIND_LAYER[mine[0]!.kind])}#item-${mine[0]!.id}`, label: "Open" };
@@ -282,6 +306,13 @@ function NextStep({ project: p, items, stage, base }: { project: Project; items:
     // The decision is made, so Decide is done: the step is moving on
     text = <><b>{approved.title}</b> is approved. {drives ? <>Next, move the project to <b>{nextName}</b>.</> : <>Next, neon1 moves the project to <b>{nextName}</b>.</>}</>;
     if (drives) move = ahead;
+  } else if (quick && approved && unsigned.length && handover.length) {
+    // A quick fix's work: hours under Execute, then its one step, which the client accepts to close it
+    const waiting = handover.every((i) => i.status === "done");
+    text = waiting ? <>Waiting on {deciders.length ? deciders.join(" or ") : "an admin of the client"} to check the fix and accept it. Accepting drafts the final invoice.</>
+      : me.operator ? <>Log your hours under Execute. When it works, tick <b>{handover.find((i) => i.status !== "done")!.title}</b> under Normalize, and the client accepts it with one signature.</>
+      : <>neon1 is on the fix. You'll be asked to check it and accept it once it's done.</>;
+    if (me.operator && !waiting) action = { to: `${base}/normalize`, label: "Open the step" };
   } else if (me.operator && canWrite && !options.length && at >= 0 && decideAt >= 0 && at <= decideAt && at >= decideAt - 1) {
     text = <>Add options for the client to compare and approve.</>;
     action = { to: `${base}/needs#options`, label: "Add options" };
@@ -720,10 +751,13 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
         const list = items.filter((i) => i.kind === kind);
         // Viewers see only groups with content, plus Requests, which they may add to
         if (!list.length && !canWrite && kind !== "request") return null;
+        // A quick fix keeps its few groups; any other appears once something is in it
+        const quick = isQuickFix(project);
+        if (quick && !list.length && !QUICK_GROUPS.has(kind)) return null;
         return (
           <section className="kind-group" key={kind} id={kind === "option" ? "options" : kind === "file_request" ? "files" : undefined}>
             {/* Checkable groups show done of total, like the tabs; options and records show how many */}
-            <h2 className="section-h">{KIND_LABEL[kind][1]} <small>{CHECKABLE.has(kind) && list.length ? `${list.filter((i) => i.status === "done").length}/${list.length}` : list.length}</small></h2>
+            <h2 className="section-h">{quick && kind === "option" ? "Quote" : KIND_LABEL[kind][1]} <small>{CHECKABLE.has(kind) && list.length ? `${list.filter((i) => i.status === "done").length}/${list.length}` : list.length}</small></h2>
             {/* Options compare side by side, measures show as cards, everything else as rows */}
             {kind === "option" ? (
               <Options items={list} all={items} docs={docs} path={path} project={project} />
@@ -750,7 +784,8 @@ function LayerTab({ layer, project, items, docs, edits }: { layer: Layer; projec
             {/* Once every handover step is done, the decision maker accepts them all with one signature */}
             {kind === "handoff" && <AcceptHandover steps={list} path={path} project={project} />}
             {/* Anyone may add a request; options come from neon1; everything else from editors */}
-            {(kind === "request" || (canWrite && (kind !== "option" || me.operator))) && <AddItem kind={kind} path={path} taken={list.map((i) => i.title)} decided={Boolean(currentDecision(items).option)} />}
+            {/* A quick fix has one quote, written in its own form, so it has no Add option */}
+            {(kind === "request" || (canWrite && (kind !== "option" || (me.operator && !quick)))) && <AddItem kind={kind} path={path} taken={list.map((i) => i.title)} decided={Boolean(currentDecision(items).option)} />}
           </section>
         );
       })}
@@ -1073,6 +1108,9 @@ function ProposalStrip({ all, docs, path, project, decider }: { all: Item[]; doc
   const changes = cur ? changedSince(cur.p, all) : undefined;
   const scopeAsks = all.filter((i) => i.kind === "request" && i.fields.scope === "yes" && i.status !== "done" && (!cur || i.createdAt > cur.p.issuedAt));
   const mayIssue = me.operator && canWrite;
+  // A quick fix calls its one revision a quote, has no Word copy, and issues from the quote form
+  const quick = isQuickFix(project);
+  const word = quick ? "Quote" : "Proposal";
   const issue = () => run(async () => {
     try {
       const r = await api<Item>(`${path}/proposals`, { method: "POST", body: { note } });
@@ -1105,22 +1143,24 @@ function ProposalStrip({ all, docs, path, project, decider }: { all: Item[]; doc
     <div className={`card proposal-strip${stale ? " faded" : ""}`} data-tour="proposal">
       {cur ? (
         <>
-          <div><b>Proposal {proposalRef(cur.p.number, cur.p.rev)}</b> <span className="small muted">issued {dateLabel(cur.p.issuedAt.slice(0, 10))}{cur.p.issuerName ? ` by ${cur.p.issuerName}` : ""} · estimates checked {dateLabel(cur.p.issuedAt.slice(0, 10))}, recheck after {dateLabel(cur.p.checkBy)}</span></div>
+          <div><b>{word} {proposalRef(cur.p.number, cur.p.rev)}</b> <span className="small muted">issued {dateLabel(cur.p.issuedAt.slice(0, 10))}{cur.p.issuerName ? ` by ${cur.p.issuerName}` : ""} · estimates checked {dateLabel(cur.p.issuedAt.slice(0, 10))}, recheck after {dateLabel(cur.p.checkBy)}</span></div>
           {cur.p.note && <div className="small">What changed: {cur.p.note}</div>}
           {stale && <div className="small"><span className="tag warn">prices may have changed</span> Approval waits until neon1 refreshes the prices.{cur.p.refreshAsked ? ` ${cur.p.refreshAsked.name} asked for a refresh ${ago(cur.p.refreshAsked.at)}.` : ""}</div>}
           {changes?.any && <div className="small">Changed since r{cur.p.rev}{changes.edited.length ? `: ${named(changes.edited)} edited` : ""}{changes.added.length ? `${changes.edited.length ? ";" : ":"} ${named(changes.added)} added` : ""}{changes.removed.length ? `; ${changes.removed.map((o) => o.title).join(", ")} taken back` : ""}. {mayIssue ? "Issue the next revision to share it for approval." : "neon1 issues the next revision for approval."}</div>}
         </>
       ) : (
-        <div><b>Proposal draft</b> <span className="small muted">not issued yet. {mayIssue ? "Issuing freezes a numbered copy the client approves from." : "Options can be read now and approved once neon1 issues it."}</span></div>
+        quick
+          ? <div><b>Quote</b> <span className="small muted">not issued yet. {mayIssue ? "Write the price below, then Quote and issue. It freezes a numbered copy the client approves from." : "neon1 issues the quote, then you approve it here."}</span></div>
+          : <div><b>Proposal draft</b> <span className="small muted">not issued yet. {mayIssue ? "Issuing freezes a numbered copy the client approves from." : "Options can be read now and approved once neon1 issues it."}</span></div>
       )}
       {/* Edited copies the client (or neon1) filed against a revision, each comparable with it */}
       <MarkupList docs={docs} all={all} path={path} />
       {scopeAsks.length > 0 && <div className="small"><span className="tag warn">{scopeAsks.length} {scopeAsks.length === 1 ? "request changes" : "requests change"} the agreed scope</span> {mayIssue ? "Answer with the next revision." : "neon1 answers with the next revision."}</div>}
       <div className="acts">
-        <Link className="btn btn-ghost btn-sm" to={`${base}/proposal${cur ? "" : "?draft=1"}`} {...NEW_TAB}>{cur ? "Read the proposal" : "Preview the draft"} <ExternalLink size={13} aria-hidden="true" /></Link>
-        {cur && <button type="button" className="btn btn-ghost btn-sm" onClick={() => void docx()}>Download Word</button>}
-        {cur && mayIssue && (changes?.any || scopeAsks.length > 0 || stale) && <Link className="btn btn-ghost btn-sm" to={`${base}/proposal?draft=1`} {...NEW_TAB}>Preview r{cur.p.rev + 1} <ExternalLink size={13} aria-hidden="true" /></Link>}
-        {mayIssue && (!cur || changes?.any || stale || scopeAsks.length > 0 || cur.p.refreshAsked) && <button type="button" className="btn btn-primary btn-sm" onClick={() => setIssuing(true)}>{cur ? `Issue r${cur.p.rev + 1}` : "Issue the proposal"}</button>}
+        <Link className="btn btn-ghost btn-sm" to={`${base}/proposal${cur ? "" : "?draft=1"}`} {...NEW_TAB}>{cur ? `Read the ${word.toLowerCase()}` : "Preview the draft"} <ExternalLink size={13} aria-hidden="true" /></Link>
+        {cur && !quick && <button type="button" className="btn btn-ghost btn-sm" onClick={() => void docx()}>Download Word</button>}
+        {!quick && cur && mayIssue && (changes?.any || scopeAsks.length > 0 || stale) && <Link className="btn btn-ghost btn-sm" to={`${base}/proposal?draft=1`} {...NEW_TAB}>Preview r{cur.p.rev + 1} <ExternalLink size={13} aria-hidden="true" /></Link>}
+        {!quick && mayIssue && (!cur || changes?.any || stale || scopeAsks.length > 0 || cur.p.refreshAsked) && <button type="button" className="btn btn-primary btn-sm" onClick={() => setIssuing(true)}>{cur ? `Issue r${cur.p.rev + 1}` : "Issue the proposal"}</button>}
         {stale && decider && !cur!.p.refreshAsked && <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void askRefresh()}>Ask neon1 to refresh</button>}
         {revs.length > 1 && <span className="small muted">Earlier: {revs.slice(0, -1).map((r, i) => <span key={r.id}>{i ? ", " : ""}<Link className="faded-link" to={`${base}/proposal?r=${r.p.rev}`} {...NEW_TAB}>r{r.p.rev}</Link></span>)}</span>}
       </div>
@@ -1157,10 +1197,19 @@ function Options({ items, all, docs, path, project }: { items: Item[]; all: Item
   const [reason, setReason] = useState("");
   const [sign, setSign] = useState<SignValue>({ typedName: "", consent: false });
   const signed = useAgreementSigned();
+  const qc = useQueryClient();
+  // A first-time client on a quick fix signs neon1's service agreement in the same dialog as the
+  // approval: two calls, two signed records (the agreement first). Only an admin of the client signs
+  // the agreement (the API says so too); anyone else keeps the usual link to read it
+  const oneScreen = isQuickFix(project) && !signed && !me.operator && access === "admin";
+  const [agreeRead, setAgreeRead] = useState(false);
+  // Why the agreement step failed, shown in the dialog (nothing is approved when it fails)
+  const [agreeError, setAgreeError] = useState<string>();
+  const agreement = useQuery({ queryKey: ["agreement", org.id], enabled: oneScreen && !currentDecision(all).decision, queryFn: () => api<{ edition: string; hash: string }>(`/t/${org.id}/agreement`) });
   // Which option the typed conditions belong to: reopening the same one keeps them (after a lost
   // reply, say), and another option starts blank
   const [draftFor, setDraftFor] = useState<string>();
-  const startApprove = (o: Item) => { if (draftFor !== o.id) { setConditions(""); setReason(""); setSign({ typedName: "", consent: false }); setDraftFor(o.id); } setApproving(o); };
+  const startApprove = (o: Item) => { if (draftFor !== o.id) { setConditions(""); setReason(""); setSign({ typedName: "", consent: false }); setDraftFor(o.id); } setAgreeRead(false); setAgreeError(undefined); setApproving(o); };
   // The option open in its panel (details, comments, and for neon1 the edit fields)
   const [openId, setOpenId] = useState<string>();
   const opened = items.find((o) => o.id === openId);
@@ -1168,7 +1217,11 @@ function Options({ items, all, docs, path, project }: { items: Item[]; all: Item
   const cur = revisions(all).at(-1);
   const stale = cur && priceCheckDue(cur.p, todayIn(org.timeZone));
   const inRev = (o: Item) => cur?.p.snapshot.options.find((x) => x.id === o.id);
-  if (!items.length) return <ProposalStripMaybe all={all} docs={docs} path={path} project={project} decider={decider} />;
+  // A quick fix: one quote, written and issued by neon1 in the compact form, approved like any option
+  const quick = isQuickFix(project);
+  const word = quick ? "Quote" : "Proposal";
+  const mayQuote = quick && me.operator && canWrite && !currentDecision(all).decision;
+  if (!items.length) return <>{mayQuote && <QuoteForm path={path} cur={cur} />}<ProposalStripMaybe all={all} docs={docs} path={path} project={project} decider={decider} /></>;
   // After a decision, the other options can still be chosen instead, but quietly. Choosing one changes
   // the decision: the one in force is replaced and stays on record. Once the handover is accepted the
   // work is finished, and its decision stays
@@ -1204,8 +1257,21 @@ function Options({ items, all, docs, path, project }: { items: Item[]; all: Item
   // Approve the exact version on screen; if it changed meanwhile, the API refuses and we say so
   const approve = async () => {
     const o = approving;
-    setApproving(undefined);
     if (!o) return;
+    // First-time client on one screen: sign the service agreement first, with the same typed name. If
+    // that fails, nothing is approved and the dialog stays open with the reason
+    if (oneScreen && agreement.data) {
+      try {
+        await api(`/t/${org.id}/agreement/sign`, { method: "POST", body: { edition: agreement.data.edition, hash: agreement.data.hash, typedName: sign.typedName.trim(), consent: agreeRead } });
+        setAgreeError(undefined);
+        // The organization's record carries the signature, which the approval checks
+        await qc.invalidateQueries({ queryKey: ["org", org.id] });
+      } catch (e) {
+        setAgreeError(problem(e));
+        return;
+      }
+    }
+    setApproving(undefined);
     try {
       // Approvals are never retried on their own; a lost reply says so and the page re-reads
       await api(`${path}/items/${o.id}/approve`, { method: "POST", body: { version: o.version, conditions, reason: inForce ? reason.trim() : "", signature: { typedName: sign.typedName.trim(), consent: sign.consent } } });
@@ -1220,8 +1286,8 @@ function Options({ items, all, docs, path, project }: { items: Item[]; all: Item
   // Why a shared option can't be approved yet, in words, or undefined when it can
   const held = (o: Item) => {
     const snap = inRev(o);
-    if (!cur) return "neon1 issues the proposal before an option can be approved";
-    if (!snap) return `not in Proposal ${proposalRef(cur.p.number, cur.p.rev)} yet; neon1 adds it in the next revision`;
+    if (!cur) return quick ? "neon1 issues the quote before it can be approved" : "neon1 issues the proposal before an option can be approved";
+    if (!snap) return `not in ${word} ${proposalRef(cur.p.number, cur.p.rev)} yet; neon1 adds it in the next revision`;
     if (snap.version !== o.version) return `changed since r${cur.p.rev}; neon1 issues the next revision`;
     if (stale) return "prices may have changed; ask neon1 to refresh";
     return undefined;
@@ -1254,6 +1320,8 @@ function Options({ items, all, docs, path, project }: { items: Item[]; all: Item
   return (
     <>
       <ProposalStrip all={all} docs={docs} path={path} project={project} decider={decider} />
+      {/* neon1 writes and issues a quick fix's quote here, until the client approves it */}
+      {mayQuote && <QuoteForm path={path} cur={cur} option={items.find((o) => o.status === "draft" || o.status === "proposed")} />}
       {/* The one thing that stands between a decision maker and Approve, said before they press it */}
       {!signed && decider && !decided && items.some((o) => o.status === "proposed") && <AgreementNeeded />}
       <div className="options">
@@ -1266,7 +1334,8 @@ function Options({ items, all, docs, path, project }: { items: Item[]; all: Item
             <article key={o.id} id={`item-${o.id}`} className={`card option${f.recommended ? " rec" : ""}`}>
               <div className="card-head">
                 <span style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                  {f.recommended && <span className="tag rec">recommended</span>}
+                  {/* One quote has nothing to be recommended over, so a quick fix doesn't say it */}
+                  {f.recommended && !quick && <span className="tag rec">recommended</span>}
                   {replacedOpt(o) ? <span className="tag" title="Approved once, then the decision changed to another option">replaced</span> : <span className={`tag${o.status === "approved" ? " client" : ""}`}>{STATUS_WORDS[o.status]?.toLowerCase() ?? o.status}</span>}
                   {code && <span className="opt-code" title="This option's ID in the issued proposal">{code}</span>}
                 </span>
@@ -1289,43 +1358,46 @@ function Options({ items, all, docs, path, project }: { items: Item[]; all: Item
               {f.why && <p className="small option-why"><b>{f.recommended ? "Why neon1 recommends it" : "When to pick it"}:</b> {f.why}</p>}
               {/* The price is never a bare number: what kind it is, the hours behind it, when it's paid */}
               <PriceBasis terms={f} />
-              {/* Cost, quality, and effort, scored so more bars is always better: neon1's own judgment */}
-              <p className="assess-h">neon1's assessment</p>
-              <Meter label="Cost" value={f.costScore} />
-              <Meter label="Quality" value={f.qualityScore} />
-              <Meter label="Effort" value={f.effortScore} />
+              {/* Cost, quality, and effort, scored so more bars is always better: neon1's own judgment.
+                  A quick fix has one quote and nothing to compare it with, so it has no scores */}
+              {!quick && <>
+                <p className="assess-h">neon1's assessment</p>
+                <Meter label="Cost" value={f.costScore} />
+                <Meter label="Quality" value={f.qualityScore} />
+                <Meter label="Effort" value={f.effortScore} />
+              </>}
               {/* The decision maker approves a proposed option of the issued revision; editors move drafts along */}
               <div className="option-acts">
-                {o.status === "proposed" && decider && !why && !finished && <button className={`btn ${decided ? "btn-ghost" : "btn-primary"}`} onClick={() => startApprove(o)}>{f.revises && inForce?.fields.optionId === f.revises ? "Approve the revised terms" : decided ? "Choose this instead" : "Approve this option"}</button>}
+                {o.status === "proposed" && decider && !why && !finished && <button className={`btn ${decided ? "btn-ghost" : "btn-primary"}`} onClick={() => startApprove(o)}>{f.revises && inForce?.fields.optionId === f.revises ? "Approve the revised terms" : decided ? "Choose this instead" : quick ? "Approve the quote" : "Approve this option"}</button>}
                 {o.status === "proposed" && decider && why && !finished && <span className="small muted">Approval waits: {why}.</span>}
                 {/* A replaced option can be chosen again, once neon1 confirms it in a fresh revision */}
                 {replacedOpt(o) && decider && !finished && (heldAgain(o) ? <span className="small muted">Going back to it waits: {heldAgain(o)}.</span> : <button className="btn btn-ghost" onClick={() => startApprove(o)}>Go back to this option</button>)}
                 {o.status === "proposed" && !decider && !decided && <span className="small muted">Waiting on {deciders.length ? deciders.join(" or ") : "a client admin"}</span>}
                 {/* Sharing an option and taking it back are neon1's to do; the client approves */}
-                {canWrite && me.operator && o.status === "draft" && <button className="btn btn-ghost" onClick={() => void setStatus(o, "proposed")}>Share with client</button>}
+                {canWrite && me.operator && o.status === "draft" && !quick && <button className="btn btn-ghost" onClick={() => void setStatus(o, "proposed")}>Share with client</button>}
                 {canWrite && me.operator && o.status === "proposed" && <button className="btn btn-ghost" onClick={() => void setStatus(o, "draft")}>Back to draft</button>}
                 {/* Terms change after approval (a smaller deposit, a new date): a revised copy goes out in the
                     next revision, and the client approves it in place of this one */}
                 {canWrite && me.operator && inForce?.fields.optionId === o.id && !finished && !revisedBy(o) && <button className="btn btn-ghost" onClick={() => void revise(o)}>Revise terms</button>}
                 {revisedBy(o) && <span className="small muted">Revised terms: <button type="button" className="linkish" onClick={() => setOpenId(revisedBy(o)!.id)}>{revisedBy(o)!.title}</button> ({STATUS_WORDS[revisedBy(o)!.status]?.toLowerCase() ?? revisedBy(o)!.status})</span>}
               </div>
-              <OptionStory option={o} all={all} />
+              <OptionStory option={o} all={all} quick={quick} />
             </article>
           );
         })}
       </div>
       {/* What the scores mean, once for all the options */}
-      <p className="small muted assess-rubric">
+      {!quick && <p className="small muted assess-rubric">
         <b>neon1's assessment</b>, from 1 to 5, where more filled dots is always better. <b>Cost</b>: the total cost. <b>Quality</b>: how fully it meets the agreed requirements. <b>Effort</b>: your team's effort to adopt and run it. The written price on each option is the price you'd accept{DEMO ? "; every figure in this demo is illustrative" : ""}.
-      </p>
+      </p>}
       {opened && <ItemPanel item={opened} label="Option" path={path} open onClose={() => setOpenId(undefined)} />}
       {/* Approval restates exactly what's being accepted, so nobody recalls terms from another screen */}
-      <Dialog open={Boolean(approving)} onClose={() => setApproving(undefined)} label="Approve option">
-        <h2>{inForce ? `Change to ${aCode ?? "this option"}?` : `Approve ${aCode ?? "this option"}?`}</h2>
+      <Dialog open={Boolean(approving)} onClose={() => setApproving(undefined)} label={quick ? "Approve the quote" : "Approve option"}>
+        <h2>{inForce ? `Change to ${aCode ?? "this option"}?` : quick ? "Approve the quote?" : `Approve ${aCode ?? "this option"}?`}</h2>
         {approving && a && (
           <dl className="terms-list">
-            <dt>Option</dt><dd><b>{approving.title}</b>{aCode && <span className="opt-code"> · {aCode}</span>}</dd>
-            {cur && <><dt>From</dt><dd>Proposal {proposalRef(cur.p.number, cur.p.rev)}, issued {dateLabel(cur.p.issuedAt.slice(0, 10))}</dd></>}
+            <dt>{quick ? "The fix" : "Option"}</dt><dd><b>{approving.title}</b>{aCode && <span className="opt-code"> · {aCode}</span>}</dd>
+            {cur && <><dt>From</dt><dd>{word} {proposalRef(cur.p.number, cur.p.rev)}, issued {dateLabel(cur.p.issuedAt.slice(0, 10))}</dd></>}
             <dt>Price</dt><dd>{a.cost || "not stated"}<CostSplit cost={a.cost} />{priceOf(a) && <div className="small muted">{priceMeaning(priceOf(a)!)}</div>}</dd>
             {/* After a change with money already invoiced, the change box below says what's asked now */}
             {priceOf(a) && !(change && change.invoiced > 0) && <><dt>When you pay</dt><dd>{paymentPlan(priceOf(a)!).map((l) => <div key={l}>{l}</div>)}</dd></>}
@@ -1358,10 +1430,27 @@ function Options({ items, all, docs, path, project }: { items: Item[]; all: Item
         <label htmlFor="cond">Conditions (optional)</label>
         <textarea id="cond" value={conditions} onChange={(e) => setConditions(e.target.value)} maxLength={2000} placeholder="e.g. only if the work happens after 6pm" />
         {neon1Buys.length > 0 && <p className="small">Signing also agrees that neon1 buys {neon1Buys.map((x) => x.name).join(" and ")} for you and is paid back at cost, with the receipt.</p>}
-        {signed ? <SignBox id="approve-sign" value={sign} onChange={setSign} /> : <AgreementNeeded />}
-        <p className="small muted">{inForce ? "Signing replaces the decision in force with this option's scope and price under your service agreement. 1NEON keeps both decisions, your reason, and your signature; none of it can be edited afterwards." : "Signing approves this option's scope and price under your service agreement. 1NEON keeps a copy of these terms with your signature, who signed and when; none of it can be edited afterwards."} Invoices follow as the proposal says.</p>
+        {/* A first-time client on a quick fix reads and signs the agreement here, above the one name box */}
+        {oneScreen && (
+          <section className="notice agreement-inline" aria-labelledby="agree-h">
+            <h3 id="agree-h" style={{ margin: "0 0 6px" }}>First, neon1's service agreement</h3>
+            <p className="small" style={{ margin: "0 0 6px" }}>You sign it once for {org.name}, and it covers every project. In short:</p>
+            <ul className="small" style={{ margin: "0 0 6px", paddingLeft: 18 }}>
+              <li>Each approved quote fixes the scope and price of that work.</li>
+              <li>Invoices are due in 15 days, and what neon1 makes for you is yours once you've paid.</li>
+              <li>Either of us can end the agreement with 14 days' written notice.</li>
+            </ul>
+            <p className="small" style={{ margin: "0 0 6px" }}><a href={`${BASE_PATH}/o/${org.slug}/agreement`} target="_blank" rel="noopener noreferrer">Read the full agreement (opens in a new tab)</a></p>
+            <label className="sign-consent">
+              <input type="checkbox" checked={agreeRead} onChange={(e) => setAgreeRead(e.target.checked)} /> I have read neon1's service agreement{agreement.data ? `, edition ${agreement.data.edition},` : ""} and agree to it for {org.name}.
+            </label>
+            {agreeError && <p className="small warn-text" role="alert" style={{ margin: "6px 0 0" }}>The agreement was not signed, so nothing was approved. {agreeError}</p>}
+          </section>
+        )}
+        {signed || oneScreen ? <SignBox id="approve-sign" value={sign} onChange={setSign} /> : <AgreementNeeded />}
+        <p className="small muted">{inForce ? "Signing replaces the decision in force with this option's scope and price under your service agreement. 1NEON keeps both decisions, your reason, and your signature; none of it can be edited afterwards." : `Signing approves ${quick ? "this quote's" : "this option's"} scope and price under your service agreement. 1NEON keeps a copy of these terms with your signature, who signed and when; none of it can be edited afterwards.`} Invoices follow as the {word.toLowerCase()} says.</p>
         <div className="actions">
-          <button className="btn btn-primary" disabled={!signed || !signReady(sign) || (Boolean(inForce) && reason.trim().length < 3)} onClick={() => void approve()}>{inForce ? `Sign and change to ${aCode ?? ""}` : `Sign and approve ${aCode ?? ""}`}</button>
+          <button className="btn btn-primary" disabled={(!signed && !(oneScreen && agreeRead && agreement.data)) || !signReady(sign) || (Boolean(inForce) && reason.trim().length < 3)} onClick={() => void approve()}>{inForce ? `Sign and change to ${aCode ?? ""}` : quick ? (oneScreen ? "Sign both and approve the quote" : "Sign and approve the quote") : `Sign and approve ${aCode ?? ""}`}</button>
           <button className="btn btn-ghost" onClick={() => setApproving(undefined)}>Cancel</button>
         </div>
       </Dialog>
@@ -1391,8 +1480,9 @@ function termChanges(was: OptionFieldsT, now: OptionFieldsT, wasItem: Item, nowI
   return out;
 }
 
-function OptionStory({ option, all }: { option: Item; all: Item[] }) {
-  const moments = optionHistory(option, all);
+function OptionStory({ option, all, quick = false }: { option: Item; all: Item[]; quick?: boolean }) {
+  // A quick fix's history names its revisions as quotes, as the rest of its screens do
+  const moments = optionHistory(option, all).map((m) => (quick ? { ...m, text: m.text.replace(/\bProposal (\d)/g, "Quote $1") } : m));
   if (moments.length < 2) return null;
   const last = moments.at(-1)!;
   return (
@@ -1408,6 +1498,96 @@ function OptionStory({ option, all }: { option: Item; all: Item[] }) {
 /** With no options shared yet, the strip shows only once there's a revision to talk about */
 function ProposalStripMaybe(props: { all: Item[]; docs: DocumentRecord[]; path: string; project: Project; decider: boolean }) {
   return revisions(props.all).length ? <ProposalStrip {...props} /> : null;
+}
+
+
+/**
+ * Quote and issue, for neon1 on a quick fix: what the fix is, and its price as hours at a rate (never
+ * billed past the high end) or a fixed amount, with nothing up front. One press writes the quote onto
+ * the project's one option and issues the revision the client approves from. Once issued it folds to a
+ * line with Change the quote; a quote past its price check opens again, to be issued afresh
+ */
+function QuoteForm({ path, cur, option }: { path: string; cur?: ReturnType<typeof revisions>[number]; option?: Item }) {
+  const { org } = useOrg();
+  const toast = useToast();
+  const refresh = useRefresh(org.id);
+  const [busy, run] = useSubmit();
+  const f = option ? OptionFields.parse(option.fields) : undefined;
+  // Issued as it stands, and within its price check: nothing to do until neon1 wants to change it
+  const issued = Boolean(cur && option && cur.p.snapshot.options.some((x) => x.id === option.id && x.version === option.version));
+  const stale = Boolean(cur && priceCheckDue(cur.p, todayIn(org.timeZone)));
+  const [open, setOpen] = useState(!issued || stale);
+  const [title, setTitle] = useState(option?.title ?? "The fix");
+  const [body, setBody] = useState(option?.body ?? "");
+  const [pricing, setPricing] = useState<"estimate" | "fixed">(f?.pricing === "fixed" ? "fixed" : "estimate");
+  const [rate, setRate] = useState(f?.rateCents ? String(f.rateCents / 100) : "");
+  const [low, setLow] = useState(String(f?.hoursLow ?? QUICK_FIX_HOURS.low));
+  const [high, setHigh] = useState(String(f?.hoursHigh ?? QUICK_FIX_HOURS.high));
+  const [price, setPrice] = useState(f?.pricing === "fixed" && priceOf(f)?.kind === "fixed" ? String((priceOf(f) as { totalCents: number }).totalCents / 100) : "");
+  const [timeline, setTimeline] = useState(f?.timeline ?? "");
+  // The typed numbers ("$150", "1,200") as numbers; NaN for text that isn't one, undefined for blank
+  const num = (v: string) => { const n = optionalNumber(v.replace(/[$,\s]/g, "")); return n.ok ? n.value : NaN; };
+  const q: Omit<QuoteInput, "title" | "body" | "note"> & { title: string } = pricing === "fixed"
+    ? { title, pricing, priceCents: Math.round((num(price) ?? 0) * 100), timeline }
+    : { title, pricing, rateCents: Math.round((num(rate) ?? 0) * 100), hoursLow: num(low), hoursHigh: num(high), timeline };
+  // What's wrong with it, in words, before it's sent: the same rules the API applies
+  const problemText = !title.trim() ? "Name the fix."
+    : pricing === "fixed" ? (!(num(price)! > 0) ? "Give the fixed price." : undefined)
+    : !(num(rate)! > 0) ? "Give the hourly rate."
+    : !(num(high)! > 0) || !(num(low)! > 0) ? "Give the fewest and the most hours."
+    : num(low)! > num(high)! ? "The fewest hours can't be more than the most."
+    : num(high)! > QUICK_FIX_MAX_HOURS ? `A quick fix is up to ${QUICK_FIX_MAX_HOURS} hours. For more, start a project with a full proposal.`
+    : undefined;
+  // The price as the client will read it, worked out the way the API will write it
+  const preview = problemText ? undefined : priceOf(quoteFields(q));
+  const send = () => run(async () => {
+    try {
+      const r = await api<{ issued: Item }>(`${path}/quote`, { method: "POST", body: { ...q, title: title.trim(), body, optionId: option?.id, version: option?.version } });
+      toast(`Issued ${r.issued.title.replace(/^Proposal/, "Quote")}. The client can approve it now.`);
+      setOpen(false);
+    } catch (e) {
+      toast(problem(e));
+    }
+    refresh();
+  });
+  if (!open) {
+    return (
+      <p className="small muted" id="quote" style={{ margin: "0 0 12px" }}>
+        The quote is issued and waiting on the client. <button type="button" className="linkish" onClick={() => setOpen(true)}>Change the quote</button>
+      </p>
+    );
+  }
+  return (
+    <form className="card quote-form" id="quote" style={{ display: "grid", gap: 12, marginBottom: 16 }} onSubmit={(e) => { e.preventDefault(); if (!problemText) void send(); }}>
+      <h3 style={{ margin: 0 }}>{cur ? "Change the quote" : "Quote and issue"}</h3>
+      <div><label htmlFor="q-title">The fix</label><input id="q-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} placeholder="e.g. Fix the front desk printer" /></div>
+      <div><label htmlFor="q-body">What neon1 will do (optional)</label><textarea id="q-body" rows={2} value={body} onChange={(e) => setBody(e.target.value)} maxLength={8000} placeholder="e.g. reinstall the driver and set the printer up again on the office network" /></div>
+      {/* Hours at a rate (capped at the high end) or one fixed price */}
+      <fieldset style={{ border: 0, padding: 0, margin: 0, display: "flex", gap: 16, flexWrap: "wrap" }}>
+        <legend className="small" style={{ marginBottom: 6 }}>Price</legend>
+        <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="radio" name="q-pricing" checked={pricing === "estimate"} onChange={() => setPricing("estimate")} /> Hours at a rate</label>
+        <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="radio" name="q-pricing" checked={pricing === "fixed"} onChange={() => setPricing("fixed")} /> Fixed price</label>
+      </fieldset>
+      {pricing === "estimate" ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 12 }}>
+          <div><label htmlFor="q-rate">Rate an hour ($)</label><input id="q-rate" inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="e.g. 150" /></div>
+          <div><label htmlFor="q-low">Fewest hours</label><input id="q-low" inputMode="decimal" value={low} onChange={(e) => setLow(e.target.value)} /></div>
+          <div><label htmlFor="q-high">Most hours</label><input id="q-high" inputMode="decimal" value={high} onChange={(e) => setHigh(e.target.value)} /></div>
+        </div>
+      ) : (
+        <div style={{ maxWidth: 220 }}><label htmlFor="q-price">Fixed price ($)</label><input id="q-price" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="e.g. 450" /></div>
+      )}
+      <div style={{ maxWidth: 320 }}><label htmlFor="q-when">When (optional)</label><input id="q-when" value={timeline} onChange={(e) => setTimeline(e.target.value)} maxLength={80} placeholder="e.g. this week" /></div>
+      {/* The price as the client will see it, and that nothing is asked up front */}
+      <p className="small" role="status" style={{ margin: 0 }}>
+        {preview ? <><b>{priceLine(preview)}</b>. {preview.kind === "estimate" ? `Billed for the hours worked, never past ${wholeDollars(preview.highCents)}, ` : "Billed "}once the client accepts the fix. Nothing up front.</> : <span className="muted">{problemText}</span>}
+      </p>
+      <div className="actions">
+        <button className="btn btn-primary" type="submit" disabled={busy || Boolean(problemText)}>{busy ? "Issuing…" : cur ? "Issue the new quote" : "Quote and issue"}</button>
+        {cur && issued && !stale && <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>Cancel</button>}
+      </div>
+    </form>
+  );
 }
 
 
@@ -1531,7 +1711,9 @@ function AcceptHandover({ steps, path, project }: { steps: Item[]; path: string;
   const decider = canApprove({ userId: me.user.id, operator: me.operator, strongSession: false }, access, project.people, isOwnOrg(org.slug)).ok;
   if (!steps.length || !waiting.length) return steps.length ? <p className="accepted-note handover-all">The handover is accepted: every step is signed for.</p> : null;
   if (!decider) return null;
-  if (left) return <p className="small muted handover-all">When all {steps.length} steps are done, you can accept the handover with one signature. {left} to go.</p>;
+  // A quick fix's one step is the fix itself, and accepting it says so in those words
+  const quick = isQuickFix(project);
+  if (left) return <p className="small muted handover-all">{quick ? "When neon1 marks it fixed, you can check it and accept it here with one signature." : <>When all {steps.length} steps are done, you can accept the handover with one signature. {left} to go.</>}</p>;
   const accept = async () => {
     setBusy(true);
     try {
@@ -1546,17 +1728,19 @@ function AcceptHandover({ steps, path, project }: { steps: Item[]; path: string;
   };
   return (
     <div className="handover-all card">
-      <p style={{ margin: 0 }}><b>Every step is done.</b> Accept the handover with one signature: it signs for {waiting.length === steps.length ? `all ${steps.length} steps` : `the ${waiting.length} ${waiting.length === 1 ? "step" : "steps"} not yet accepted`}, and neon1 prepares the final invoice.</p>
+      {quick
+        ? <p style={{ margin: 0 }}><b>neon1 says it's fixed.</b> Check that it works, then accept it with one signature, and neon1 prepares the invoice.</p>
+        : <p style={{ margin: 0 }}><b>Every step is done.</b> Accept the handover with one signature: it signs for {waiting.length === steps.length ? (steps.length === 1 ? "the one step" : `all ${steps.length} steps`) : `the ${waiting.length} ${waiting.length === 1 ? "step" : "steps"} not yet accepted`}, and neon1 prepares the final invoice.</p>}
       {open ? (
         <form className="accept-form" onSubmit={(e) => { e.preventDefault(); if (signReady(sign) && !busy) void accept(); }}>
           <input aria-label="What you checked (optional)" placeholder="What you checked (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} />
           <SignBox id="accept-handover" value={sign} onChange={setSign} />
           <div className="line">
-            <button className="btn btn-primary btn-sm" disabled={!signReady(sign) || busy}>Sign and accept the handover</button>
+            <button className="btn btn-primary btn-sm" disabled={!signReady(sign) || busy}>{quick ? "Sign and accept the fix" : "Sign and accept the handover"}</button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
           </div>
         </form>
-      ) : <div className="actions" style={{ marginTop: 8 }}><button type="button" className="btn btn-primary btn-sm" onClick={() => setOpen(true)}>Accept the handover</button></div>}
+      ) : <div className="actions" style={{ marginTop: 8 }}><button type="button" className="btn btn-primary btn-sm" onClick={() => setOpen(true)}>{quick ? "Accept the fix" : "Accept the handover"}</button></div>}
     </div>
   );
 }

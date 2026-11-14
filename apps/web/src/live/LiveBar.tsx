@@ -225,6 +225,10 @@ export function LiveBar({ player }: { player: Player }) {
             <button className="live-btn" onClick={() => player.toggle()}><RotateCcw size={14} aria-hidden="true" />Watch again</button>
             <button className="live-btn" onClick={() => setList(true)}>Other walkthroughs</button>
           </div>
+          {/* The one extra way on from the end: the same story to read, for a visitor who'd rather not watch */}
+          <p className="live-card-foot">
+            Prefer to read? <a href="/1NEON/example">See the sample project</a>.
+          </p>
           <p className="live-card-foot">
             Questions this didn't answer? <a href="/1NEON/faqs">Read the FAQs</a>, or <a href="/#contact">ask Pradeep</a>. <a href={exit.href}>{exit.label}</a>
           </p>
